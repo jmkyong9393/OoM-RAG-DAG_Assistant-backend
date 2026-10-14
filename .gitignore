@@ -1,0 +1,36 @@
+# 환경변수·비밀
+.env
+.env.*
+!.env.example
+*.pem
+
+# Java / Gradle
+api/build/
+api/.gradle/
+api/out/
+api/bin/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Python
+ai/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# 평가 결과 원문 (보고서 근거는 docs/로 옮겨 커밋)
+eval/results/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# 로그·임시
+*.log
+tmp/
