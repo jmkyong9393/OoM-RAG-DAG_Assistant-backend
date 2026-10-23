@@ -1,6 +1,6 @@
 # OoM-RAG-DAG_Assistant-backend
 
-KT CS × 한국생산성본부 프로젝트형 일경험 — **생성형 AI 기반 기업 업무지식 검색·활용 Assistant (OoM Assist)** 의 백엔드 레포.
+**생성형 AI 기반 기업 업무지식 검색·활용 Assistant (OoM Assist)** 의 백엔드 레포.
 프론트는 [OoM-RAG-DAG_Assistant](https://github.com/Jonghyeon-Bae/OoM-RAG-DAG_Assistant) (Next.js 16, Vercel).
 
 팀 OoM (Out of Memory): 배종현(팀장·AI), 장문경(백엔드·DB), 신동준(데이터·평가), 홍경표(프론트)
