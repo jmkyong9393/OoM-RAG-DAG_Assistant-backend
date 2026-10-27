@@ -3,7 +3,8 @@
 **생성형 AI 기반 기업 업무지식 검색·활용 Assistant (OoM Assist)** 의 백엔드 레포.
 프론트는 [OoM-RAG-DAG_Assistant](https://github.com/Jonghyeon-Bae/OoM-RAG-DAG_Assistant) (Next.js 16, Vercel).
 
-팀 OoM (Out of Memory): 배종현(팀장·AI), 장문경(백엔드·DB), 신동준(데이터·평가), 홍경표(프론트)
+팀 OoM (Out of Memory): 배종현(팀장·AI·어시스턴트 화면), 장문경(백엔드 총괄·DB·배포·설계문서·AI 공동), 신동준(Spring 구현·데이터·평가), 홍경표(프론트)
+이 레포의 머지 권한은 장문경에게 있다. `ai/`의 그래프·프롬프트는 배종현이 머지한다.
 기간: 2026-10-12 ~ 2026-12-06 (8주, 6주차 금요일 코드 프리즈)
 
 ## 무엇을 하는가
@@ -26,14 +27,13 @@
 
 | 폴더 | 내용 | 담당 |
 |---|---|---|
-| `api/` | Spring Boot API 서버 | 장문경 |
-| `ai/` | Python AI 서비스 (LangGraph, kiwipiepy, OpenAI) | 배종현 |
-| `db/` | `schema.sql` · `functions.sql` · `roles.sql` · 시드 | 장문경 |
-| `data/` | 규정 JSON 청크 · 합성 로그 · 평가셋 (git 커밋, 1급 자산) | 신동준 |
-| `scripts/` | 원천(PDF·HWP·Markdown) → JSON, 합성 로그 생성 | 신동준 |
+| `api/` | Spring Boot 게이트웨이 (도메인 API · SSE 릴레이 · Flyway `db/migration`) | 신동준(1차 작성) → 장문경(결재·머지) |
+| `ai/` | Python AI 서비스 (LangGraph, kiwipiepy, OpenAI, 정제 워커) | 배종현(그래프·프롬프트) · 장문경(DB 계층·워커) |
+| `data/` | 규정 JSON 청크 · 합성 로그 · 평가셋 (git 커밋, 1급 자산) | 신동준 · 장문경(합성 로그) |
+| `scripts/` | 원천(PDF·HWP·Markdown) → JSON, 인덱싱, 합성 로그 생성 | 신동준 |
 | `eval/` | hit@5 · RAGAS 스크립트 | 신동준 |
 | `deploy/` | docker-compose(로컬·프로덕션) · Caddyfile · `.env.example` | 장문경 |
-| `docs/` | 개발문서 (인덱스 `docs/00_문서_인덱스.md`) | 전원 |
+| `docs/` | 개발문서 (인덱스 `docs/00_문서_인덱스.md`) | 장문경 |
 
 경계 원칙 세 가지. **DB 쓰기는 `api/`만**, **검색·체인 SQL은 `db/` 함수로 공유**, **토크나이징·임베딩·LLM은 `ai/`만.**
 
