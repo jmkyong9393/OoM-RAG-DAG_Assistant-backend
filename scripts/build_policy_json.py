@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ARTICLE_RE = re.compile(r"^\s*(제\s*\d+\s*조(?:의\s*\d+)?)\s*(?:\(([^)]*)\)|（([^）]*)）)?\s*(.*)$")
 FAQ_RE = re.compile(r"^\s*(Q\s*\d+)[.\s)]\s*(.*)$", re.I)
-HEADING_RE = re.compile(r"^\s*#{1,6}\s+(.+?)\s*$")
+HEADING_RE = re.compile(r"^\s*(#{1,6})\s+(.+?)\s*$")
 TABLE_RE = re.compile(r"^\s*\[?\s*별표\s*\d*\s*\]?\s*(.*)$")
 PARA_RE = re.compile(r"(?=[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮])")
 NUM_RE = re.compile(r"\d+")
@@ -31,6 +31,7 @@ def split_articles(lines: list[str]) -> list[dict]:
     """줄 목록 → [{label, title, text}]. 조문 경계 전까지의 줄을 하나로 모은다."""
     out: list[dict] = []
     cur: dict | None = None
+    stack: dict[int, str] = {}   # 제목 수준(#=1, ##=2, …) → 제목. 소제목 label 합성용
 
     def flush():
         nonlocal cur
@@ -59,7 +60,15 @@ def split_articles(lines: list[str]) -> list[dict]:
             cur = {"label": re.sub(r"\s+", "", f.group(1).upper()) + ". " + f.group(2).strip(), "title": f.group(2).strip() or None, "text": ""}
         elif h:
             flush()
-            cur = {"label": h.group(1).strip(), "title": h.group(1).strip(), "text": ""}
+            level, title = len(h.group(1)), h.group(2).strip()
+            stack = {k: v for k, v in stack.items() if k < level}
+            stack[level] = title
+            if level >= 3:   # ###/#### 소제목은 가장 가까운 ##(없으면 #) 뒤에 ' › ' 로 이어 붙인다
+                base = stack.get(2) or stack.get(1)
+                label = " › ".join(filter(None, [base] + [stack.get(k) for k in range(3, level + 1)]))
+            else:
+                label = title
+            cur = {"label": label, "title": title, "text": ""}
         elif t:
             flush()
             cur = {"label": line.strip(), "title": t.group(1).strip() or None, "text": ""}

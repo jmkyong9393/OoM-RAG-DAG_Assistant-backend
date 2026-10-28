@@ -82,6 +82,17 @@ def test_table_sections_split_on_row_boundaries(tmp_path):
     assert sum(c["text"].count("\n") + 1 for c in doc["chunks"]) == 13, "행 수 보존(머리행 1 + 12)"
 
 
+def test_sub_headings_extend_parent_label(tmp_path):
+    src = tmp_path / "sub.md"
+    src.write_text("# 별표 Ⅰ 대상품목\n| 번호 | 업종 |\n\n## 별표 Ⅱ 상품 › 5. 공산품\n공통 규정.\n\n#### ⑤자동차\n| 1) 하자 | o 교환 |\n\n"
+                   "## 별표 Ⅱ 서비스업 › 9. 운수 관련\n\n### ①운수업\n| 0) 공통 | o |\n\n#### 항공(국제 여객)\n| 1) 지연 | o 배상 |\n\n"
+                   "### ③택배\n| 1) 분실 | o 배상 |\n", encoding="utf-8")
+    labels = [c["article_label"] for c in b.build(src, args())["chunks"]]
+    assert labels == ["별표 Ⅰ 대상품목", "별표 Ⅱ 상품 › 5. 공산품", "별표 Ⅱ 상품 › 5. 공산품 › ⑤자동차",
+                      "별표 Ⅱ 서비스업 › 9. 운수 관련 › ①운수업", "별표 Ⅱ 서비스업 › 9. 운수 관련 › ①운수업 › 항공(국제 여객)",
+                      "별표 Ⅱ 서비스업 › 9. 운수 관련 › ③택배"], "###는 ## 뒤에, ####는 ###까지 이어 붙고 새 ###에서 ####는 초기화"
+
+
 def test_supersedes_and_no_articles(tmp_path):
     src = tmp_path / "x.md"
     src.write_text("제1조(목적) 테스트", encoding="utf-8")

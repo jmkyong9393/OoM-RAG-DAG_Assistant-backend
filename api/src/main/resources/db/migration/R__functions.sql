@@ -25,14 +25,15 @@ $$;
 CREATE OR REPLACE FUNCTION hybrid_search_chunks(p_ws bigint, p_tokens text, p_vec vector(1536), p_k int DEFAULT 5)
 RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
   WITH cand AS (
-    SELECT c.id, c.tsv, c.embedding
+    SELECT c.id, c.tsv, c.embedding, length(c.text) AS len
     FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
     WHERE d.status = 'active' AND c.workspace_id IN (SELECT workspace_ancestors(p_ws))
   ),
   q AS (SELECT or_tsquery(p_tokens) AS tq),
+  -- 어휘 점수 동점이면 짧은 청크(더 집중된 조문) 우선, 그다음 id — 순위가 실행마다 바뀌지 않게
   lex AS (
     SELECT id, r FROM (
-      SELECT c.id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q.tq) DESC) AS r
+      SELECT c.id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q.tq) DESC, c.len, c.id) AS r
       FROM cand c, q WHERE q.tq IS NOT NULL AND c.tsv @@ q.tq
     ) t WHERE r <= 20
   ),
@@ -52,7 +53,8 @@ $$;
 CREATE OR REPLACE FUNCTION hybrid_search_nodes(p_ws bigint, p_tokens text, p_vec vector(1536), p_error_code text, p_k int DEFAULT 5)
 RETURNS TABLE(node_id bigint, score double precision) LANGUAGE sql STABLE AS $$
   WITH cand AS (
-    SELECT id, tsv, embedding, error_code, keywords FROM log_nodes WHERE workspace_id = p_ws AND status = 'active'
+    SELECT id, tsv, embedding, error_code, keywords, length(coalesce(tokens, '')) AS len
+    FROM log_nodes WHERE workspace_id = p_ws AND status = 'active'
   ),
   exact AS (
     SELECT id FROM cand WHERE coalesce(p_error_code, '') <> '' AND error_code = p_error_code
@@ -70,7 +72,7 @@ RETURNS TABLE(node_id bigint, score double precision) LANGUAGE sql STABLE AS $$
   q AS (SELECT or_tsquery(p_tokens) AS tq),
   lex AS (
     SELECT id, r FROM (
-      SELECT c.id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q.tq) DESC) AS r
+      SELECT c.id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q.tq) DESC, c.len, c.id) AS r
       FROM cand c, q WHERE q.tq IS NOT NULL AND c.tsv @@ q.tq
     ) t WHERE r <= 20
   ),
