@@ -31,11 +31,12 @@ def profile(name: str = "default") -> LlmProfile:
     p = f"LLM_PROFILE_{name.upper()}_"
     return LlmProfile(
         name=name,
-        base_url=os.environ.get(p + "BASE_URL", "https://api.openai.com/v1").rstrip("/"),
+        # .env 에 'KEY=' 처럼 빈 값으로 있어도 기본값을 쓰도록 `or`
+        base_url=(os.environ.get(p + "BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
         api_key=os.environ.get(p + "API_KEY", ""),
-        model_light=os.environ.get(p + "MODEL_LIGHT", "gpt-4o-mini"),
-        model_answer=os.environ.get(p + "MODEL_ANSWER", "gpt-4o-mini"),
-        embedding_model=os.environ.get(p + "EMBEDDING_MODEL", "text-embedding-3-small"),
+        model_light=os.environ.get(p + "MODEL_LIGHT") or "gpt-4o-mini",
+        model_answer=os.environ.get(p + "MODEL_ANSWER") or "gpt-4o-mini",
+        embedding_model=os.environ.get(p + "EMBEDDING_MODEL") or "text-embedding-3-small",
     )
 
 

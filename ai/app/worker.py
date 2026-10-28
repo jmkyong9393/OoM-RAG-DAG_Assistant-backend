@@ -74,8 +74,12 @@ async def run_once(reindex: bool = False) -> dict:
     with db.connect() as conn:
         if reindex:
             db.reset_tokens(conn)
-        stats["chunks"] = await backfill_chunk_tokens(conn, Tokenizer())
-        stats["nodes"] = await backfill_node_tokens(conn, cache)
+        # 한 번에 200건씩(임베딩 요청 크기) 비어 있는 행이 없을 때까지 반복 — --reindex 직후 수백 건도 한 주기에 끝낸다
+        tokenizer = Tokenizer()
+        while (n := await backfill_chunk_tokens(conn, tokenizer)) > 0:
+            stats["chunks"] += n
+        while (n := await backfill_node_tokens(conn, cache)) > 0:
+            stats["nodes"] += n
         tried: list[int] = []
         while True:
             row = db.claim_pending_log(conn, tried)
