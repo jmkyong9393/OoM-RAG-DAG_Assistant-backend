@@ -75,11 +75,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-        for piece in re.findall(r"\S+\s*", text):
+        pieces = re.findall(r"\S+\s*", text)
+        limit = req.get("max_tokens")
+        finish = "length" if limit and limit < len(pieces) else "stop"
+        for piece in pieces[:limit]:
             chunk = {"id": "stub", "object": "chat.completion.chunk", "model": req.get("model"),
                      "choices": [{"index": 0, "delta": {"content": piece}, "finish_reason": None}]}
             self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode("utf-8"))
             self.wfile.flush()
+        end = {"id": "stub", "object": "chat.completion.chunk", "model": req.get("model"),
+               "choices": [{"index": 0, "delta": {}, "finish_reason": finish}]}
+        self.wfile.write(f"data: {json.dumps(end)}\n\n".encode("utf-8"))
         if (req.get("stream_options") or {}).get("include_usage"):
             usage = {"id": "stub", "object": "chat.completion.chunk", "choices": [],
                      "usage": {"prompt_tokens": 120, "completion_tokens": 25, "total_tokens": 145}}

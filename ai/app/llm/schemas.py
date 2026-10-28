@@ -91,6 +91,7 @@ class DoneEvent(BaseModel):
     model: str
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    truncated: bool = False   # 답변이 ANSWER_MAX_TOKENS 상한에 걸려 잘렸음
 
 
 class ErrorEvent(BaseModel):

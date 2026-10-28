@@ -51,5 +51,11 @@ def db_url() -> str:
     return os.environ.get("AI_DB_URL", "postgresql://oom_ai:oom_ai@localhost:5432/oom")
 
 
+def answer_max_tokens() -> int | None:
+    """답변 생성 하드 상한(max_tokens). 0 이면 상한 없음. 프롬프트의 분량 지시가 1차, 이 값은 폭주 방지용 2차(기본 400 ≈ 지시 준수 시 최대치의 2배)."""
+    n = int(os.environ.get("ANSWER_MAX_TOKENS") or "400")
+    return n if n > 0 else None
+
+
 def worker_poll_sec() -> float:
     return float(os.environ.get("WORKER_POLL_SEC", "3"))

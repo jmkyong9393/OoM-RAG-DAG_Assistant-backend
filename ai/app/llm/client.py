@@ -9,7 +9,7 @@ from typing import AsyncIterator
 
 import httpx
 
-from app.config import LlmProfile, ai_mode
+from app.config import LlmProfile, ai_mode, answer_max_tokens
 from app.llm.schemas import IntentResult, RefineResult
 from app.retrieval.tokenize import Tokenizer, extract_error_code
 
@@ -43,6 +43,7 @@ class Usage:
     def __init__(self) -> None:
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.finish_reason: str | None = None   # 생성 스트림의 종료 사유 ("length" = max_tokens 에 걸려 잘림)
 
 
 # ── 분류 ─────────────────────────────────────────────────────────────────────
@@ -71,14 +72,16 @@ async def classify(profile: LlmProfile, query: str, error_code: str | None, poli
 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.
 규칙: (1) 인용은 제공된 마커([P1], [N2] 등)만 쓴다. (2) 컨텍스트에 없는 내용은 "근거 없음"이라고 말한다.
-(3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다."""
+(3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다.
+(6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내, 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다."""
 
 
 async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage) -> AsyncIterator[str]:
     """policy_ctx: {ref, article_label, doc_title, text}, chain_ctx: {ref, type, status, title, resolution_summary, depth}"""
     if ai_mode() == "openai" and profile.has_key:
         context = _render_context(policy_ctx, chain_ctx)
-        async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}", usage):
+        async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}", usage,
+                                        max_tokens=answer_max_tokens()):
             yield piece
         return
     # fake: 템플릿 답변 — 검색 결과를 그대로 마커와 함께 서술
@@ -159,13 +162,15 @@ async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, us
         return json.loads(j["choices"][0]["message"]["content"])
 
 
-async def _chat_stream(profile: LlmProfile, model: str, system: str, user: str, usage: Usage) -> AsyncIterator[str]:
+async def _chat_stream(profile: LlmProfile, model: str, system: str, user: str, usage: Usage,
+                       max_tokens: int | None = None) -> AsyncIterator[str]:
+    body = {"model": model, "temperature": 0.2, "stream": True, "stream_options": {"include_usage": True},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    if max_tokens:
+        body["max_tokens"] = max_tokens
     async with httpx.AsyncClient(timeout=120) as client:
         async with client.stream("POST", f"{profile.base_url}/chat/completions",
-                                 headers={"Authorization": f"Bearer {profile.api_key}"},
-                                 json={"model": model, "temperature": 0.2, "stream": True,
-                                       "stream_options": {"include_usage": True},
-                                       "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}) as r:
+                                 headers={"Authorization": f"Bearer {profile.api_key}"}, json=body) as r:
             r.raise_for_status()
             async for line in r.aiter_lines():
                 if not line.startswith("data:"):
@@ -178,6 +183,8 @@ async def _chat_stream(profile: LlmProfile, model: str, system: str, user: str, 
                     usage.prompt_tokens += int(j["usage"].get("prompt_tokens", 0))
                     usage.completion_tokens += int(j["usage"].get("completion_tokens", 0))
                 for ch in j.get("choices", []):
+                    if ch.get("finish_reason"):
+                        usage.finish_reason = ch["finish_reason"]
                     delta = (ch.get("delta") or {}).get("content")
                     if delta:
                         yield delta

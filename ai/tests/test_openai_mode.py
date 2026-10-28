@@ -62,8 +62,22 @@ async def test_pipeline_openai_streams_and_marks_unverified(openai_mode, backfil
     assert paths.count("/v1/chat/completions") == 1, "생성 1 (분류는 '에러'+'규정' 힌트로 규칙 처리, LLM 호출 없음)"
     gen = [c for c in openai_mode.calls if c["body"].get("stream")][0]["body"]
     assert gen["stream_options"] == {"include_usage": True}
+    assert gen["max_tokens"] == 400 and done["truncated"] is False, "기본 상한 400 이 요청에 실리고, 스텁 답변(어절 10여 개)은 잘리지 않는다"
     assert "## 규정" in gen["messages"][1]["content"] and "## 해결 사례 체인" in gen["messages"][1]["content"]
     assert all(c["auth"] == "Bearer sk-test" for c in openai_mode.calls)
+
+
+async def test_pipeline_openai_marks_truncated_answer(openai_mode, backfilled, monkeypatch):
+    """상한에 걸리면(finish_reason=length) 잘렸다는 안내 토큰을 덧붙이고 done.truncated 로 알린다. 상한 0 은 무제한."""
+    monkeypatch.setenv("ANSWER_MAX_TOKENS", "3")
+    blocks = await collect(pipeline.run(2, True, "VPN 규정상 승인 절차"))
+    d = dict(blocks)
+    tokens = [b[1]["text"] for b in blocks if b[0] == "token"]
+    assert d["done"]["truncated"] is True and tokens[-1] == pipeline.TRUNCATED_NOTE and len(tokens) == 4
+    assert openai_mode.calls[-1]["body"]["max_tokens"] == 3
+    monkeypatch.setenv("ANSWER_MAX_TOKENS", "0")
+    blocks = await collect(pipeline.run(2, True, "VPN 규정상 승인 절차"))
+    assert dict(blocks)["done"]["truncated"] is False and "max_tokens" not in openai_mode.calls[-1]["body"]
 
 
 async def test_pipeline_openai_dag_only_skips_classify(openai_mode, backfilled):

@@ -18,6 +18,7 @@ from app.retrieval.tokenize import Tokenizer, extract_error_code
 from app.sse import sse
 
 MARKER_RE = re.compile(r"\[([PN]\d+)\]")
+TRUNCATED_NOTE = "\n(답변 길이 상한에 도달해 이하 생략)"
 
 
 async def run(workspace_id: int, policy_enabled: bool | None, query: str, session_id: int | None = None) -> AsyncIterator[bytes]:
@@ -100,6 +101,9 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
                 first_token_ms = int((time.perf_counter() - t0) * 1000)
             answer.append(piece)
             yield sse("token", TokenEvent(text=piece).model_dump())
+        truncated = usage.finish_reason == "length"
+        if truncated:
+            yield sse("token", TokenEvent(text=TRUNCATED_NOTE).model_dump())
         yield sse("stage", StageEvent(node="generate", status="done").model_dump())
 
         # critic — LLM 미사용: 마커 ↔ 검색 집합 대조
@@ -111,7 +115,8 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         yield sse("citations", CitationsEvent(verified=verified, unverified=unverified).model_dump())
         yield sse("stage", StageEvent(node="critic", status="done").model_dump())
         model = prof.model_answer if (ai_mode() == "openai" and prof.has_key) else "fake"
-        yield sse("done", _done(intent, retrieved, [ref_to_id[m] for m in verified], unverified, retrieval_ms, first_token_ms or retrieval_ms, t0, model, usage).model_dump())
+        yield sse("done", _done(intent, retrieved, [ref_to_id[m] for m in verified], unverified, retrieval_ms, first_token_ms or retrieval_ms, t0, model, usage,
+                                truncated).model_dump())
     except Exception as e:  # noqa: BLE001 — 전체 실패만 error 이벤트
         yield sse("error", ErrorEvent(message=str(e)[:300]).model_dump())
 
@@ -148,7 +153,7 @@ def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code:
     return ctx, ChainEvent(entry_id=entry, nodes=ev_nodes, edges=[ChainEdge(**e) for e in ch["edges"]])
 
 
-def _done(intent, retrieved, verified_ids, unverified_refs, retrieval_ms, first_token_ms, t0, model, usage) -> DoneEvent:
+def _done(intent, retrieved, verified_ids, unverified_refs, retrieval_ms, first_token_ms, t0, model, usage, truncated=False) -> DoneEvent:
     return DoneEvent(intent=intent, retrieved_ids=retrieved, verified_ids=verified_ids, unverified_ids=unverified_refs,
                      latency=Latency(retrieval_ms=retrieval_ms, first_token_ms=first_token_ms, total_ms=int((time.perf_counter() - t0) * 1000)),
-                     model=model, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens)
+                     model=model, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens, truncated=truncated)

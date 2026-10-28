@@ -341,6 +341,11 @@
           "default": 0,
           "title": "Completion Tokens",
           "type": "integer"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
         }
       },
       "required": [
