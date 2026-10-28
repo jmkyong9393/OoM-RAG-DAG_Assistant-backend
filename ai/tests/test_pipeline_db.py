@@ -1,6 +1,5 @@
 """파이프라인 통합 테스트 — 실제 Postgres(시드) + fake LLM. 검색·체인·마커 검증·이벤트 순서를 끝까지 돈다."""
 import pytest
-from fastapi.testclient import TestClient
 
 from app.graph import pipeline
 from app.sse import EVENT_ORDER
@@ -54,8 +53,11 @@ async def test_policy_query_hits_active_version_only(fake_mode, backfilled):
     refs = d["policy"]
     assert refs and refs[0]["ref"] == "P1"
     chunk_ids = [r["chunk_id"] for r in refs]
-    assert any(c.startswith("vpn-guide-v21") for c in chunk_ids)
+    # 시드 v2.1 또는 index_policy 로 적재한 v2.2 (v2.2 가 있으면 v2.1 은 R8 로 retired)
+    assert any(c.startswith("vpn-guide-v21") or c.startswith("vpn-guide-v22") for c in chunk_ids)
     assert not any(c.startswith("vpn-guide-v20") for c in chunk_ids), "retired 문서는 검색되지 않는다"
+    if any(c.startswith("vpn-guide-v22") for c in chunk_ids):
+        assert not any(c.startswith("vpn-guide-v21") for c in chunk_ids), "개정판이 있으면 구버전은 빠진다"
     assert all(r["doc_title"] and r["article_label"] and r["text"] for r in refs)
     assert all(i.startswith("c:") for i in d["done"]["retrieved_ids"])
     assert d["citations"]["verified"][0] == "P1"
@@ -98,12 +100,14 @@ async def test_policy_enabled_null_falls_back_to_workspace_setting(fake_mode, ba
     assert dict(blocks)["intent"]["mode"] == "dag_only"
 
 
-def test_http_endpoint_streams_pipeline(fake_mode, backfilled):
+async def test_http_endpoint_streams_pipeline(fake_mode, backfilled):
+    # TestClient 는 스레드에서 새 이벤트 루프를 만든다(Windows 간헐 WinError 10014) → ASGITransport 로 세션 루프 안에서 호출
+    import httpx
     from app.main import app
-    client = TestClient(app)
-    h = client.get("/ai/health").json()
-    assert h["mode"] == "fake" and h["db"] is True
-    r = client.post("/ai/chat", json={"workspace_id": WS_SW, "policy_enabled": False, "session_id": 1, "query": "E-403 해결"})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        h = (await client.get("/ai/health")).json()
+        assert h["mode"] == "fake" and h["db"] is True
+        r = await client.post("/ai/chat", json={"workspace_id": WS_SW, "policy_enabled": False, "session_id": 1, "query": "E-403 해결"})
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
     blocks = parse_blocks(r.text)
     assert blocks[0][0] == "stage" and blocks[-1][0] == "done"

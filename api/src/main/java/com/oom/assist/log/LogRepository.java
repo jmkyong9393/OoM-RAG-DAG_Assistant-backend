@@ -74,6 +74,41 @@ public class LogRepository {
         """).params(ws, type, title, body, authorId, composeMs, source).query(Long.class).single();
   }
 
+  /** 일괄 등록용: 정제 결과까지 같이 넣는다(있으면 refine_status=done → 워커는 토큰·임베딩만 백필). source_ref 로 재적재 멱등. */
+  public long insertNodeFull(long ws, String type, String title, String body, long authorId, String source, String sourceRef,
+      String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt) {
+    boolean refined = errorCode != null || (keywords != null && !keywords.isEmpty()) || resolutionSummary != null;
+    return jdbc.sql("""
+        INSERT INTO log_nodes (workspace_id, type, title, body, author_id, source, source_ref, error_code, keywords, resolution_summary,
+                               refine_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, coalesce(?, now())) RETURNING id
+        """).params(ws, type, title, body, authorId, source, sourceRef, errorCode,
+            keywords == null ? new String[0] : keywords.toArray(String[]::new), resolutionSummary, refined ? "done" : "pending", createdAt)
+        .query(Long.class).single();
+  }
+
+  public Optional<Long> findBySourceRef(long ws, String sourceRef) {
+    return jdbc.sql("SELECT id FROM log_nodes WHERE workspace_id = ? AND source_ref = ? ORDER BY id LIMIT 1").params(ws, sourceRef)
+        .query(Long.class).optional();
+  }
+
+  /** 상위 로그 추천: hybrid_search_nodes(어휘·키워드·에러 코드) 상위. active 만, 점수 순. */
+  public List<LogNodeDto> suggestByScore(long ws, String tokens, String errorCode, int limit) {
+    return jdbc.sql("SELECT " + VIEW_COLS + " FROM hybrid_search_nodes(?, ?, NULL, ?, ?) h JOIN v_log_nodes v ON v.id = h.node_id ORDER BY h.score DESC, v.id")
+        .params(ws, tokens, errorCode, limit).query(LogRepository::map).list();
+  }
+
+  /** 상위 로그 검색: 질의 어절 중 하나라도 제목·에러 코드에 부분 일치. 맞은 어절 수 → 최신순. active 만. */
+  public List<LogNodeDto> suggestByText(long ws, String q, int limit, List<Long> exclude) {
+    String[] words = java.util.Arrays.stream(q.trim().split("\\s+")).filter(w -> !w.isBlank()).map(w -> "%" + w + "%").toArray(String[]::new);
+    return jdbc.sql("SELECT " + VIEW_COLS + " FROM v_log_nodes v"
+            + " WHERE v.workspace_id = ? AND v.status = 'active' AND NOT (v.id = ANY(?))"
+            + " AND EXISTS (SELECT 1 FROM unnest(?::text[]) w WHERE v.title ILIKE w OR coalesce(v.error_code, '') ILIKE w)"
+            + " ORDER BY (SELECT count(*) FROM unnest(?::text[]) w WHERE v.title ILIKE w OR coalesce(v.error_code, '') ILIKE w) DESC,"
+            + " v.created_at DESC, v.id DESC LIMIT ?")
+        .params(ws, exclude.toArray(Long[]::new), words, words, limit).query(LogRepository::map).list();
+  }
+
   public void insertEdge(long ws, long parent, long child, long createdBy, String origin) {
     jdbc.sql("INSERT INTO log_edges (workspace_id, parent_id, child_id, created_by, origin) VALUES (?, ?, ?, ?, ?)")
         .params(ws, parent, child, createdBy, origin).update();

@@ -47,6 +47,7 @@ make seed-reset                       # data/seed/*.json 적재 (워크스페이
 make api                              # Spring Boot :8080   (/api/v1, 환경변수는 deploy/.env)
 make ai                               # Python AI :8000   (AI_MODE=auto: 키 있으면 openai, 없으면 fake)
 make worker ARGS=--once               # 시드 직후 1회: 토큰 백필 + pending 로그 정제. 상시 실행은 ARGS 없이, 토크나이저/임베딩 모델 변경 후엔 ARGS=--reindex
+make index                            # data/policies/*.chunks.json 규정 적재(개정 자동 폐기) + 백필. 검색 품질은 eval/hit_at_k.py
 ```
 
 `AI_MODE` — `openai`(OpenAI 호환 API, 정식 경로) · `fake`(키 없는 개발용: 실제 검색 + 규칙 기반 LLM 대체) · `dummy`(고정 이벤트, DB 불필요) · `auto`(기본: 키 있으면 openai, 없으면 fake). 공급자는 `LLM_PROFILE_<NAME>_*` env 프로필로 바꾼다. 키를 넣은 뒤 `scripts/llm_smoke.py` 로 4경로(분류·생성·정제·임베딩)를 1회 점검한다.

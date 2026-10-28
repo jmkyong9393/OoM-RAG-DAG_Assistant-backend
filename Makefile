@@ -1,7 +1,7 @@
 # 로컬 개발 진입점. Windows는 Git Bash 또는 WSL에서 실행.
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: up down migrate api ai worker seed seed-reset test test-ai psql logs
+.PHONY: up down migrate api ai index worker seed seed-reset test test-ai psql logs
 
 up:            ## postgres 기동
 	$(COMPOSE) up -d postgres
@@ -26,6 +26,9 @@ seed-reset:
 
 test:          ## Spring 테스트 (Testcontainers → Docker 필요)
 	cd api && ./gradlew test
+
+index:         ## data/policies/*.chunks.json → DB 적재(R8 개정 폐기) + 토큰·임베딩 백필
+	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/index_policy.py $(ARGS) && cd ai && uv run python -m app.worker --once
 
 worker:        ## 정제 워커 (pending 로그 정제 · 토큰/임베딩 백필). make worker ARGS=--once 는 1회만
 	set -a; . deploy/.env; set +a; cd ai && uv run python -m app.worker $(ARGS)

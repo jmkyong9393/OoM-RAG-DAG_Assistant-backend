@@ -109,9 +109,14 @@ class DbFunctionsTest extends AbstractDbTest {
     jdbc.sql("UPDATE log_nodes SET keywords = ARRAY['vpn'] WHERE id = ?").param(kw1).update();
     jdbc.sql("UPDATE log_nodes SET tokens = 'VPN 접속 오류' WHERE id = ?").param(lex).update();
     List<Long> hits = jdbc.sql("SELECT node_id FROM hybrid_search_nodes(?, 'VPN 토큰 갱신', NULL, 'E-1', 10)").param(ws).query(Long.class).list();
-    // 정확 일치(+1.0) > 키워드 겹침(+0.5/개, 대소문자 무시; 동점은 id 순) > 어휘만(1/61)
-    // kw2 는 'VPN' 1개만 겹친다 — 다중어 키워드 '토큰 갱신'은 형태소 단위 질의와 완전 일치하지 않는다
+    // 정확 일치(+1.0) ≥ 키워드 겹침(+0.5/개, 대소문자 무시; 동점은 id 순) > 어휘만(1/61)
+    // kw2 는 'VPN' + 복합어 '토큰 갱신'(어절 전부가 질의 토큰에 포함) 2개 → +1.0 으로 exact 와 동점, id 순으로 exact 가 먼저
     assertThat(hits).containsExactly(exact, kw2, kw1, lex);
+    List<Double> scores = jdbc.sql("SELECT score FROM hybrid_search_nodes(?, 'VPN 토큰 갱신', NULL, 'E-1', 10)").param(ws).query(Double.class).list();
+    assertThat(scores.get(0)).isEqualTo(scores.get(1)).isEqualTo(1.0);
+    assertThat(scores.get(2)).isEqualTo(0.5);
+    // 복합어 일부만 맞으면 부스팅 없음
+    assertThat(jdbc.sql("SELECT score FROM hybrid_search_nodes(?, '갱신', NULL, NULL, 10)").param(ws).query(Double.class).list()).isEmpty();
   }
 
   @Test

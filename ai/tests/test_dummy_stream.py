@@ -1,6 +1,6 @@
 """더미 스트림(AI_MODE=dummy) 단위 테스트. 이벤트 형식·순서·모드별 분기를 DB·Spring 없이 검증한다."""
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from app.main import app
 from app.sse import EVENT_ORDER, sse
@@ -14,9 +14,14 @@ def test_sse_format_and_unknown_event():
     assert "session" not in EVENT_ORDER  # session 은 Spring 이 송출한다
 
 
-def test_dag_only_stream_has_no_policy_and_intent_troubleshoot(dummy_mode):
-    client = TestClient(app)
-    r = client.post("/ai/chat", json={"workspace_id": 1, "policy_enabled": False, "session_id": 7, "query": "E-403"})
+def _client():
+    # TestClient 대신 ASGITransport: Windows 에서 스레드별 새 루프 생성이 간헐 실패(WinError 10014)
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
+
+
+async def test_dag_only_stream_has_no_policy_and_intent_troubleshoot(dummy_mode):
+    async with _client() as client:
+        r = await client.post("/ai/chat", json={"workspace_id": 1, "policy_enabled": False, "session_id": 7, "query": "E-403"})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/event-stream")
     blocks = parse_blocks(r.text)
@@ -33,9 +38,9 @@ def test_dag_only_stream_has_no_policy_and_intent_troubleshoot(dummy_mode):
     assert dict(blocks)["citations"]["verified"] == ["N1", "N2", "N3"]
 
 
-def test_policy_stream_includes_policy_before_tokens(dummy_mode):
-    client = TestClient(app)
-    r = client.post("/ai/chat", json={"workspace_id": 2, "policy_enabled": True, "query": "VPN 신청 기준"})
+async def test_policy_stream_includes_policy_before_tokens(dummy_mode):
+    async with _client() as client:
+        r = await client.post("/ai/chat", json={"workspace_id": 2, "policy_enabled": True, "query": "VPN 신청 기준"})
     blocks = parse_blocks(r.text)
     names = [b[0] for b in blocks]
     assert names.index("policy") < names.index("token")
@@ -44,11 +49,11 @@ def test_policy_stream_includes_policy_before_tokens(dummy_mode):
     assert "c:vpn-guide-v21-a12-1" in blocks[-1][1]["verified_ids"]
 
 
-def test_health_reports_mode_and_chain_summary(dummy_mode):
-    client = TestClient(app)
-    h = client.get("/ai/health").json()
-    assert h["status"] == "ok" and h["mode"] == "dummy" and h["models"] == {}
-    s = client.post("/ai/chain-summary", json={"nodes": [{"title": "A"}, {"title": "B"}], "edges": []}).json()
+async def test_health_reports_mode_and_chain_summary(dummy_mode):
+    async with _client() as client:
+        h = (await client.get("/ai/health")).json()
+        assert h["status"] == "ok" and h["mode"] == "dummy" and h["models"] == {}
+        s = (await client.post("/ai/chain-summary", json={"nodes": [{"title": "A"}, {"title": "B"}], "edges": []})).json()
     assert s == {"summary": "A → B"}
 
 

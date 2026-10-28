@@ -43,4 +43,5 @@ dependencies {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	maxHeapSize = "768m"   // 테스트 JVM 상한 (gradle.properties 참고)
 }

@@ -20,10 +20,24 @@ public class LogController {
 
   private final LogService service;
   private final LogRepository repo;
+  private final LogBulkService bulk;
 
-  public LogController(LogService service, LogRepository repo) {
+  public LogController(LogService service, LogRepository repo, LogBulkService bulk) {
     this.service = service;
     this.repo = repo;
+    this.bulk = bulk;
+  }
+
+  /** 상위 로그 자동완성: 추천(에러 코드·키워드·어휘 점수) + 검색(제목·코드 부분 일치). 두 섹션은 겹치지 않는다. */
+  @GetMapping("/logs/suggest")
+  public LogBulkService.SuggestResponse suggest(@RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "8") int limit, TenantContext ctx) {
+    return bulk.suggest(ctx, q, limit);
+  }
+
+  /** 일괄 등록 (합성 로그·연구노트 실사례). 한 트랜잭션, source_ref 멱등. */
+  @PostMapping("/logs/bulk")
+  public ResponseEntity<LogBulkService.BulkResponse> bulkImport(@RequestBody LogBulkService.BulkRequest body, TenantContext ctx) {
+    return ResponseEntity.status(HttpStatus.CREATED).body(bulk.bulk(ctx, body));
   }
 
   public record ListResponse(List<LogNodeDto> items, Map<String, Integer> counts) {}

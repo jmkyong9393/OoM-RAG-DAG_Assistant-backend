@@ -60,10 +60,12 @@ RETURNS TABLE(node_id bigint, score double precision) LANGUAGE sql STABLE AS $$
   qtok AS (
     SELECT array_agg(DISTINCT lower(t)) AS toks FROM regexp_split_to_table(coalesce(p_tokens, ''), '\s+') AS t WHERE t <> ''
   ),
+  -- 키워드 부스팅: 키워드의 모든 어절이 질의 토큰에 포함되면 +0.5 ('토큰 갱신' 같은 복합어도 형태소 단위 질의와 맞는다)
   kw AS (
-    SELECT c.id, 0.5 * (SELECT count(*) FROM unnest(c.keywords) k WHERE lower(k) = ANY (q.toks)) AS s
+    SELECT c.id, 0.5 * (SELECT count(*) FROM unnest(c.keywords) k
+                        WHERE regexp_split_to_array(lower(trim(k)), '\s+') <@ q.toks) AS s
     FROM cand c, qtok q
-    WHERE q.toks IS NOT NULL AND (SELECT array_agg(lower(x)) FROM unnest(c.keywords) x) && q.toks
+    WHERE q.toks IS NOT NULL AND cardinality(c.keywords) > 0
   ),
   q AS (SELECT or_tsquery(p_tokens) AS tq),
   lex AS (
