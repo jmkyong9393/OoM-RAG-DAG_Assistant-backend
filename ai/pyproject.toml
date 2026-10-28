@@ -26,3 +26,5 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23"]
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

@@ -74,6 +74,7 @@ public class SecurityConfig {
         .securityContext(sc -> sc.securityContextRepository(repo))
         .authorizeHttpRequests(a -> a
             .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+            .requestMatchers(HttpMethod.GET, "/auth/password-policy").permitAll()
             .requestMatchers(HttpMethod.GET, "/workspaces").permitAll()   // 로그인 전 앱 셸(부서 목록)
             .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info").permitAll()
             .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

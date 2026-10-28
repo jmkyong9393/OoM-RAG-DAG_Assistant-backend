@@ -17,7 +17,7 @@ logs_fe, edges_fe = load("logs.json"), load("edges.json")
 docs_fe, chunks_fe, events_fe = load("documents.json"), load("chunks.json"), load("doc-events.json")
 
 # 조직: 테넌트 1 + 회사 루트(id 10, 규정 공통) + 부서 3(프론트 id 1·2·3 유지 — URL /w/{id} 호환)
-tenant = {"id": 1, "slug": "oom-demo", "name": "OoM 시연 회사", "settings": {"llm_profile": "default"}}
+tenant = {"id": 1, "slug": "oom-demo", "name": "OoM 시연 회사", "settings": {"llm_profile": "default", "employee_prefix": "OOM"}}
 workspaces = [{"id": 10, "tenant_id": 1, "parent_id": None, "kind": "company", "name": "전사 공통", "policy_enabled": True,
                "settings": {"language": "ko"}}]
 for w in ws_fe:
@@ -25,16 +25,18 @@ for w in ws_fe:
                        "policy_enabled": w["policy_enabled"], "settings": {"language": "ko"}})
 
 # 사용자: 홈 부서 admin, 나머지 부서 member (데모에서 어느 워크스페이스든 들어갈 수 있게)
-# 로그인은 이메일+비밀번호(ADR 안건 G). 프론트 mocks 에는 이메일이 없어 여기서 부여한다. 비밀번호는 seed.py 가 SEED_PASSWORD 로 해시해 넣는다.
+# 로그인은 사번+비밀번호(ADR 안건 G). 사번 = 회사 코드(tenant settings.employee_prefix) + 4자리. 이메일은 연락처.
+# 비밀번호는 seed.py 가 SEED_PASSWORD 로 해시해 넣는다.
+PREFIX = "OOM"
 EMAILS = {1: "bae@oom.local", 2: "jang@oom.local", 3: "shin@oom.local", 4: "hong@oom.local", 5: "kim@oom.local"}
-users = [{"id": u["id"], "tenant_id": 1, "name": u["name"], "title": u.get("title"), "email": EMAILS.get(u["id"], f"user{u['id']}@oom.local"),
-          "home_workspace_id": u["workspace_id"]} for u in users_fe]
+users = [{"id": u["id"], "tenant_id": 1, "name": u["name"], "title": u.get("title"), "employee_no": f"{PREFIX}{u['id']:04d}",
+          "email": EMAILS.get(u["id"], f"user{u['id']}@oom.local"), "home_workspace_id": u["workspace_id"]} for u in users_fe]
 members = []
 for u in users:
     for w in ws_fe:
         members.append({"workspace_id": w["id"], "user_id": u["id"], "role": "admin" if w["id"] == u["home_workspace_id"] else "member"})
 # 격리 시연용: 한 부서(CS)에만 속한 사용자. 이 계정으로 다른 워크스페이스를 열면 403 (프론트 mocks 에는 없음)
-users.append({"id": 5, "tenant_id": 1, "name": "김하늘", "title": "상담사", "email": EMAILS[5], "home_workspace_id": 3})
+users.append({"id": 5, "tenant_id": 1, "name": "김하늘", "title": "상담사", "employee_no": f"{PREFIX}0005", "email": EMAILS[5], "home_workspace_id": 3})
 members.append({"workspace_id": 3, "user_id": 5, "role": "member"})
 
 name_to_id = {u["name"]: u["id"] for u in users}

@@ -1,7 +1,5 @@
 """openai 모드 검증 — 실제 키 없이 OpenAI 호환 스텁 서버로 classify(JSON) · generate(스트리밍+usage) · refine(JSON) · embeddings 4경로를
 실제 DB 와 함께 끝까지 돌린다. 키 발급 후에는 scripts/llm_smoke.py 로 같은 4경로를 실제 공급자에 1회 확인한다."""
-import asyncio
-
 import pytest
 
 from app.config import profile
@@ -70,13 +68,13 @@ async def test_pipeline_openai_dag_only_skips_classify(openai_mode, backfilled):
     assert paths.count("/v1/chat/completions") == 1, "dag_only 는 분류 LLM 호출 없음"
 
 
-def test_worker_openai_writes_embedding(openai_mode, admin_conn):
+async def test_worker_openai_writes_embedding(openai_mode, admin_conn):
     from app import worker
     row = admin_conn.execute("""
         INSERT INTO log_nodes (workspace_id, type, status, title, body, author_id, refine_status, source)
         VALUES (1, 'fail', 'active', '[test] 임베딩 확인', '스텁 공급자로 임베딩이 저장되는지 본다.', 2, 'pending', 'synthetic') RETURNING id""").fetchone()
     try:
-        stats = asyncio.run(worker.run_once())
+        stats = await worker.run_once()
         assert stats["refined"] >= 1
         n = admin_conn.execute("SELECT refine_status, keywords, embedding_model, embedding IS NOT NULL AS has_vec, embedding <=> %s::vector AS dist FROM log_nodes WHERE id = %s",
                                ("[" + ",".join(f"{x:.7g}" for x in fake_embedding("[test] 임베딩 확인\n스텁 공급자로 임베딩이 저장되는지 본다.")) + "]", row["id"])).fetchone()

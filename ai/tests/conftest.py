@@ -5,11 +5,18 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
+
+# Windows 의 Proactor 루프는 테스트마다 asyncio.run() 으로 루프를 만들고 닫을 때 간헐적으로 WinError 10014 / '_ssock' 오류를 낸다 → Selector 루프
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 def _load_dotenv() -> None:
@@ -85,12 +92,12 @@ def dummy_mode(monkeypatch):
     monkeypatch.setenv("AI_MODE", "dummy")
 
 
-@pytest.fixture(scope="session")
-def backfilled():
-    """워커 1회 실행: 시드 청크·노드의 tokens 백필 (어휘 검색 전제). DB 없으면 건너뜀."""
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def backfilled():
+    """워커 1회 실행: 시드 청크·노드의 tokens 백필 (어휘 검색 전제). DB 없으면 건너뜀.
+    asyncio.run() 대신 pytest-asyncio 의 세션 루프를 쓴다 — Windows 에서 루프를 반복 생성하면 WinError 10014 가 간헐 발생."""
     if not DB_AVAILABLE:
         pytest.skip("db")
-    import asyncio
     os.environ.setdefault("AI_MODE", "fake")
     from app import worker
-    return asyncio.run(worker.run_once())
+    return await worker.run_once()

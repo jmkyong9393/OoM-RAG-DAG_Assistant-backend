@@ -23,7 +23,7 @@ spring:
     async:
       request-timeout: 180000            # SSE 스트림 (ms)
   session:
-    timeout: 72h                         # 마지막 요청 후 72시간 유지
+    timeout: 30m                         # 미사용 30분이면 세션 종료 (보호조치 기준 §4, 개발문서 35). 요청마다 연장
     jdbc:
       initialize-schema: never           # spring_session 테이블은 Flyway V4 가 만든다
       table-name: spring_session

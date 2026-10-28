@@ -5,7 +5,7 @@ data/seed/*.json 의 파일 9종과 필드가 **데이터 교체 인터페이스
 적재 전에 도메인 규칙(R2·R12 등)을 점검해 **경고로 보고**한다 — 임시 데이터는 통과시키되, 생성기 품질 기준으로 쓴다.
 
 사용:  uv run --with "psycopg[binary]" --with bcrypt scripts/seed.py [--reset] [--strict]   (--strict: 규칙 위반이 있으면 적재하지 않음)
-       SEED_PASSWORD: 시드 사용자 전원의 초기 비밀번호 (기본 oom-demo-1234!, 로컬 전용)
+       SEED_PASSWORD: 시드 사용자 전원의 초기 비밀번호 (기본 Oom!demo-2026 — 작성규칙 충족, 로컬 전용)
 환경:  DATABASE_URL (기본 postgresql://oom:oom@localhost:5432/oom; make seed 는 deploy/.env 를 읽는다)  — 스키마 소유 계정(oom_api 가 아님: 시드는 explicit id 로 넣는다)
 """
 import json, os, sys, pathlib
@@ -13,7 +13,7 @@ import bcrypt
 import psycopg
 from psycopg.types.json import Jsonb
 
-SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "oom-demo-1234!")
+SEED_PASSWORD = os.environ.get("SEED_PASSWORD", "Oom!demo-2026")
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SEED = ROOT / "data" / "seed"
@@ -83,9 +83,12 @@ def main():
         # 비밀번호: SEED_PASSWORD 하나를 전원에 BCrypt 로 넣는다(로컬 시연용). 이미 있는 사용자는 비밀번호를 건드리지 않는다.
         pw_hash = bcrypt.hashpw(SEED_PASSWORD.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("ascii")
         for u in load("users.json"):
-            cur.execute("""INSERT INTO users (id, tenant_id, name, title, email, password_hash) VALUES (%s,%s,%s,%s,%s,%s)
-                           ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, password_hash = coalesce(users.password_hash, EXCLUDED.password_hash)""",
-                        (u["id"], u["tenant_id"], u["name"], u.get("title"), u.get("email"), pw_hash))
+            cur.execute("""INSERT INTO users (id, tenant_id, name, title, employee_no, email, password_hash, password_changed_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s, now())
+                           ON CONFLICT (id) DO UPDATE SET employee_no = EXCLUDED.employee_no, email = EXCLUDED.email,
+                             password_hash = coalesce(users.password_hash, EXCLUDED.password_hash),
+                             password_changed_at = coalesce(users.password_changed_at, now())""",
+                        (u["id"], u["tenant_id"], u["name"], u.get("title"), u.get("employee_no"), u.get("email"), pw_hash))
         for m in load("workspace_members.json"):
             cur.execute("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
                         (m["workspace_id"], m["user_id"], m["role"]))

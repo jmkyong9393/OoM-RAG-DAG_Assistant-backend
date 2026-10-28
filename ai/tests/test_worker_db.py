@@ -1,6 +1,4 @@
 """정제 워커 통합 테스트 — 관리자 계정으로 pending 노드를 넣고, 앱 계정(oom_ai)의 권한만으로 정제·백필이 되는지 본다."""
-import asyncio
-
 import pytest
 
 from app import worker
@@ -21,8 +19,8 @@ def pending_node(admin_conn):
     admin_conn.execute("DELETE FROM workspace_terms WHERE workspace_id = 1 AND source = 'auto' AND term <> ALL(%s)", (list(before),))
 
 
-def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node, admin_conn):
-    stats = asyncio.run(worker.run_once())
+async def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node, admin_conn):
+    stats = await worker.run_once()
     assert stats["refined"] >= 1 and stats["failed"] == 0
     n = admin_conn.execute("SELECT * FROM log_nodes WHERE id = %s", (pending_node,)).fetchone()
     assert n["refine_status"] == "done" and n["refine_error"] is None
@@ -38,12 +36,12 @@ def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node, admi
     assert admin_conn.execute("SELECT count(*) AS c FROM policy_chunks WHERE tokens IS NULL").fetchone()["c"] == 0
     assert admin_conn.execute("SELECT count(*) AS c FROM log_nodes WHERE tokens IS NULL AND refine_status <> 'pending'").fetchone()["c"] == 0
     # 두 번째 실행은 할 일이 없다
-    again = asyncio.run(worker.run_once())
+    again = await worker.run_once()
     assert again == {"refined": 0, "failed": 0, "chunks": 0, "nodes": 0}
 
 
-def test_refined_node_is_searchable_by_error_code_and_words(fake_mode, pending_node, admin_conn):
-    asyncio.run(worker.run_once())
+async def test_refined_node_is_searchable_by_error_code_and_words(fake_mode, pending_node, admin_conn):
+    await worker.run_once()
     from app.retrieval import db
     with db.connect() as conn:
         exact = db.search_nodes(conn, 1, None, None, "E-500", 3)
@@ -55,16 +53,16 @@ def test_refined_node_is_searchable_by_error_code_and_words(fake_mode, pending_n
         assert not db.search_nodes(conn, 2, None, None, "E-500", 3)
 
 
-def test_failed_refine_increments_attempts(fake_mode, pending_node, admin_conn, monkeypatch):
+async def test_failed_refine_increments_attempts(fake_mode, pending_node, admin_conn, monkeypatch):
     async def boom(*a, **k):
         raise RuntimeError("llm down")
     monkeypatch.setattr(worker.llm, "refine", boom)
-    stats = asyncio.run(worker.run_once())
+    stats = await worker.run_once()
     assert stats["failed"] >= 1
     n = admin_conn.execute("SELECT refine_status, refine_attempts, refine_error, tokens FROM log_nodes WHERE id = %s", (pending_node,)).fetchone()
     assert n["refine_status"] == "pending" and n["refine_attempts"] == 1
     assert "llm down" in n["refine_error"]
     assert n["tokens"], "정제가 실패해도 토큰은 남겨 어휘 검색은 되게 한다"
     admin_conn.execute("UPDATE log_nodes SET refine_attempts = 2 WHERE id = %s", (pending_node,))
-    asyncio.run(worker.run_once())
+    await worker.run_once()
     assert admin_conn.execute("SELECT refine_status FROM log_nodes WHERE id = %s", (pending_node,)).fetchone()["refine_status"] == "failed"

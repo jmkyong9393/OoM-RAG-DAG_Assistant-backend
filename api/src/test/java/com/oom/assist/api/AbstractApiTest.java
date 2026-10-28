@@ -38,6 +38,7 @@ public abstract class AbstractApiTest {
   @Autowired protected PasswordEncoder encoder;
 
   protected long tenant, company, wsSw, wsHr, userLead, userBackend;
+  protected String empLead = "T0001", empBackend = "T0002";
   protected String emailLead = "lead@test.local", emailBackend = "backend@test.local";
 
   @BeforeEach
@@ -46,16 +47,16 @@ public abstract class AbstractApiTest {
     company = jdbc.sql("INSERT INTO workspaces (tenant_id, kind, name, policy_enabled) VALUES (?, 'company', '전사', true) RETURNING id").param(tenant).query(Long.class).single();
     wsSw = jdbc.sql("INSERT INTO workspaces (tenant_id, parent_id, kind, name, policy_enabled) VALUES (?, ?, 'dept', 'SW 개발', false) RETURNING id").params(tenant, company).query(Long.class).single();
     wsHr = jdbc.sql("INSERT INTO workspaces (tenant_id, parent_id, kind, name, policy_enabled) VALUES (?, ?, 'dept', '인사·총무', true) RETURNING id").params(tenant, company).query(Long.class).single();
-    userLead = user("배종현", "팀장", emailLead);
-    userBackend = user("장문경", "매니저", emailBackend);
+    userLead = user("배종현", "팀장", empLead, emailLead);
+    userBackend = user("장문경", "매니저", empBackend, emailBackend);
     member(wsSw, userLead, "admin");
     member(wsSw, userBackend, "member");
     member(wsHr, userBackend, "admin");
   }
 
-  protected long user(String name, String title, String email) {
-    return jdbc.sql("INSERT INTO users (tenant_id, name, title, email, password_hash) VALUES (?, ?, ?, ?, ?) RETURNING id")
-        .params(tenant, name, title, email, encoder.encode(PASSWORD)).query(Long.class).single();
+  protected long user(String name, String title, String employeeNo, String email) {
+    return jdbc.sql("INSERT INTO users (tenant_id, name, title, employee_no, email, password_hash, password_changed_at) VALUES (?, ?, ?, ?, ?, ?, now()) RETURNING id")
+        .params(tenant, name, title, employeeNo, email, encoder.encode(PASSWORD)).query(Long.class).single();
   }
 
   protected void member(long ws, long user, String role) {
@@ -70,10 +71,10 @@ public abstract class AbstractApiTest {
    */
   protected Cookie loginCookie(long userId) {
     return sessionCookies.computeIfAbsent(userId, id -> {
-      String email = jdbc.sql("SELECT email FROM users WHERE id = ?").param(id).query(String.class).single();
+      String empNo = jdbc.sql("SELECT employee_no FROM users WHERE id = ?").param(id).query(String.class).single();
       try {
         MvcResult r = mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-            .content("{\"email\": \"" + email + "\", \"password\": \"" + PASSWORD + "\"}")).andReturn();
+            .content("{\"employee_no\": \"" + empNo + "\", \"password\": \"" + PASSWORD + "\"}")).andReturn();
         if (r.getResponse().getStatus() != 200) throw new IllegalStateException("login failed: " + r.getResponse().getStatus());
         String h = r.getResponse().getHeaders("Set-Cookie").stream().filter(x -> x.startsWith("OOMSESSION=")).findFirst().orElseThrow();
         return new Cookie("OOMSESSION", h.substring("OOMSESSION=".length(), h.indexOf(';')));
