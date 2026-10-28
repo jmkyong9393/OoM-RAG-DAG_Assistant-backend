@@ -23,6 +23,9 @@ PDF 하이라이트가 필요하면 `bboxes` 에 사각형 목록을 넣고 `fil
 }
 ```
 
+원문에서 만들기: `uv run scripts/build_policy_json.py 원문.md --slug <slug> --workspace <id> --title "<제목>" --version v1.0 [--supersedes <구 slug>]`
+(`제N조`·`제N조의M`·`Q18.`·`## 제목`·`[별표]` 줄을 경계로 자르고, 긴 조문은 항 ①②③ 경계에서 `--max-chars`(기본 700) 이하로 나눈다)
+
 규칙
 - `index_policy.py` 는 제목·버전·청크 본문의 해시가 같으면 스킵, 다르면 청크를 교체한다(재실행 멱등).
 - 개정판을 넣으면 구버전은 `retired` 가 되고 검색에서 빠진다(`retire_reason='v2.2 개정'`, 감사 로그 `superseded`). 구버전 청크는 남아 "이전 규정" 재열람이 가능하다.
