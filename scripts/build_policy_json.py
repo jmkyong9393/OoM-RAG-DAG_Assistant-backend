@@ -4,7 +4,7 @@
   - 법령·규정: '제12조(원격접속 신청)' / '제12조의2' 줄에서 새 조문 시작. 긴 조문은 항(①②③…) 경계에서 max-chars 이하로 분할, article_label 은 같게
   - FAQ: 'Q18.' 또는 'Q18 ' 로 시작하는 줄에서 새 항목 시작
   - Markdown: '## ' 제목 줄도 조문 경계로 취급 (제목이 label)
-  - '별표' 블록은 하나의 조문으로 취급
+  - '별표' 블록은 하나의 조문으로 취급. 표('| 셀 | 셀 |' 행, hwpx_to_md.py 출력)는 행 경계에서 분할
 청크 id 는 결정적: {slug}-a{조번호}-{seq} (조번호가 없으면 s{순번}).
 
 실행: uv run scripts/build_policy_json.py 원문.md --slug refund-policy-v4 --workspace 3 --title "환불규정" --version v4.0 \
@@ -72,7 +72,10 @@ def split_articles(lines: list[str]) -> list[dict]:
 
 
 def split_long(text: str, max_chars: int) -> list[str]:
-    """항(①②…) 경계에서 max_chars 이하 조각으로. 항 하나가 그보다 길면 문장 경계로."""
+    """항(①②…) 경계에서 max_chars 이하 조각으로. 항 하나가 그보다 길면 문장 경계로.
+    표('| … |' 행)가 들어 있으면 행 경계에서 자른다 — 한 행이 쪼개지지 않게."""
+    if re.search(r"^\|", text, re.M):
+        return _split_rows(text, max_chars)
     text = text.replace("\n", " ").strip()
     if len(text) <= max_chars:
         return [text]
@@ -91,6 +94,25 @@ def split_long(text: str, max_chars: int) -> list[str]:
         buf += (" " if buf else "") + p
     if buf.strip():
         chunks.append(buf.strip())
+    return chunks
+
+
+def _split_rows(text: str, max_chars: int) -> list[str]:
+    """줄(표 행·문단) 단위로 max_chars 이하로 묶는다. 한 줄이 그보다 길면 그 줄만 문장 경계로 더 자른다."""
+    units = [l.strip() for l in text.splitlines() if l.strip()]
+    chunks: list[str] = []
+    buf = ""
+    for u in units:
+        if len(u) > max_chars:
+            if buf:
+                chunks.append(buf); buf = ""
+            chunks.extend(split_long(u.strip("| ").replace(" | ", " / "), max_chars))
+            continue
+        if len(buf) + len(u) + 1 > max_chars and buf:
+            chunks.append(buf); buf = ""
+        buf += ("\n" if buf else "") + u
+    if buf:
+        chunks.append(buf)
     return chunks
 
 
@@ -117,6 +139,7 @@ def build(source: Path, args) -> dict:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source", type=Path)
     ap.add_argument("--slug", required=True); ap.add_argument("--workspace", type=int, required=True)

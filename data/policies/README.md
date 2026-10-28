@@ -24,7 +24,16 @@ PDF 하이라이트가 필요하면 `bboxes` 에 사각형 목록을 넣고 `fil
 ```
 
 원문에서 만들기: `uv run scripts/build_policy_json.py 원문.md --slug <slug> --workspace <id> --title "<제목>" --version v1.0 [--supersedes <구 slug>]`
-(`제N조`·`제N조의M`·`Q18.`·`## 제목`·`[별표]` 줄을 경계로 자르고, 긴 조문은 항 ①②③ 경계에서 `--max-chars`(기본 700) 이하로 나눈다)
+(`제N조`·`제N조의M`·`Q18.`·`## 제목`·`[별표]` 줄을 경계로 자르고, 긴 조문은 항 ①②③ 경계에서 `--max-chars`(기본 700) 이하로 나눈다.
+표(`| 셀 | 셀 |` 행)가 있는 절은 행 경계에서 나눈다)
+
+HWPX(한글) 원문이면 먼저 `uv run scripts/hwpx_to_md.py 별표1.hwpx 별표2.hwpx … --prelude 본문.md --out 원문.md` 로 Markdown 을 만든다.
+업종 제목(`1. 농ㆍ수ㆍ축산물`)은 `##` 제목으로, 표는 행마다 한 줄로 옮긴다. 원문과 변환 결과는 `src/<slug>/` 에 함께 둔다.
+
+| slug | 원문 | 청크 | 비고 |
+|---|---|---|---|
+| `consumer-dispute-2025` | `src/consumer-dispute-2025/` 공정위고시 제2025-14호 본문 + 별표 Ⅰ~Ⅳ (law.go.kr HWPX) | 185 | 워크스페이스 3(CS). 시드 `consumer-dispute` 를 폐기(`--supersedes`) |
+| `vpn-guide-v22` | (시드) | 3 | 워크스페이스 2 |
 
 규칙
 - `index_policy.py` 는 제목·버전·청크 본문의 해시가 같으면 스킵, 다르면 청크를 교체한다(재실행 멱등).

@@ -31,6 +31,7 @@ def search(conn, item: dict, mode: str, tokens: str, vec, k: int) -> list[str]:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows 콘솔(cp949)에서 '—' 출력 오류 방지
     ap = argparse.ArgumentParser()
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--json", type=Path, default=None)

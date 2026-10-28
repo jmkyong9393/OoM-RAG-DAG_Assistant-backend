@@ -70,6 +70,18 @@ def test_long_article_splits_on_paragraph_marks_keeping_label(tmp_path):
     assert all(c["text"].lstrip()[0] in "①②③④⑤" for c in doc["chunks"]), "항 경계에서 자른다"
 
 
+def test_table_sections_split_on_row_boundaries(tmp_path):
+    rows = [f"| {i}) 분쟁유형 {i} | o 해결기준 {'가' * 60} | 비고 |" for i in range(1, 13)]
+    src = tmp_path / "tbl.md"
+    src.write_text("## 별표 Ⅱ 상품 › 2. 식료품\n\n| 분쟁유형 | 해결기준 | 비고 |\n" + "\n".join(rows) + "\n", encoding="utf-8")
+    doc = b.build(src, args(max_chars=400))
+    assert {c["article_label"] for c in doc["chunks"]} == {"별표 Ⅱ 상품 › 2. 식료품"}
+    assert len(doc["chunks"]) >= 3 and all(len(c["text"]) <= 400 for c in doc["chunks"])
+    for c in doc["chunks"]:
+        assert all(l.startswith("|") and l.endswith("|") for l in c["text"].splitlines()), "행이 중간에 잘리지 않는다"
+    assert sum(c["text"].count("\n") + 1 for c in doc["chunks"]) == 13, "행 수 보존(머리행 1 + 12)"
+
+
 def test_supersedes_and_no_articles(tmp_path):
     src = tmp_path / "x.md"
     src.write_text("제1조(목적) 테스트", encoding="utf-8")
