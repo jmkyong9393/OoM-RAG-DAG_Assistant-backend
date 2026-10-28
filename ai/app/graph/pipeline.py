@@ -39,14 +39,16 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         q_tokens = tokenizer.tokens(query)
         error_code = extract_error_code(query)
 
-        # classify
+        # 질의 임베딩은 분류와 병렬로 시작 (openai 모드에서만 값이 있다. 분류가 규칙으로 즉시 끝나면 임베딩이 임계 경로)
+        q_vec_task = asyncio.create_task(asyncio.to_thread(embed.embed_one, prof, query))
+
+        # classify — 규칙으로 결정되면 LLM 호출 없음
         yield sse("stage", StageEvent(node="supervisor", status="start").model_dump())
         intent = (await llm.classify(prof, query, error_code, policy_enabled, usage)).intent
         yield sse("intent", IntentEvent(intent=intent, mode=mode).model_dump())
         yield sse("stage", StageEvent(node="supervisor", status="done").model_dump())
 
-        # 임베딩은 한 번만 (openai 모드에서만 값이 있다)
-        q_vec = await asyncio.to_thread(embed.embed_one, prof, query)
+        q_vec = await q_vec_task
 
         # workers (병렬. 한쪽 실패는 stage error 로 보고하고 계속)
         do_policy = policy_enabled and intent in ("policy", "both")

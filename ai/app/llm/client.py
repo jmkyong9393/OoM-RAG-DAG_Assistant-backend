@@ -13,8 +13,30 @@ from app.config import LlmProfile, ai_mode
 from app.llm.schemas import IntentResult, RefineResult
 from app.retrieval.tokenize import Tokenizer, extract_error_code
 
-POLICY_HINTS = ("규정", "기준", "지침", "정책", "신청", "절차", "환불", "교환", "승인", "조항", "몇 조", "규칙", "허용")
-TROUBLE_HINTS = ("오류", "에러", "장애", "실패", "안 돼", "안돼", "해결", "원인", "조치", "예전에", "사례", "timeout", "error")
+# 규칙 분류 힌트. 한쪽 힌트만 있으면 LLM 없이 확정, 둘 다 있으면 both, 둘 다 없으면 LLM(openai) 또는 both(fake).
+# 넓은 말("되나요", "거부")은 넣지 않는다 — 규정 FAQ 질문을 troubleshoot 로 잘못 보내면 규정 검색을 건너뛰기 때문.
+POLICY_HINTS = ("규정", "기준", "지침", "정책", "신청", "절차", "환불", "환급", "교환", "승인", "조항", "몇 조", "규칙", "허용",
+                "보증기간", "보유기간", "내용연수", "배상", "보상", "위약금", "수수료", "취소", "해지", "약관", "고시", "법령", "법에", "기한", "며칠", "언제까지", "청구")
+TROUBLE_HINTS = ("오류", "에러", "장애", "해결", "예전에", "사례", "복구", "재발", "먹통", "타임아웃", "멈춘", "멈춤", "느려", "거절", "문제", "배치",
+                 "timeout", "error", "exception", "stacktrace")
+# 약한 힌트: 규정 질문에도 흔히 나온다("인증이 실패하나요"). 단독으로는 troubleshoot 확정 대신 LLM 에 넘긴다
+TROUBLE_WEAK_HINTS = ("실패", "원인", "조치", "안 돼", "안돼", "안 됨", "안됨")
+HTTP_STATUS_RE = re.compile(r"(?<!\d)[45]\d\d(?!\d)")   # '504', '429로', '403 떨어지는데' — 접두어 없는 HTTP 상태 코드
+
+
+def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
+    """힌트만으로 결정되면 IntentResult, 애매하면 None. 에러 코드는 troubleshoot 의 강한 신호."""
+    q = query.lower()
+    has_policy = any(h in q for h in POLICY_HINTS)
+    has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q))
+    weak_trouble = any(h in q for h in TROUBLE_WEAK_HINTS)
+    if has_policy and (has_trouble or weak_trouble):
+        return IntentResult(intent="both", reason="rule: policy+trouble hints")
+    if has_policy:
+        return IntentResult(intent="policy", reason="rule: policy hints")
+    if has_trouble:
+        return IntentResult(intent="troubleshoot", reason="rule: error code" if error_code else "rule: trouble hints")
+    return None
 
 
 class Usage:
@@ -26,8 +48,12 @@ class Usage:
 # ── 분류 ─────────────────────────────────────────────────────────────────────
 
 async def classify(profile: LlmProfile, query: str, error_code: str | None, policy_enabled: bool, usage: Usage) -> IntentResult:
+    """규칙 먼저, LLM 은 애매할 때만 — 분류 LLM 호출(≈4 s)이 첫 토큰 체감의 대부분이라 힌트로 결정되면 건너뛴다."""
     if not policy_enabled:
         return IntentResult(intent="troubleshoot", reason="dag_only mode")
+    ruled = rule_classify(query, error_code)
+    if ruled is not None:
+        return ruled
     if ai_mode() == "openai" and profile.has_key:
         system = ("You classify a Korean enterprise question into exactly one intent. "
                   "policy: asks about official rules/guidelines/procedures. troubleshoot: asks how a failure/error was solved before. "
@@ -35,18 +61,9 @@ async def classify(profile: LlmProfile, query: str, error_code: str | None, poli
         hint = f" (error code detected: {error_code})" if error_code else ""
         data = await _chat_json(profile, profile.model_light, system, f"질문: {query}{hint}", usage)
         try:
-            return IntentResult(**data)
+            return IntentResult(intent=data["intent"], reason="llm: " + str(data.get("reason", "")))
         except Exception:
-            return IntentResult(intent="both", reason="fallback")
-    q = query.lower()
-    has_policy = any(h in q for h in POLICY_HINTS)
-    has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS)
-    if has_policy and has_trouble:
-        return IntentResult(intent="both", reason="rule: policy+trouble hints")
-    if has_policy:
-        return IntentResult(intent="policy", reason="rule: policy hints")
-    if has_trouble:
-        return IntentResult(intent="troubleshoot", reason="rule: trouble hints")
+            return IntentResult(intent="both", reason="llm: fallback")
     return IntentResult(intent="both", reason="rule: unsure → both")
 
 

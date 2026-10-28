@@ -28,11 +28,16 @@ async def test_classify_and_refine_use_json_mode(openai_mode):
     prof = profile()
     assert prof.has_key and prof.base_url == openai_mode.base_url
     u = llm.Usage()
+    # 힌트가 있으면 규칙으로 끝나 LLM 을 부르지 않는다
+    n = len(openai_mode.calls)
     r = await llm.classify(prof, "VPN 규정상 E-403 에러는 어떻게 조치해?", "E-403", True, u)
-    assert r.intent == "both" and r.reason == "stub"
+    assert r.intent == "both" and r.reason.startswith("rule:") and len(openai_mode.calls) == n
+    # 힌트가 없는 질문만 LLM(JSON 모드)로 간다
+    r = await llm.classify(prof, "요즘 VPN 이 왜 이래?", None, True, u)
+    assert r.intent == "troubleshoot" and r.reason == "llm: stub"   # 스텁은 '규정' 없는 질문을 troubleshoot 로 답한다
     call = openai_mode.calls[-1]["body"]
     assert call["model"] == "stub-light" and call["response_format"] == {"type": "json_object"} and call["temperature"] == 0
-    assert "error code detected: E-403" in call["messages"][1]["content"]
+    assert "error code detected" not in call["messages"][1]["content"]
     rr = await llm.refine(prof, "HTTP 504 타임아웃", "커넥션 풀 확장으로 해결", Tokenizer(), u)
     assert rr.keywords == ["스텁", "키워드", "정제"]
     assert rr.error_code == "HTTP 504", "LLM 이 코드를 비우면 정규식 추출값으로 보완한다"
@@ -54,7 +59,7 @@ async def test_pipeline_openai_streams_and_marks_unverified(openai_mode, backfil
     assert done["unverified_ids"] == ["N99"] and len(done["verified_ids"]) == 2
     paths = [c["path"] for c in openai_mode.calls]
     assert paths.count("/v1/embeddings") == 1, "질의 임베딩은 한 번만"
-    assert paths.count("/v1/chat/completions") == 2, "분류 1 + 생성 1"
+    assert paths.count("/v1/chat/completions") == 1, "생성 1 (분류는 '에러'+'규정' 힌트로 규칙 처리, LLM 호출 없음)"
     gen = [c for c in openai_mode.calls if c["body"].get("stream")][0]["body"]
     assert gen["stream_options"] == {"include_usage": True}
     assert "## 규정" in gen["messages"][1]["content"] and "## 해결 사례 체인" in gen["messages"][1]["content"]
