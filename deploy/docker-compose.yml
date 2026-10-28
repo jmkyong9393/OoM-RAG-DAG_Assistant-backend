@@ -1,0 +1,37 @@
+# 로컬 개발: postgres만 컨테이너. api·ai·web은 호스트에서 실행.
+# Python만 띄우는 개발자는 `docker compose --profile migrate run --rm flyway` 로 같은 마이그레이션을 적용한다.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: oom-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oom}
+      POSTGRES_USER: ${POSTGRES_USER:-oom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oom}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - oom-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oom} -d ${POSTGRES_DB:-oom}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  flyway:
+    image: flyway/flyway:11
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../api/src/main/resources/db/migration:/flyway/sql:ro
+    command: >
+      -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oom}
+      -user=${POSTGRES_USER:-oom} -password=${POSTGRES_PASSWORD:-oom}
+      -placeholders.oom_api_password=${OOM_API_PASSWORD:-oom_api}
+      -placeholders.oom_ai_password=${OOM_AI_PASSWORD:-oom_ai}
+      migrate
+
+volumes:
+  oom-pgdata:

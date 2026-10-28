@@ -1,0 +1,74 @@
+[
+  {
+    "id": "consumer-dispute-a1-1",
+    "doc_id": 4,
+    "workspace_id": 3,
+    "article_label": "총칙 1. 목적",
+    "page": null,
+    "text": "이 기준은 소비자기본법 제16조제2항 및 같은 법 시행령 제8조제3항에 따라 소비자와 사업자 사이에 발생한 분쟁을 원활하게 해결하기 위한 합의 또는 권고의 기준을 정함을 목적으로 한다.",
+    "bboxes": null
+  },
+  {
+    "id": "consumer-dispute-a3-1",
+    "doc_id": 4,
+    "workspace_id": 3,
+    "article_label": "품목별 해결기준 — 식료품",
+    "page": null,
+    "text": "개봉된 신선식품은 소비자의 귀책사유가 없는 한 구입 후 7일 이내 교환 또는 환급이 가능하다. 다만 부패·변질이 사업자의 보관 부주의에 기인한 경우 기간과 관계없이 환급한다.",
+    "bboxes": null
+  },
+  {
+    "id": "consumer-dispute-a3-2",
+    "doc_id": 4,
+    "workspace_id": 3,
+    "article_label": "품목별 해결기준 — 식료품 (별표)",
+    "page": null,
+    "text": "유통기한 경과 제품 판매 시: 제품 교환 또는 구입가 환급. 이물 혼입: 제품 교환 또는 구입가 환급 및 치료비 배상.",
+    "bboxes": null
+  },
+  {
+    "id": "sec-faq-a18-1",
+    "doc_id": 3,
+    "workspace_id": 2,
+    "article_label": "Q18. VPN 접속이 거부될 때",
+    "page": 3,
+    "text": "승인된 기간이 만료되었거나 단말 보안 점검을 통과하지 못한 경우 접속이 거부됩니다. 기간 만료는 재신청, 점검 미통과는 보안 포털에서 점검 후 재시도하십시오.",
+    "bboxes": null
+  },
+  {
+    "id": "vpn-guide-v21-a12-1",
+    "doc_id": 1,
+    "workspace_id": 2,
+    "article_label": "제12조 (원격접속 신청)",
+    "page": 7,
+    "text": "① 사외에서 사내망에 접속하려는 임직원은 접속 목적과 기간을 명시하여 사전에 신청하여야 한다. ② 접속 기간은 최대 30일로 하며, 부서장의 승인을 받아야 한다. ③ 기간 연장은 보안담당자 확인 후 1회에 한하여 가능하다.",
+    "bboxes": null
+  },
+  {
+    "id": "vpn-guide-v21-a14-1",
+    "doc_id": 1,
+    "workspace_id": 2,
+    "article_label": "제14조 (접속 차단)",
+    "page": 8,
+    "text": "① 승인 기간이 만료되었거나 단말 보안 점검을 통과하지 못한 단말의 접속은 차단한다. ② 차단된 임직원은 보안 포털에서 사유를 확인하고 재신청할 수 있다.",
+    "bboxes": null
+  },
+  {
+    "id": "vpn-guide-v20-a12-1",
+    "doc_id": 2,
+    "workspace_id": 2,
+    "article_label": "제12조 (원격접속 신청)",
+    "page": 7,
+    "text": "① 사외에서 사내망에 접속하려는 임직원은 사전에 신청하여야 한다. ② 접속 기간은 최대 14일로 한다.",
+    "bboxes": null
+  },
+  {
+    "id": "refund-policy-v3-a7-1",
+    "doc_id": 5,
+    "workspace_id": 3,
+    "article_label": "제7조 (개봉 상품의 환불)",
+    "page": 4,
+    "text": "① 신선식품은 개봉 후 단순 변심에 의한 환불이 불가하다. ② 다만 배송 중 변질·파손이 확인된 경우 수령일로부터 3일 이내 사진 증빙을 첨부하여 환불을 요청할 수 있다.",
+    "bboxes": null
+  }
+]

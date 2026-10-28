@@ -1,0 +1,46 @@
+[
+  {
+    "id": 10,
+    "tenant_id": 1,
+    "parent_id": null,
+    "kind": "company",
+    "name": "전사 공통",
+    "policy_enabled": true,
+    "settings": {
+      "language": "ko"
+    }
+  },
+  {
+    "id": 1,
+    "tenant_id": 1,
+    "parent_id": 10,
+    "kind": "dept",
+    "name": "SW 개발",
+    "policy_enabled": false,
+    "settings": {
+      "language": "ko"
+    }
+  },
+  {
+    "id": 2,
+    "tenant_id": 1,
+    "parent_id": 10,
+    "kind": "dept",
+    "name": "인사·총무",
+    "policy_enabled": true,
+    "settings": {
+      "language": "ko"
+    }
+  },
+  {
+    "id": 3,
+    "tenant_id": 1,
+    "parent_id": 10,
+    "kind": "dept",
+    "name": "고객지원(CS)",
+    "policy_enabled": true,
+    "settings": {
+      "language": "ko"
+    }
+  }
+]

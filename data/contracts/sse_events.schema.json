@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OoM Assist SSE events",
+  "description": "POST /api/v1/chat 스트림의 event 이름별 data payload. 순서: session → stage → intent → policy → chain → token → citations → done → error",
+  "type": "object",
+  "properties": {
+    "session": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id"
+      ],
+      "description": "Spring 이 첫 이벤트로 송출 (Python 스트림에는 없음)"
+    },
+    "stage": {
+      "$ref": "#/$defs/StageEvent"
+    },
+    "intent": {
+      "$ref": "#/$defs/IntentEvent"
+    },
+    "policy": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PolicyRef"
+      }
+    },
+    "chain": {
+      "$ref": "#/$defs/ChainEvent"
+    },
+    "token": {
+      "$ref": "#/$defs/TokenEvent"
+    },
+    "citations": {
+      "$ref": "#/$defs/CitationsEvent"
+    },
+    "done": {
+      "$ref": "#/$defs/DoneEvent"
+    },
+    "error": {
+      "$ref": "#/$defs/ErrorEvent"
+    }
+  },
+  "$defs": {
+    "StageEvent": {
+      "properties": {
+        "node": {
+          "enum": [
+            "supervisor",
+            "policy_rag",
+            "graph_search",
+            "gate",
+            "generate",
+            "critic"
+          ],
+          "title": "Node",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "start",
+            "done",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        }
+      },
+      "required": [
+        "node",
+        "status"
+      ],
+      "title": "StageEvent",
+      "type": "object"
+    },
+    "IntentEvent": {
+      "properties": {
+        "intent": {
+          "enum": [
+            "policy",
+            "troubleshoot",
+            "both"
+          ],
+          "title": "Intent",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "policy",
+            "dag_only"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent",
+        "mode"
+      ],
+      "title": "IntentEvent",
+      "type": "object"
+    },
+    "ChainEdge": {
+      "properties": {
+        "parent_id": {
+          "title": "Parent Id",
+          "type": "integer"
+        },
+        "child_id": {
+          "title": "Child Id",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parent_id",
+        "child_id"
+      ],
+      "title": "ChainEdge",
+      "type": "object"
+    },
+    "ChainNode": {
+      "properties": {
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "integer"
+        },
+        "type": {
+          "enum": [
+            "fail",
+            "success",
+            "ref"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "deprecated"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "depth": {
+          "title": "Depth",
+          "type": "integer"
+        },
+        "path_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path Label"
+        },
+        "last_confirmed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Confirmed At"
+        }
+      },
+      "required": [
+        "ref",
+        "id",
+        "type",
+        "status",
+        "title",
+        "depth"
+      ],
+      "title": "ChainNode",
+      "type": "object"
+    },
+    "ChainEvent": {
+      "properties": {
+        "entry_id": {
+          "title": "Entry Id",
+          "type": "integer"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/$defs/ChainNode"
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/ChainEdge"
+          },
+          "title": "Edges",
+          "type": "array"
+        }
+      },
+      "required": [
+        "entry_id",
+        "nodes",
+        "edges"
+      ],
+      "title": "ChainEvent",
+      "type": "object"
+    },
+    "TokenEvent": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TokenEvent",
+      "type": "object"
+    },
+    "CitationsEvent": {
+      "properties": {
+        "verified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verified",
+          "type": "array"
+        },
+        "unverified": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unverified",
+          "type": "array"
+        }
+      },
+      "required": [
+        "verified",
+        "unverified"
+      ],
+      "title": "CitationsEvent",
+      "type": "object"
+    },
+    "Latency": {
+      "properties": {
+        "retrieval_ms": {
+          "title": "Retrieval Ms",
+          "type": "integer"
+        },
+        "first_token_ms": {
+          "title": "First Token Ms",
+          "type": "integer"
+        },
+        "total_ms": {
+          "title": "Total Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "retrieval_ms",
+        "first_token_ms",
+        "total_ms"
+      ],
+      "title": "Latency",
+      "type": "object"
+    },
+    "DoneEvent": {
+      "properties": {
+        "intent": {
+          "enum": [
+            "policy",
+            "troubleshoot",
+            "both"
+          ],
+          "title": "Intent",
+          "type": "string"
+        },
+        "retrieved_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Retrieved Ids",
+          "type": "array"
+        },
+        "verified_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verified Ids",
+          "type": "array"
+        },
+        "unverified_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unverified Ids",
+          "type": "array"
+        },
+        "latency": {
+          "$ref": "#/$defs/Latency"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "prompt_tokens": {
+          "default": 0,
+          "title": "Prompt Tokens",
+          "type": "integer"
+        },
+        "completion_tokens": {
+          "default": 0,
+          "title": "Completion Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "intent",
+        "retrieved_ids",
+        "verified_ids",
+        "unverified_ids",
+        "latency",
+        "model"
+      ],
+      "title": "DoneEvent",
+      "type": "object"
+    },
+    "ErrorEvent": {
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "node": {
+          "anyOf": [
+            {
+              "enum": [
+                "supervisor",
+                "policy_rag",
+                "graph_search",
+                "gate",
+                "generate",
+                "critic"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "ErrorEvent",
+      "type": "object"
+    },
+    "PolicyRef": {
+      "properties": {
+        "ref": {
+          "title": "Ref",
+          "type": "string"
+        },
+        "chunk_id": {
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "doc_id": {
+          "title": "Doc Id",
+          "type": "integer"
+        },
+        "doc_title": {
+          "title": "Doc Title",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "article_label": {
+          "title": "Article Label",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "chunk_id",
+        "doc_id",
+        "doc_title",
+        "version",
+        "article_label",
+        "text"
+      ],
+      "title": "PolicyRef",
+      "type": "object"
+    }
+  },
+  "x-event-order": [
+    "session",
+    "stage",
+    "intent",
+    "policy",
+    "chain",
+    "token",
+    "citations",
+    "done",
+    "error"
+  ]
+}
