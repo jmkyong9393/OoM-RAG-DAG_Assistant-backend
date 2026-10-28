@@ -1,7 +1,7 @@
 """AI 서비스 FastAPI 래퍼. /ai/chat 은 AI_MODE 에 따라 더미 스트림(E1 스파이크용) 또는 실제 파이프라인(graph/pipeline.py)을 흘린다.
 이벤트 8종·순서는 app/sse.py · 개발문서 04 §4.3 이 정본이고, `session` 은 Spring 이 앞에 붙인다.
 
-실행: uv run uvicorn app.main:app --port 18000 --reload
+실행: uv run uvicorn app.main:app --port 8000 --reload
 """
 import asyncio
 import time

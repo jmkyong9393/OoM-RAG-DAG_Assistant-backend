@@ -47,7 +47,7 @@ def ai_mode() -> str:
 
 
 def db_url() -> str:
-    return os.environ.get("AI_DB_URL", "postgresql://oom_ai:oom_ai@localhost:15432/oom")
+    return os.environ.get("AI_DB_URL", "postgresql://oom_ai:oom_ai@localhost:5432/oom")
 
 
 def worker_poll_sec() -> float:

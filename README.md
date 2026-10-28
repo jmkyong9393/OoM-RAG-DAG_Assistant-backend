@@ -41,11 +41,11 @@
 
 ```bash
 cp deploy/.env.example deploy/.env    # 로컬 기본값으로 바로 동작. OpenAI 키가 없으면 AI 는 fake 모드(규칙 분류·템플릿 답변)로 돈다
-make up                               # postgres(pgvector) :15432
+make up                               # postgres(pgvector) :5432
 make migrate                          # Flyway 컨테이너로 스키마·함수·뷰 적용 (Spring 기동 시에도 자동 적용)
 make seed-reset                       # data/seed/*.json 적재 (워크스페이스 4 · 사용자 4 · 로그 13 · 문서 6)
-make api                              # Spring Boot :18080  (/api/v1, 환경변수는 deploy/.env)
-make ai                               # Python AI :18000  (AI_MODE=auto: 키 있으면 openai, 없으면 fake)
+make api                              # Spring Boot :8080   (/api/v1, 환경변수는 deploy/.env)
+make ai                               # Python AI :8000   (AI_MODE=auto: 키 있으면 openai, 없으면 fake)
 make worker ARGS=--once               # 시드 직후 1회: 토큰 백필 + pending 로그 정제. 상시 실행은 ARGS 없이, 토크나이저/임베딩 모델 변경 후엔 ARGS=--reindex
 ```
 
@@ -54,11 +54,11 @@ make worker ARGS=--once               # 시드 직후 1회: 토큰 백필 + pend
 확인:
 
 ```bash
-curl -c cj -X POST localhost:18080/api/v1/session -H 'Content-Type: application/json' -d '{"user_id":2}'
-curl -N -b cj -X POST localhost:18080/api/v1/chat -H 'Content-Type: application/json' -H 'X-Workspace-Id: 1' -d '{"query":"E-403 어떻게 해결했어?"}'
+curl -c cj -X POST localhost:8080/api/v1/session -H 'Content-Type: application/json' -d '{"user_id":2}'
+curl -N -b cj -X POST localhost:8080/api/v1/chat -H 'Content-Type: application/json' -H 'X-Workspace-Id: 1' -d '{"query":"E-403 어떻게 해결했어?"}'
 ```
 
-테스트: `make test` (Spring, Docker 필요 — Testcontainers pgvector), `make test-ai` (Python, DB 통합 테스트는 :15432 가 떠 있을 때만).
+테스트: `make test` (Spring, Docker 필요 — Testcontainers pgvector), `make test-ai` (Python, DB 통합 테스트는 로컬 Postgres 가 떠 있을 때만). 호스트에서 포트가 겹치면 `deploy/.env` 의 `POSTGRES_PORT`·`PORT`·`AI_PORT` 와 URL 들만 바꾼다.
 계약·에러 코드·프론트 전환 체크리스트는 `docs/06_서비스_계약_Spring_Python_프론트.md`. SSE payload JSON Schema 는 `data/contracts/sse_events.schema.json` (`scripts/export_sse_schema.py` 로 생성).
 
 ## 문서

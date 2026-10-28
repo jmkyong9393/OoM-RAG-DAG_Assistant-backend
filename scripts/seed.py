@@ -5,7 +5,7 @@ data/seed/*.json 의 파일 9종과 필드가 **데이터 교체 인터페이스
 적재 전에 도메인 규칙(R2·R12 등)을 점검해 **경고로 보고**한다 — 임시 데이터는 통과시키되, 생성기 품질 기준으로 쓴다.
 
 사용:  uv run --with "psycopg[binary]" scripts/seed.py [--reset] [--strict]   (--strict: 규칙 위반이 있으면 적재하지 않음)
-환경:  DATABASE_URL (기본 postgresql://oom:oom@localhost:15432/oom)  — 스키마 소유 계정(oom_api 가 아님: 시드는 explicit id 로 넣는다)
+환경:  DATABASE_URL (기본 postgresql://oom:oom@localhost:5432/oom; make seed 는 deploy/.env 를 읽는다)  — 스키마 소유 계정(oom_api 가 아님: 시드는 explicit id 로 넣는다)
 """
 import json, os, sys, pathlib
 import psycopg
@@ -13,7 +13,7 @@ from psycopg.types.json import Jsonb
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SEED = ROOT / "data" / "seed"
-DSN = os.environ.get("DATABASE_URL", "postgresql://oom:oom@localhost:15432/oom")
+DSN = os.environ.get("DATABASE_URL", "postgresql://oom:oom@localhost:5432/oom")
 RESET = "--reset" in sys.argv
 STRICT = "--strict" in sys.argv
 

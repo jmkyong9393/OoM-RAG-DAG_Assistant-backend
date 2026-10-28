@@ -39,7 +39,7 @@ management:
 
 oom:
   ai:
-    base-url: ${AI_BASE_URL:http://localhost:18000}
+    base-url: ${AI_BASE_URL:http://localhost:8000}
   cors:
     origins: ${CORS_ORIGINS:http://localhost:3000}
   session:
