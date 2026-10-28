@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: oom-assist-api
+  threads:
+    virtual:
+      enabled: true                      # SSE 릴레이를 블로킹 루프로 쓰기 위해
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/oom}
+    username: ${DB_USER:oom}             # 운영: oom_api
+    password: ${DB_PASSWORD:oom}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    user: ${FLYWAY_USER:${DB_USER:oom}}  # 스키마 소유자. 운영에서는 DB 관리자 계정
+    password: ${FLYWAY_PASSWORD:${DB_PASSWORD:oom}}
+    placeholders:
+      oom_api_password: ${OOM_API_PASSWORD:oom_api}
+      oom_ai_password: ${OOM_AI_PASSWORD:oom_ai}
+  jackson:
+    property-naming-strategy: SNAKE_CASE # 응답 JSON은 snake_case (프론트 계약)
+    default-property-inclusion: always
+  mvc:
+    async:
+      request-timeout: 180000            # SSE 스트림 (ms)
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api/v1
+  compression:
+    enabled: true
+    mime-types: application/json,text/html,text/plain  # text/event-stream 제외 (버퍼링 방지)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+oom:
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:18000}
+  cors:
+    origins: ${CORS_ORIGINS:http://localhost:3000}
+  session:
+    secret: ${SESSION_SECRET:dev-only-change-me}
+    ttl-hours: 72
+    secure-cookie: ${SESSION_SECURE_COOKIE:false}   # Vercel(다른 오리진) 배포 시 true (Secure + SameSite=None)
