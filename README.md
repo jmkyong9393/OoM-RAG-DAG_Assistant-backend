@@ -44,7 +44,7 @@ cp deploy/.env.example deploy/.env    # 로컬 기본값으로 바로 동작. Op
 make up                               # postgres(pgvector) :5432
 make migrate                          # Flyway 컨테이너로 스키마·함수·뷰 적용 (Spring 기동 시에도 자동 적용)
 make seed-reset                       # data/seed/*.json 적재 (워크스페이스 4 · 사용자 4 · 로그 13 · 문서 6)
-make api                              # Spring Boot :8080   (/api/v1, 환경변수는 deploy/.env)
+make api                              # Spring Boot :8080   (/api/v1, 환경변수는 deploy/.env). "Started ..." 뒤 Gradle 이 80% EXECUTING 으로 머무는 게 정상(서버 실행 중). 종료는 Ctrl+C
 make ai                               # Python AI :8000   (AI_MODE=auto: 키 있으면 openai, 없으면 fake)
 make worker ARGS=--once               # 시드 직후 1회: 토큰 백필 + pending 로그 정제. 상시 실행은 ARGS 없이, 토크나이저/임베딩 모델 변경 후엔 ARGS=--reindex
 make index                            # data/policies/*.chunks.json 규정 적재(개정 자동 폐기) + 백필. 검색 품질은 eval/hit_at_k.py
