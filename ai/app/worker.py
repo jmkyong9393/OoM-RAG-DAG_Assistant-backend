@@ -45,11 +45,17 @@ async def backfill_chunk_tokens(conn, tokenizer: Tokenizer) -> int:
     if not rows:
         return 0
     prof = load_profile()
-    # 임베딩·토큰 모두 "문서 제목 + 조문 라벨 + 본문" 기준 (라벨에만 있는 핵심어를 놓치지 않게)
+    # 임베딩은 "문서 제목 + 조문 라벨 + 본문", 어휘 토큰은 제목을 떼어 따로(가중 D) — 제목이 모든 청크에 들어가 순위를 흐리기 때문
     texts = [f"{r['doc_title']}\n{r['article_label']}\n{r['text']}" for r in rows]
-    vecs = await asyncio.to_thread(embed.embed, prof, texts) if ai_mode() == "openai" else None
+    need = [i for i, r in enumerate(rows) if r["needs_vec"]]   # 토큰만 다시 만들 때(--reindex·V7) 임베딩은 재사용
+    vecs: dict[int, list[float]] = {}
+    if need and ai_mode() == "openai":
+        got = await asyncio.to_thread(embed.embed, prof, [texts[i] for i in need])
+        vecs = dict(zip(need, got))
     for i, r in enumerate(rows):
-        db.set_chunk_tokens(conn, r["id"], tokenizer.tokens(texts[i]), vecs[i] if vecs else None, prof.embedding_model if vecs else None)
+        v = vecs.get(i)
+        db.set_chunk_tokens(conn, r["id"], tokenizer.tokens(f"{r['article_label']}\n{r['text']}"), tokenizer.tokens(r["doc_title"]),
+                            v, prof.embedding_model if v else None)
     return len(rows)
 
 

@@ -17,6 +17,24 @@ def test_extract_error_code_normalizes(text, expected):
     assert extract_error_code(text) == expected
 
 
+def test_query_tokens_expand_synonyms_only_on_query_side():
+    """기본 묶음(가전제품↔전자제품, 유통기한↔소비기한, 환불↔환급)이 질의 토큰에만 OR 로 붙고, 묶음이 없으면 tokens() 와 같다."""
+    tok = Tokenizer()
+    groups = tokenize.synonym_groups({})
+    q = "구입 10일 안에 고장난 가전제품 교환이나 환불"
+    assert tok.query_tokens(q) == tok.tokens(q)
+    expanded = tok.query_tokens(q, groups).split()
+    assert expanded[: len(tok.tokens(q).split())] == tok.tokens(q).split(), "원래 토큰이 앞에 그대로"
+    assert "환급" in expanded and ("전자" in expanded or "전자제품" in expanded)
+    # 여러 토큰으로 쪼개지는 표현도 전부 있을 때만 확장된다
+    multi = tok.query_tokens("유통기한 지난 제품을 팔았을 때 교환", groups).split()
+    assert "소비" in multi, f"유통+기한 → 소비기한 토큰 추가: {multi}"
+    assert "소비" not in tok.query_tokens("기한 안에 신청", groups).split(), "'기한' 하나로는 확장하지 않는다"
+    # 워크스페이스 settings.synonyms 가 더해진다
+    ws_groups = tokenize.synonym_groups({"synonyms": [["사내망", "인트라넷"]]})
+    assert "인트라넷" in tok.query_tokens("사내망 접속", ws_groups).split()
+
+
 def test_kiwi_tokens_keep_nouns_and_error_code():
     tok = Tokenizer()
     if tok.backend != "kiwi":

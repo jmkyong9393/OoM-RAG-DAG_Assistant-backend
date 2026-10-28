@@ -130,7 +130,7 @@ def set_node_tokens(conn, node_id: int, tokens: str, vec: list[float] | None, em
 
 def chunks_without_tokens(conn, limit: int = 200) -> list[dict]:
     """문서 제목·조문 라벨도 함께 돌려준다 — 핵심어(예: 'VPN')가 본문이 아니라 제목·라벨에만 있는 청크가 많다."""
-    return conn.execute("""SELECT c.id, d.title AS doc_title, c.article_label, c.text
+    return conn.execute("""SELECT c.id, d.title AS doc_title, c.article_label, c.text, c.embedding IS NULL AS needs_vec
                            FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
                            WHERE c.tokens IS NULL ORDER BY c.id LIMIT %s""", (limit,)).fetchall()
 
@@ -142,7 +142,8 @@ def reset_tokens(conn) -> None:
     conn.commit()
 
 
-def set_chunk_tokens(conn, chunk_id: str, tokens: str, vec: list[float] | None, embedding_model: str | None) -> None:
-    conn.execute("UPDATE policy_chunks SET tokens = %s, embedding = coalesce(%s::vector, embedding), meta = meta || %s::jsonb WHERE id = %s",
-                 (tokens, vec_literal(vec), json.dumps({"embedding_model": embedding_model} if vec else {}), chunk_id))
+def set_chunk_tokens(conn, chunk_id: str, tokens: str, title_tokens: str, vec: list[float] | None, embedding_model: str | None) -> None:
+    """tokens(라벨+본문, 가중 A)와 title_tokens(문서 제목, 가중 D)는 tsv 생성 컬럼이 합친다 (V7)."""
+    conn.execute("UPDATE policy_chunks SET tokens = %s, title_tokens = %s, embedding = coalesce(%s::vector, embedding), meta = meta || %s::jsonb WHERE id = %s",
+                 (tokens, title_tokens, vec_literal(vec), json.dumps({"embedding_model": embedding_model} if vec else {}), chunk_id))
     conn.commit()

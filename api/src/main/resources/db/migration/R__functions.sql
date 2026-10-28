@@ -21,7 +21,7 @@ RETURNS tsquery LANGUAGE sql IMMUTABLE AS $$
                WHERE t <> '' AND numnode(plainto_tsquery('simple', t)) > 0)::tsquery END
 $$;
 
--- 규정 하이브리드 검색: 어휘(tsvector) 상위 20 + 벡터 상위 20 → RRF(k=60) → 상위 p_k. active 문서, 자기+조상 워크스페이스.
+-- 규정 하이브리드 검색: 어휘(IDF 가중, 제목 0.1) 상위 20 + 벡터 상위 20 → RRF(k=60) → 상위 p_k. active 문서, 자기+조상 워크스페이스.
 CREATE OR REPLACE FUNCTION hybrid_search_chunks(p_ws bigint, p_tokens text, p_vec vector(1536), p_k int DEFAULT 5)
 RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
   WITH cand AS (
@@ -29,12 +29,23 @@ RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
     FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
     WHERE d.status = 'active' AND c.workspace_id IN (SELECT workspace_ancestors(p_ws))
   ),
-  q AS (SELECT or_tsquery(p_tokens) AS tq),
-  -- 어휘 점수 동점이면 짧은 청크(더 집중된 조문) 우선, 그다음 id — 순위가 실행마다 바뀌지 않게
+  -- 질의 단어별 IDF(후보 집합 안에서 그 단어가 든 청크 수). Postgres FTS 는 IDF 가 없어 '소비자·기준·환급'처럼
+  -- 거의 모든 청크에 있는 단어가 '개봉·신선식품'과 같은 무게가 되는 것을 막는다. 본문·라벨(A) 적중 1.0, 문서 제목(D)만 적중 0.1.
+  terms AS (
+    SELECT DISTINCT t, plainto_tsquery('simple', t) AS tq
+    FROM regexp_split_to_table(coalesce(p_tokens, ''), '\s+') AS t
+    WHERE t <> '' AND numnode(plainto_tsquery('simple', t)) > 0
+  ),
+  tf AS (
+    SELECT t.t, t.tq, ln(((SELECT count(*) FROM cand) + 1)::float / (count(c.id) + 1)) AS idf
+    FROM terms t LEFT JOIN cand c ON c.tsv @@ t.tq GROUP BY t.t, t.tq
+  ),
+  -- 동점이면 짧은 청크(더 집중된 조문) 우선, 그다음 id — 순위가 실행마다 바뀌지 않게
   lex AS (
     SELECT id, r FROM (
-      SELECT c.id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q.tq) DESC, c.len, c.id) AS r
-      FROM cand c, q WHERE q.tq IS NOT NULL AND c.tsv @@ q.tq
+      SELECT s.id, row_number() OVER (ORDER BY s.s DESC, s.len, s.id) AS r
+      FROM (SELECT c.id, c.len, SUM(tf.idf * CASE WHEN c.tsv @@ (tf.tq::text || ':A')::tsquery THEN 1.0 ELSE 0.1 END) AS s
+            FROM cand c JOIN tf ON c.tsv @@ tf.tq GROUP BY c.id, c.len) s
     ) t WHERE r <= 20
   ),
   vec AS (

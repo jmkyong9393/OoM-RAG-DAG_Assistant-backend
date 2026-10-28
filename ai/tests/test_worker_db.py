@@ -33,7 +33,12 @@ async def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node
     terms = {r["term"] for r in admin_conn.execute("SELECT term FROM workspace_terms WHERE workspace_id = 1 AND source = 'auto'")}
     assert "E-500" in terms and "결제" in terms
     # 백필 결과: 시드 노드·청크에 tokens 가 모두 채워져 있다
-    assert admin_conn.execute("SELECT count(*) AS c FROM policy_chunks WHERE tokens IS NULL").fetchone()["c"] == 0
+    assert admin_conn.execute("SELECT count(*) AS c FROM policy_chunks WHERE tokens IS NULL OR title_tokens IS NULL").fetchone()["c"] == 0
+    # 제목 토큰은 D(기본, 표기 없음)·라벨+본문은 A 가중 — 문서 제목만의 토큰 '지침' 은 A 가 붙지 않는다 (V7)
+    import re
+    tsv = admin_conn.execute("SELECT tsv::text AS t, tokens, title_tokens FROM policy_chunks WHERE id = 'vpn-guide-v22-a15-1'").fetchone()
+    assert "지침" in tsv["title_tokens"].split() and "지침" not in tsv["tokens"].split()
+    assert re.search(r"'토큰':\d+A", tsv["t"]) and re.search(r"'지침':\d+(?![0-9A-C])", tsv["t"]), tsv["t"]
     assert admin_conn.execute("SELECT count(*) AS c FROM log_nodes WHERE tokens IS NULL AND refine_status <> 'pending'").fetchone()["c"] == 0
     # 두 번째 실행은 할 일이 없다
     again = await worker.run_once()

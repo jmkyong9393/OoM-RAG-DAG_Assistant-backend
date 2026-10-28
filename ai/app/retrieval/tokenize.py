@@ -6,15 +6,33 @@ kiwi 제약: add_user_word 뒤 첫 분석에서 사전을 재빌드한다(실측
 """
 from __future__ import annotations
 
+import json
 import re
 import threading
 from functools import lru_cache
+from pathlib import Path
 
 ERROR_CODE_RE = re.compile(r"\b(?:[A-Z]{1,4}-?\d{3,4}|HTTP\s?\d{3}|\d{3}\s?(?:Timeout|Error))\b", re.I)
 KEEP_TAGS = {"NNG", "NNP", "NNB", "SL", "SN", "SH", "VV", "VA", "XR", "NR"}  # 명사·외래어·수사·동사/형용사 어간·어근
 
 _lock = threading.RLock()
 _added_terms: set[str] = set()
+_SYN_PATH = Path(__file__).with_name("synonyms_ko.json")
+
+
+@lru_cache(maxsize=1)
+def default_synonym_groups() -> tuple[tuple[str, ...], ...]:
+    try:
+        data = json.loads(_SYN_PATH.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — 파일이 없으면 확장 없이 동작
+        return ()
+    return tuple(tuple(g) for g in data.get("groups", []) if isinstance(g, list) and len(g) > 1)
+
+
+def synonym_groups(settings: dict | None) -> list[list[str]]:
+    """기본 동의어 묶음 + 워크스페이스 settings.synonyms (같은 형식: 문자열 목록의 목록)."""
+    extra = (settings or {}).get("synonyms") or []
+    return [list(g) for g in default_synonym_groups()] + [list(g) for g in extra if isinstance(g, list) and len(g) > 1]
 
 
 def normalize_code(raw: str) -> str:
@@ -94,6 +112,30 @@ class Tokenizer:
                 if len(w) > 1:
                     out.append(w)
         return " ".join(dict.fromkeys([c.lower() for c in codes] + out))
+
+    def query_tokens(self, text: str, groups: list[list[str]] | None = None) -> str:
+        """질의용 토큰: tokens() + 동의어 확장. 한 묶음의 어느 표현(토큰 전부)이 질의에 있으면 나머지 표현의 토큰을 덧붙인다.
+        OR tsquery 라 recall 만 넓어진다. 인덱스 쪽은 tokens() 그대로 — 색인을 다시 만들 필요가 없다."""
+        base = self.tokens(text)
+        if not groups:
+            return base
+        out = base.split()
+        have = set(out)
+        for g in groups:
+            forms = [f for f in (self._phrase_tokens(p) for p in g) if f]
+            if any(set(f) <= have for f in forms):
+                for f in forms:
+                    for t in f:
+                        if t not in have:
+                            have.add(t)
+                            out.append(t)
+        return " ".join(out)
+
+    def _phrase_tokens(self, phrase: str) -> list[str]:
+        cache = self.__dict__.setdefault("_phrase_cache", {})
+        if phrase not in cache:
+            cache[phrase] = self.tokens(phrase).split()
+        return cache[phrase]
 
     def nouns(self, text: str, limit: int = 8) -> list[str]:
         """키워드 후보(fake 정제용): 명사 빈도 상위."""

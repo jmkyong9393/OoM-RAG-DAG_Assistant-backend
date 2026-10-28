@@ -14,7 +14,7 @@ from app.llm import client as llm
 from app.llm.schemas import (ChainEdge, ChainEvent, ChainNode, CitationsEvent, DoneEvent, ErrorEvent, IntentEvent, Latency,
                              PolicyRef, StageEvent, TokenEvent)
 from app.retrieval import db, embed
-from app.retrieval.tokenize import Tokenizer, extract_error_code
+from app.retrieval.tokenize import Tokenizer, extract_error_code, synonym_groups
 from app.sse import sse
 
 MARKER_RE = re.compile(r"\[([PN]\d+)\]")
@@ -37,7 +37,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         prof = load_profile(ws["settings"].get("llm_profile", "default"))
         mode = "policy" if policy_enabled else "dag_only"
         tokenizer = Tokenizer(terms)
-        q_tokens = tokenizer.tokens(query)
+        q_tokens = tokenizer.query_tokens(query, synonym_groups(ws["settings"]))
         error_code = extract_error_code(query)
 
         # 질의 임베딩은 분류와 병렬로 시작 (openai 모드에서만 값이 있다. 분류가 규칙으로 즉시 끝나면 임베딩이 임계 경로)

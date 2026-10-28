@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "ai"))
 
 from app.config import ai_mode, profile  # noqa: E402
 from app.retrieval import db, embed  # noqa: E402
-from app.retrieval.tokenize import Tokenizer, extract_error_code  # noqa: E402
+from app.retrieval.tokenize import Tokenizer, extract_error_code, synonym_groups  # noqa: E402
 
 
 def search(conn, item: dict, mode: str, tokens: str, vec, k: int) -> list[str]:
@@ -46,9 +46,12 @@ def main() -> int:
     tok = Tokenizer()
     modes = ["lex", "vec", "hybrid"] if use_vec else ["lex"]
     rows, hits = [], {m: {"policy": [0, 0], "troubleshoot": [0, 0]} for m in modes}
+    syn: dict[int, list[list[str]]] = {}
     with db.connect() as conn:
         for it in items:
-            tokens = tok.tokens(it["query"])
+            ws = it["workspace_id"]
+            groups = syn.get(ws) or syn.setdefault(ws, synonym_groups(db.workspace_settings(conn, ws)["settings"]))
+            tokens = tok.query_tokens(it["query"], groups)   # 파이프라인과 같은 질의 토큰(동의어 확장 포함)
             vec = embed.embed_one(prof, it["query"]) if use_vec else None
             row = {"query": it["query"], "kind": it.get("kind", "policy"), "expect": it["expect"]}
             for m in modes:
