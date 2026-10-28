@@ -1,38 +1,33 @@
 package com.oom.assist.common.context;
 
-import com.oom.assist.session.SessionCookie;
+import com.oom.assist.auth.CurrentUser;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * 쿠키 oom_u(서명된 user_id) + 헤더 X-Workspace-Id → workspace_members 조회 → TenantContext 를 요청 속성에 둔다.
- * 쿠키·헤더가 없거나 소속이 아니면 속성을 비워 두고, 컨트롤러가 TenantContext 를 요구할 때 401 이 난다.
- * 규칙 R1: 소속이 아닌 워크스페이스는 존재 자체를 숨긴다.
+ * 세션에서 복원된 로그인 사용자 + 헤더 X-Workspace-Id → workspace_members 조회 → TenantContext 를 요청 속성에 둔다.
+ * Spring Security 필터 체인 안(익명 처리 뒤)에 끼워 넣는다(SecurityConfig). 헤더가 없거나 소속이 아니면 속성을 비워 두고,
+ * 컨트롤러가 TenantContext 를 요구할 때 401 이 난다. 규칙 R1: 소속이 아닌 워크스페이스는 존재 자체를 숨긴다.
  */
-@Component
 public class TenantContextFilter extends OncePerRequestFilter {
   public static final String WORKSPACE_HEADER = "X-Workspace-Id";
 
-  private final SessionCookie cookie;
   private final JdbcClient jdbc;
 
-  public TenantContextFilter(SessionCookie cookie, JdbcClient jdbc) {
-    this.cookie = cookie;
+  public TenantContextFilter(JdbcClient jdbc) {
     this.jdbc = jdbc;
   }
 
   @Override
   protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
-    Optional<Long> userId = readUserId(req);
+    Optional<Long> userId = CurrentUser.id();
     String wsHeader = req.getHeader(WORKSPACE_HEADER);
     if (userId.isPresent() && wsHeader != null && !wsHeader.isBlank()) {
       try {
@@ -50,15 +45,6 @@ public class TenantContextFilter extends OncePerRequestFilter {
       }
     }
     chain.doFilter(req, res);
-  }
-
-  public Optional<Long> readUserId(HttpServletRequest req) {
-    Cookie[] cookies = req.getCookies();
-    if (cookies == null) return Optional.empty();
-    for (Cookie c : cookies) {
-      if (SessionCookie.NAME.equals(c.getName())) return cookie.verify(c.getValue());
-    }
-    return Optional.empty();
   }
 
   private static TenantContext toContext(Map<String, Object> r) {

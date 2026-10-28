@@ -2,6 +2,7 @@ package com.oom.assist.session;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -24,7 +25,7 @@ public class FeedbackController {
 
   @PostMapping("/feedback")
   @Transactional
-  public ResponseEntity<Void> feedback(@RequestBody FeedbackRequest body, TenantContext ctx) {
+  public ResponseEntity<Void> feedback(@Valid @RequestBody FeedbackRequest body, TenantContext ctx) {
     boolean exists = jdbc.sql("SELECT EXISTS (SELECT 1 FROM search_sessions WHERE id = ? AND workspace_id = ?)")
         .params(body.sessionId(), ctx.workspaceId()).query(Boolean.class).single();
     if (!exists) throw ApiException.notFound("session");

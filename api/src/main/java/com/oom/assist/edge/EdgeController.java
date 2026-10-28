@@ -2,6 +2,7 @@ package com.oom.assist.edge;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.log.LogService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,13 +23,13 @@ public class EdgeController {
   public record EdgeRequest(@NotNull Long parentId, @NotNull Long childId) {}
 
   @PostMapping("/edges")
-  public ResponseEntity<Void> link(@RequestBody EdgeRequest body, TenantContext ctx) {
+  public ResponseEntity<Void> link(@Valid @RequestBody EdgeRequest body, TenantContext ctx) {
     service.linkEdge(ctx, body.parentId(), body.childId());
     return ResponseEntity.status(201).build();
   }
 
   @DeleteMapping("/edges")
-  public ResponseEntity<Void> unlink(@RequestBody EdgeRequest body, TenantContext ctx) {
+  public ResponseEntity<Void> unlink(@Valid @RequestBody EdgeRequest body, TenantContext ctx) {
     service.unlinkEdge(ctx, body.parentId(), body.childId());
     return ResponseEntity.noContent().build();
   }

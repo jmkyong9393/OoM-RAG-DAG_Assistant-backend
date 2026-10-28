@@ -25,13 +25,16 @@ for w in ws_fe:
                        "policy_enabled": w["policy_enabled"], "settings": {"language": "ko"}})
 
 # 사용자: 홈 부서 admin, 나머지 부서 member (데모에서 어느 워크스페이스든 들어갈 수 있게)
-users = [{"id": u["id"], "tenant_id": 1, "name": u["name"], "title": u.get("title"), "home_workspace_id": u["workspace_id"]} for u in users_fe]
+# 로그인은 이메일+비밀번호(ADR 안건 G). 프론트 mocks 에는 이메일이 없어 여기서 부여한다. 비밀번호는 seed.py 가 SEED_PASSWORD 로 해시해 넣는다.
+EMAILS = {1: "bae@oom.local", 2: "jang@oom.local", 3: "shin@oom.local", 4: "hong@oom.local", 5: "kim@oom.local"}
+users = [{"id": u["id"], "tenant_id": 1, "name": u["name"], "title": u.get("title"), "email": EMAILS.get(u["id"], f"user{u['id']}@oom.local"),
+          "home_workspace_id": u["workspace_id"]} for u in users_fe]
 members = []
 for u in users:
     for w in ws_fe:
         members.append({"workspace_id": w["id"], "user_id": u["id"], "role": "admin" if w["id"] == u["home_workspace_id"] else "member"})
 # 격리 시연용: 한 부서(CS)에만 속한 사용자. 이 계정으로 다른 워크스페이스를 열면 403 (프론트 mocks 에는 없음)
-users.append({"id": 5, "tenant_id": 1, "name": "김하늘", "title": "상담사", "home_workspace_id": 3})
+users.append({"id": 5, "tenant_id": 1, "name": "김하늘", "title": "상담사", "email": EMAILS[5], "home_workspace_id": 3})
 members.append({"workspace_id": 3, "user_id": 5, "role": "member"})
 
 name_to_id = {u["name"]: u["id"] for u in users}

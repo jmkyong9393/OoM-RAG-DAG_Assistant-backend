@@ -54,7 +54,7 @@ make worker ARGS=--once               # 시드 직후 1회: 토큰 백필 + pend
 확인:
 
 ```bash
-curl -c cj -X POST localhost:8080/api/v1/session -H 'Content-Type: application/json' -d '{"user_id":2}'
+curl -c cj -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"jang@oom.local","password":"oom-demo-1234!"}'
 curl -N -b cj -X POST localhost:8080/api/v1/chat -H 'Content-Type: application/json' -H 'X-Workspace-Id: 1' -d '{"query":"E-403 어떻게 해결했어?"}'
 ```
 

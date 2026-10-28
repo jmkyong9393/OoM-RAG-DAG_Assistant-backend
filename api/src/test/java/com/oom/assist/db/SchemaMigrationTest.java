@@ -15,7 +15,8 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tables).containsExactlyInAnyOrder(
         "tenants", "workspaces", "users", "workspace_members",
         "log_nodes", "log_edges", "policy_documents", "policy_chunks",
-        "search_sessions", "answer_feedback", "workspace_terms", "eval_runs", "audit_log");
+        "search_sessions", "answer_feedback", "workspace_terms", "eval_runs", "audit_log",
+        "spring_session", "spring_session_attributes");   // V4 세션 저장소
   }
 
   @Test

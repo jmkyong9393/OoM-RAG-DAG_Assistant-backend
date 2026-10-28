@@ -32,6 +32,7 @@ class ChatRelayApiTest extends AbstractApiTest {
 
   @AfterEach
   void cleanup() {
+    jdbc.sql("DELETE FROM spring_session").update();   // 비트랜잭션 테스트라 로그인 세션 행도 직접 지운다
     jdbc.sql("DELETE FROM answer_feedback WHERE session_id IN (SELECT id FROM search_sessions WHERE workspace_id IN (?, ?))").params(wsSw, wsHr).update();
     jdbc.sql("DELETE FROM search_sessions WHERE workspace_id IN (?, ?)").params(wsSw, wsHr).update();
     jdbc.sql("DELETE FROM audit_log WHERE tenant_id = ?").param(tenant).update();

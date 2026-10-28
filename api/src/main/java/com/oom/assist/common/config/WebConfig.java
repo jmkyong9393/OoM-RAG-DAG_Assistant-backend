@@ -29,7 +29,7 @@ public class WebConfig implements WebMvcConfigurer {
         .allowedOriginPatterns(props.cors().origins().toArray(String[]::new))
         .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
         .allowedHeaders("*")
-        .allowCredentials(true) // oom_u 쿠키
+        .allowCredentials(true) // 세션 쿠키 OOMSESSION
         .maxAge(3600);
   }
 

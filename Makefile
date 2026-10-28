@@ -19,10 +19,10 @@ ai:            ## Python AI 서비스 :$$AI_PORT (기본 8000. AI_MODE=dummy|fak
 	set -a; . deploy/.env; set +a; cd ai && uv sync -q --extra graph && uv run uvicorn app.main:app --host 127.0.0.1 --port "$${AI_PORT:-8000}" --reload
 
 seed:          ## data/seed/*.json → DB (멱등, --reset 은 비우고 다시). DATABASE_URL 은 deploy/.env
-	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/seed.py
+	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" --with bcrypt scripts/seed.py
 
 seed-reset:
-	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/seed.py --reset
+	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" --with bcrypt scripts/seed.py --reset
 
 test:          ## Spring 테스트 (Testcontainers → Docker 필요)
 	cd api && ./gradlew test

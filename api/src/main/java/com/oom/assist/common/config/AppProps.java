@@ -8,5 +8,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record AppProps(Ai ai, Cors cors, Session session) {
   public record Ai(String baseUrl) {}
   public record Cors(List<String> origins) {}
-  public record Session(String secret, int ttlHours, boolean secureCookie) {}
+  /** 세션 쿠키 속성. 프론트가 다른 사이트(예: *.vercel.app)면 sameSite=None + secure=true 가 필요하다. */
+  public record Session(String cookieName, String sameSite, boolean secure) {}
 }
