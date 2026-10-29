@@ -1,0 +1,21 @@
+# 운영 compose 로컬 검증용 오버라이드. 운영 기본값(HTTPS 자동·Secure 쿠키)은 건드리지 않고 여기서만 평문 localhost 로 바꾼다.
+#   - web: 프론트 이미지가 없을 때 스텁
+#   - postgres: 시드 적재를 위해 15433 노출
+#   - caddy: `localhost` 사이트 주소는 자동 HTTPS + 80→443 308 리다이렉트라서 `http://localhost` 로 평문 고정
+#   - api: 평문이라 Secure 쿠키를 끈다 (안 끄면 curl 이 OOMSESSION 을 재전송하지 않아 401)
+# 사용: docker compose -f docker-compose.prod.yml -f docker-compose.smoke.yml --env-file .env.smoke up -d   (또는 bash smoke.sh)
+services:
+  web:
+    image: caddy:2
+    command: ["caddy", "respond", "--listen", ":3000", "web stub (프론트 이미지 전)"]
+    depends_on: {}
+  postgres:
+    ports:
+      - "15433:5432"
+  caddy:
+    environment:
+      SITE_ADDRESS: http://localhost
+  api:
+    environment:
+      SESSION_SECURE_COOKIE: "false"
+      CORS_ORIGINS: http://localhost
