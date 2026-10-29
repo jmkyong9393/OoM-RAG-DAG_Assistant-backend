@@ -1,0 +1,22 @@
+# 배포 — 아직 비활성(수동 실행만). Lightsail 대상이 정해지면 2단계에서 채운다.
+# 예약된 Secrets 이름: LIGHTSAIL_HOST, LIGHTSAIL_SSH_KEY, DEPLOY_ENV_FILE(deploy/.env 전체).
+# OpenAI 키는 CI 에서 쓰지 않는다(테스트는 스텁). 운영 키는 DEPLOY_ENV_FILE 안에만.
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 배포 대상
+        type: choice
+        options: [staging]
+        default: staging
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "배포 파이프라인은 코어 게이트(11/06) 뒤 2단계에서 구성한다."
+          echo "계획: ci 통과 → compose 이미지 빌드 → Lightsail 로 compose up(flyway migrate 포함) → /actuator/health 확인."
+          exit 1
