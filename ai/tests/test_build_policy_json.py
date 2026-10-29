@@ -45,6 +45,18 @@ def test_split_articles_recognizes_all_boundary_kinds(tmp_path):
     assert arts[1]["title"] == "목적"
 
 
+def test_appendix_and_repeated_article_numbers_get_unique_ids(tmp_path):
+    """'## 부칙' 아래 제1조는 'p1', 본문에서 같은 조번호가 다시 나오면 'a1b' — 청크 id 충돌로 적재가 깨지지 않는다."""
+    src = tmp_path / "src.md"
+    src.write_text("제1조(목적) 본문 목적.\n\n제2조(정의) 본문 정의.\n\n## 부칙\n\n제1조(시행일) 2026년 11월 1일부터 시행한다.\n\n제2조(경과조치) 종전 규정에 따른 처분은 유효하다.\n\n## 별도 장\n\n제1조(다시 1조) 번호가 재시작한 조문.\n", encoding="utf-8")
+    doc = b.build(src, args())
+    ids = [c["id"] for c in doc["chunks"]]
+    labels = [c["article_label"] for c in doc["chunks"]]
+    assert ids == ["test-doc-a1-1", "test-doc-a2-1", "test-doc-p1-1", "test-doc-p2-1", "test-doc-a1b-1"], ids
+    assert labels[2] == "부칙 제1조 (시행일)" and labels[4] == "제1조 (다시 1조)"
+    assert len(ids) == len(set(ids)) and index_policy.validate(doc, src) == []
+
+
 def test_build_ids_are_deterministic_and_validate(tmp_path):
     src = tmp_path / "src.md"
     src.write_text(SAMPLE, encoding="utf-8")

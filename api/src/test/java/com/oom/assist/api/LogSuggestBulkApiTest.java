@@ -80,6 +80,27 @@ class LogSuggestBulkApiTest extends AbstractApiTest {
   }
 
   @Test
+  void bulkParentRefsCreateMultiParentNode() throws Exception {
+    // 합류 노드: 두 체인의 루트(fail)를 parent_refs 로 모두 부모로 — 간선 2개, 기존 parent_ref 와 섞어 써도 중복 없이
+    String body = """
+        {"items": [
+          {"ref": "a", "type": "fail", "title": "E-403 반복", "body": "a", "source_ref": "mp-1"},
+          {"ref": "b", "type": "fail", "title": "배치 지연", "body": "b", "source_ref": "mp-2"},
+          {"ref": "c", "type": "fail", "title": "NTP 시간 오차", "body": "공통 원인", "parent_ref": "a", "parent_refs": ["b", "a"], "source_ref": "mp-3"},
+          {"type": "success", "title": "NTP 동기화", "body": "해결", "parent_refs": ["c"], "source_ref": "mp-4"}
+        ]}""";
+    MvcResult r = mvc.perform(as(post("/logs/bulk"), userLead, wsSw).content(body)).andExpect(status().isCreated())
+        .andExpect(jsonPath("$.created").value(4)).andReturn();
+    int c = JsonPath.read(r.getResponse().getContentAsString(StandardCharsets.UTF_8), "$.items[2].id");
+    assertThat(jdbc.sql("SELECT count(*) FROM log_edges WHERE child_id = ?").param(c).query(Long.class).single()).isEqualTo(2L);
+    assertThat(jdbc.sql("SELECT count(*) FROM log_edges WHERE parent_id = ?").param(c).query(Long.class).single()).isEqualTo(1L);
+    // 다중 부모 중 하나가 success 면 R12 위반 → 409
+    String bad = "{\"items\":[{\"ref\":\"s\",\"type\":\"success\",\"title\":\"s\",\"body\":\"b\",\"problem_title\":\"P\"},"
+        + "{\"type\":\"success\",\"title\":\"t\",\"body\":\"b\",\"parent_refs\":[\"" + c + "\",\"s\"]}]}";
+    mvc.perform(as(post("/logs/bulk"), userLead, wsSw).content(bad)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EDGE_PARENT_TYPE"));
+  }
+
+  @Test
   void bulkAppliesSameRulesAsSingleCreate() throws Exception {
     // success 루트 → problem_title 필수, 있으면 fail 루트 자동 생성 + 완료
     mvc.perform(as(post("/logs/bulk"), userLead, wsSw).content("{\"items\":[{\"type\":\"success\",\"title\":\"s\",\"body\":\"b\"}]}"))
