@@ -44,7 +44,7 @@ RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
   lex AS (
     SELECT id, r FROM (
       SELECT s.id, row_number() OVER (ORDER BY s.s DESC, s.len, s.id) AS r
-      FROM (SELECT c.id, c.len, SUM(tf.idf * CASE WHEN c.tsv @@ (tf.tq::text || ':A')::tsquery THEN 1.0 ELSE 0.1 END) AS s
+      FROM (SELECT c.id, c.len, SUM(tf.idf * CASE WHEN ts_filter(c.tsv, '{a}') @@ tf.tq THEN 1.0 ELSE 0.1 END) AS s
             FROM cand c JOIN tf ON c.tsv @@ tf.tq GROUP BY c.id, c.len) s
     ) t WHERE r <= 20
   ),

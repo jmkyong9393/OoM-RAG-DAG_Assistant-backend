@@ -57,8 +57,8 @@ public class LogBulkService {
 
   // ── bulk ───────────────────────────────────────────────────────────────────
 
-  public record Item(String ref, String type, String title, String body, String parentRef, String problemTitle, String source, String sourceRef,
-                     String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt) {}
+  public record Item(String ref, String type, String title, String body, String parentRef, List<String> parentRefs, String problemTitle, String source,
+                     String sourceRef, String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt) {}
   public record BulkRequest(List<Item> items) {}
   public record ItemResult(String ref, long id, String status) {}
   public record BulkResponse(int created, int existing, List<ItemResult> items) {}
@@ -92,10 +92,15 @@ public class LogBulkService {
         }
       }
 
-      Long parentId = resolveParent(ws, it.parentRef(), byRef, ref);
+      // 다중 부모(합류 노드): parent_ref 하나 + parent_refs 여러 개를 합쳐 중복 없이. 새 노드는 자식이 없어 사이클이 생길 수 없다
+      List<Long> parentIds = new ArrayList<>();
+      for (String p : parentRefsOf(it)) {
+        Long pid = resolveParent(ws, p, byRef, ref);
+        if (pid != null && !parentIds.contains(pid)) parentIds.add(pid);
+      }
       long id;
       String sourceRef = blank(it.sourceRef()) ? null : it.sourceRef().trim();
-      if (parentId == null && "success".equals(it.type())) {
+      if (parentIds.isEmpty() && "success".equals(it.type())) {
         // R2: success 루트 → problem_title 로 fail 루트 생성 + 완료 (단건 등록과 같은 규칙. 정제 컬럼은 INSERT 시에만 쓸 수 있어 여기서 직접 넣는다)
         if (blank(it.problemTitle())) throw ApiException.badRequest("PROBLEM_TITLE_REQUIRED", ref + ": success without parent needs problem_title");
         long root = repo.insertNodeFull(ws, "fail", it.problemTitle().trim(), it.problemTitle().trim(), ctx.userId(), source, null, null, null, null, it.createdAt());
@@ -105,7 +110,7 @@ public class LogBulkService {
         repo.setResolved(root, OffsetDateTime.now(), null);
         repo.audit(ctx.tenantId(), ws, "log_nodes", String.valueOf(root), "resolved", ctx.userName(), null, it.problemTitle().trim());
       } else {
-        if (parentId != null) {
+        for (Long parentId : parentIds) {
           LogNodeDto parent = repo.find(ws, parentId).orElseThrow(() -> ApiException.conflict("PARENT_NOT_FOUND", ref + ": parent not in this workspace"));
           if (!"active".equals(parent.status())) throw ApiException.conflict("PARENT_DEPRECATED", ref + ": parent is deprecated");
           if ("success".equals(it.type()) && !Set.of("fail", "ref").contains(parent.type()))
@@ -113,7 +118,7 @@ public class LogBulkService {
         }
         id = repo.insertNodeFull(ws, it.type(), it.title().trim(), it.body().trim(), ctx.userId(), source,
             sourceRef, it.errorCode(), it.keywords(), it.resolutionSummary(), it.createdAt());
-        if (parentId != null) repo.insertEdge(ws, parentId, id, ctx.userId(), "bulk");
+        for (Long parentId : parentIds) repo.insertEdge(ws, parentId, id, ctx.userId(), "bulk");
       }
       byRef.put(ref, id);
       out.add(new ItemResult(ref, id, "created"));
@@ -121,6 +126,13 @@ public class LogBulkService {
     }
     repo.audit(ctx.tenantId(), ws, "log_nodes", "-", "bulk_import", ctx.userName(), "created=" + created + " existing=" + existing, null);
     return new BulkResponse(created, existing, out);
+  }
+
+  private static List<String> parentRefsOf(Item it) {
+    List<String> refs = new ArrayList<>();
+    if (!blank(it.parentRef())) refs.add(it.parentRef());
+    if (it.parentRefs() != null) for (String p : it.parentRefs()) if (!blank(p)) refs.add(p);
+    return refs;
   }
 
   /** parent_ref: 배열 안 ref("#0", "root-a") 또는 기존 id 문자열("101"). */

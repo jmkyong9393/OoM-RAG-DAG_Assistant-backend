@@ -21,6 +21,10 @@ TROUBLE_HINTS = ("오류", "에러", "장애", "해결", "예전에", "사례", 
                  "timeout", "error", "exception", "stacktrace")
 # 약한 힌트: 규정 질문에도 흔히 나온다("인증이 실패하나요"). 단독으로는 troubleshoot 확정 대신 LLM 에 넘긴다
 TROUBLE_WEAK_HINTS = ("실패", "원인", "조치", "안 돼", "안돼", "안 됨", "안됨")
+# 약한 규정 힌트: "~해야 해?"(의무·판단) · "몇 초/몇 회/상한"(기준값) 은 규정이 답을 가진 질문이다. 장애 힌트와 함께 오면 both,
+# 단독이면 LLM 에 넘긴다 — 사례만 보고 "타임아웃은 20초" 처럼 로그 수치를 규정인 양 답하는 것을 막는다(실험 2026-10-29)
+POLICY_WEAK_HINTS = ("해야 해", "해야 하", "해야 되", "해야 돼", "해야돼", "해야해", "해도 되", "해도 돼", "되나요", "몇 초", "몇 번", "몇 회", "몇 분",
+                     "몇 시간", "몇 퍼센트", "몇 %", "상한", "한도", "최대", "최소", "기본값", "의무")
 HTTP_STATUS_RE = re.compile(r"(?<!\d)[45]\d\d(?!\d)")   # '504', '429로', '403 떨어지는데' — 접두어 없는 HTTP 상태 코드
 
 
@@ -30,8 +34,11 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
     has_policy = any(h in q for h in POLICY_HINTS)
     has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q))
     weak_trouble = any(h in q for h in TROUBLE_WEAK_HINTS)
+    weak_policy = any(h in q for h in POLICY_WEAK_HINTS)
     if has_policy and (has_trouble or weak_trouble):
         return IntentResult(intent="both", reason="rule: policy+trouble hints")
+    if has_trouble and weak_policy:
+        return IntentResult(intent="both", reason="rule: trouble + obligation/threshold hints")
     if has_policy:
         return IntentResult(intent="policy", reason="rule: policy hints")
     if has_trouble:
@@ -57,8 +64,9 @@ async def classify(profile: LlmProfile, query: str, error_code: str | None, poli
         return ruled
     if ai_mode() == "openai" and profile.has_key:
         system = ("You classify a Korean enterprise question into exactly one intent. "
-                  "policy: asks about official rules/guidelines/procedures. troubleshoot: asks how a failure/error was solved before. "
-                  "both: asks for both. If unsure, answer both. Reply JSON {\"intent\": \"policy|troubleshoot|both\", \"reason\": \"...\"}.")
+                  "policy: asks about official rules/guidelines/procedures, or what one must/should do, or a threshold/limit/default value. "
+                  "troubleshoot: asks how a failure/error was solved before. both: asks for both, or asks what to do about a failure. "
+                  "If unsure, answer both. Reply JSON {\"intent\": \"policy|troubleshoot|both\", \"reason\": \"...\"}.")
         hint = f" (error code detected: {error_code})" if error_code else ""
         data = await _chat_json(profile, profile.model_light, system, f"질문: {query}{hint}", usage)
         try:

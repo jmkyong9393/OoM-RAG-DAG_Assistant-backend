@@ -39,7 +39,12 @@ def test_rules_never_contradict_evalset_kind(capsys):
     ("요즘 VPN 이 왜 이래?", None, None),            # 애매 → LLM
     ("시간 동기화가 안 맞으면 인증이 실패하나요", None, None),  # '실패' 는 약한 힌트 — 규정 질문일 수 있어 LLM 에
     ("접속이 실패하는데 규정상 승인 기간이 지난 건가요", None, "both"),  # 약한 힌트 + 규정 힌트 → both
-    ("VPN 접속이 거부될 때 어떻게 해야 해", None, None),  # '거부'는 힌트가 아니다 (규정 FAQ 일 수 있음)
+    ("VPN 접속이 거부될 때 어떻게 해야 해", None, None),  # '거부'는 힌트가 아니다 (규정 FAQ 일 수 있음). '해야 해' 단독도 LLM 에
+    # 장애 힌트 + 의무/기준값 힌트 → both (규정 없이 사례 수치만으로 "기준" 을 답하지 않게)
+    ("배포하고 나서 502가 늘어나는데 롤백해야 해?", None, "both"),
+    ("컨테이너가 OOM으로 계속 재시작되는데 장애로 등록해야 해?", None, "both"),
+    ("외부 API 타임아웃 몇 초로 잡고 재시도는 몇 번까지 해?", None, "both"),
+    ("502 급증 났던 거 예전에 어떻게 해결했어?", None, "troubleshoot"),  # 순수 사례 질의는 그대로
 ])
 def test_rule_examples(query, code, expected):
     r = rule_classify(query, code)

@@ -54,6 +54,8 @@ def split_articles(lines: list[str]) -> list[dict]:
             flush()
             label = re.sub(r"\s+", "", m.group(1))
             title = (m.group(2) or m.group(3) or "").strip()
+            if any("부칙" in v for v in stack.values()):   # '## 부칙' 아래의 제1조는 본문 제1조와 다른 조문 — 라벨·id 를 구분
+                label = "부칙 " + label
             cur = {"label": f"{label} ({title})" if title else label, "title": title or None, "text": m.group(4).strip()}
         elif f:
             flush()
@@ -129,14 +131,22 @@ def build(source: Path, args) -> dict:
     lines = source.read_text(encoding="utf-8").splitlines()
     articles = split_articles(lines)
     chunks = []
+    seen: dict[str, int] = {}
     for i, a in enumerate(articles, 1):
         nums = NUM_RE.findall(a["label"])
-        if a["label"].startswith("제") and nums:            # 제12조 → a12, 제2조의2 → a2-2
+        if a["label"].startswith("부칙 제") and nums:       # 부칙 제1조 → p1 (본문 제1조 a1 과 충돌하지 않게)
+            key = f"p{nums[0]}" + (f"-{nums[1]}" if "조의" in a["label"] and len(nums) > 1 else "")
+        elif a["label"].startswith("제") and nums:          # 제12조 → a12, 제2조의2 → a2-2
             key = f"a{nums[0]}" + (f"-{nums[1]}" if "조의" in a["label"] and len(nums) > 1 else "")
         elif a["label"].upper().startswith("Q") and nums:    # Q18 → q18
             key = f"q{nums[0]}"
         else:                                                # 제목·별표·서문 → 순번
             key = f"s{i}"
+        if key in seen:                                      # 같은 조번호가 다시 나오면(장별 번호 재시작 등) 글자를 붙여 유일하게
+            seen[key] += 1
+            key = f"{key}{chr(ord('a') + seen[key])}"
+        else:
+            seen[key] = 0
         for seq, piece in enumerate(split_long(a["text"], args.max_chars), 1):
             chunks.append({"id": f"{args.slug}-{key}-{seq}", "article_label": a["label"], "article_title": a["title"], "page": None, "text": piece})
     doc = {"slug": args.slug, "workspace_id": args.workspace, "title": args.title, "version": args.version, "doc_type": args.doc_type,
