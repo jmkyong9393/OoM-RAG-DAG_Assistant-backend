@@ -111,6 +111,32 @@ async def loop() -> None:
         await asyncio.sleep(worker_poll_sec())
 
 
+def start_embedded() -> "threading.Thread":
+    """AI 서비스 프로세스 안에서 loop() 를 데몬 스레드 + 전용 이벤트 루프로 돈다.
+    API 의 이벤트 루프와 분리해 정제의 동기 DB·kiwi 작업이 채팅 스트림을 막지 않게 한다. 프로세스가 끝나면 함께 끝난다."""
+    import threading
+
+    def _run():
+        asyncio.run(loop())
+
+    t = threading.Thread(target=_run, name="refine-worker", daemon=True)
+    t.start()
+    return t
+
+
+def start_embedded() -> "threading.Thread":
+    """AI 서비스 프로세스 안에서 loop() 를 데몬 스레드 + 전용 이벤트 루프로 돈다.
+    API 의 이벤트 루프와 분리해 정제의 동기 DB·kiwi 작업이 채팅 스트림을 막지 않게 한다. 프로세스가 끝나면 함께 끝난다."""
+    import threading
+
+    def _run():
+        asyncio.run(loop())
+
+    t = threading.Thread(target=_run, name="refine-worker", daemon=True)
+    t.start()
+    return t
+
+
 if __name__ == "__main__":
     if "--reindex" in sys.argv:          # 토크나이저·임베딩 모델 변경 후: 청크·노드 토큰(+임베딩) 전부 재생성
         print(asyncio.run(run_once(reindex=True)))

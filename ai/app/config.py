@@ -57,5 +57,15 @@ def answer_max_tokens() -> int | None:
     return n if n > 0 else None
 
 
+def worker_embedded() -> bool:
+    """WORKER_EMBEDDED=1 이면 정제 워커를 AI 서비스 프로세스 안(별도 스레드·별도 이벤트 루프)에서 돈다 — kiwi 모델·런타임을 공유해 ≈500 MB 절감."""
+    return os.environ.get("WORKER_EMBEDDED", "0").lower() in ("1", "true", "yes")
+
+
+def worker_embedded() -> bool:
+    """WORKER_EMBEDDED=1 이면 정제 워커를 AI 서비스 프로세스 안(별도 스레드·별도 이벤트 루프)에서 돈다 — kiwi 모델·런타임을 공유해 ≈500 MB 절감."""
+    return os.environ.get("WORKER_EMBEDDED", "0").lower() in ("1", "true", "yes")
+
+
 def worker_poll_sec() -> float:
     return float(os.environ.get("WORKER_POLL_SEC", "3"))

@@ -1,7 +1,9 @@
-# 단일 호스트 운영 compose (Lightsail 4 GB). Caddy → web(Next) / api(Spring) / ai(Python) + worker + postgres.
+# 단일 호스트 운영 compose (Lightsail 4 GB). Caddy → web(Next) / api(Spring) / ai(Python, 정제 워커 내장) + postgres.
 # 실행(박스): docker compose -f docker-compose.prod.yml --env-file .env pull && up -d
 # 마이그레이션: docker compose -f docker-compose.prod.yml --env-file .env --profile migrate run --rm flyway  (api 기동 시에도 Flyway 가 돈다)
 # 로컬 검증(이미지 직접 빌드): docker compose -f docker-compose.prod.yml --env-file .env build && up -d
+# 프로젝트 이름을 고정한다 — 개발용 docker-compose.yml 과 같은 폴더라 기본 이름(deploy)이 겹치면 `down -v` 가 개발 postgres 컨테이너까지 지운다(실제로 겪음)
+name: oom-prod
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -68,7 +70,7 @@ services:
   ai:
     image: ${AI_IMAGE:-oom-ai:local}
     build: ../ai
-    environment: &ai-env
+    environment:
       AI_DB_URL: postgresql://oom_ai:${OOM_AI_PASSWORD}@postgres:5432/${POSTGRES_DB:-oom}
       AI_MODE: ${AI_MODE:-openai}
       LLM_PROFILE_DEFAULT_BASE_URL: ${LLM_PROFILE_DEFAULT_BASE_URL:-https://api.openai.com/v1}
@@ -78,6 +80,7 @@ services:
       LLM_PROFILE_DEFAULT_EMBEDDING_MODEL: ${LLM_PROFILE_DEFAULT_EMBEDDING_MODEL:-text-embedding-3-small}
       ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-400}
       WORKER_POLL_SEC: ${WORKER_POLL_SEC:-5}
+      WORKER_EMBEDDED: "1"                   # 정제 워커를 같은 프로세스(스레드)에서 — kiwi 모델 공유로 ≈500 MB 절감
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,17 +91,7 @@ services:
       retries: 20
       start_period: 30s
     restart: unless-stopped
-    mem_limit: 1g
-
-  worker:
-    image: ${AI_IMAGE:-oom-ai:local}
-    command: ["uv", "run", "--no-sync", "python", "-m", "app.worker"]
-    environment: *ai-env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    mem_limit: 768m
+    mem_limit: 1536m        # 워커 내장분 포함
 
   web:
     image: ${WEB_IMAGE:?set WEB_IMAGE (프론트 레포 Dockerfile 로 빌드한 이미지)}
