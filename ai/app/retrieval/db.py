@@ -14,8 +14,10 @@ from app.config import db_url
 
 
 @contextmanager
-def connect() -> Iterator[psycopg.Connection]:
-    with psycopg.connect(db_url(), row_factory=dict_row) as conn:
+def connect(timeout: float | None = None) -> Iterator[psycopg.Connection]:
+    """timeout: 접속 대기 상한(초). 기동 워밍업처럼 DB 가 없어도 진행해야 하는 자리에서만 준다 — 없으면 SYN 이 버려지는 환경에서 무한 대기한다."""
+    kw = {"connect_timeout": int(timeout)} if timeout else {}
+    with psycopg.connect(db_url(), row_factory=dict_row, **kw) as conn:
         yield conn
 
 

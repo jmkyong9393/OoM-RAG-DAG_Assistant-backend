@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.config import ai_mode, profile
+from app.config import ai_mode, profile, worker_embedded, worker_embedded
 from app.graph import pipeline
 from app.sse import sse
 
@@ -25,12 +25,16 @@ async def lifespan(_: FastAPI):
         def _warm():
             terms: list[str] = []
             try:
-                with db.connect() as conn:
-                    terms = [r["term"] for r in conn.execute("SELECT DISTINCT term FROM workspace_terms")]
+                with db.connect(timeout=3) as conn:   # DB 가 없어도 기동은 되게 — 3초 넘기면 사전 없이 시작
+                    terms = db.user_terms(conn)
             except Exception:  # noqa: BLE001 — DB 없이도 기동은 되게
                 pass
             return warm_up(terms)
         await asyncio.to_thread(_warm)
+        if worker_embedded():
+            from app import worker
+            app.state.worker_thread = worker.start_embedded()
+            print("[ai] refine worker embedded (thread)", flush=True)
     yield
 
 

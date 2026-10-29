@@ -14,8 +14,8 @@ $C --profile migrate run --rm flyway | grep -E "Successfully|ERROR" || true
 step "seed (host → :15433)"
 ( cd .. && DATABASE_URL="postgresql://$(grep ^POSTGRES_USER= deploy/.env.smoke | cut -d= -f2):$(grep ^POSTGRES_PASSWORD= deploy/.env.smoke | cut -d= -f2)@localhost:15433/$(grep ^POSTGRES_DB= deploy/.env.smoke | cut -d= -f2)" \
   SEED_PASSWORD="$(grep ^SEED_PASSWORD= deploy/.env.smoke | cut -d= -f2)" uv run --with "psycopg[binary]" --with bcrypt scripts/seed.py | tail -2 )
-step "api · ai · worker · web(stub) · caddy"
-$C up -d api ai worker web caddy
+step "api · ai(워커 내장) · web(stub) · caddy"
+$C up -d api ai web caddy
 step "health 대기"
 for i in $(seq 1 60); do
   s=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/v1/actuator/health || true)
@@ -46,7 +46,7 @@ curl -sN -b ./.smoke.jar -H "X-Workspace-Id: 1" -H "Content-Type: application/js
 step "web 스텁 (/)"
 curl -s http://localhost/ | head -c 80; echo
 step "컨테이너 메모리"
-docker stats --no-stream --format "  {{.Name}}\t{{.MemUsage}}" | grep -E "deploy-|oom-prod"
+docker stats --no-stream --format "  {{.Name}}\t{{.MemUsage}}" | grep -E "oom-prod"
 if [ "${1:-}" != "--keep" ]; then
   step "정리 (볼륨 포함)"
   $C down -v
