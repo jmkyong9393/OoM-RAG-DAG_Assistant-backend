@@ -143,6 +143,15 @@ public class LogRepository {
     return jdbc.sql("SELECT orphaned_descendants(?)").param(id).query(Long.class).list();
   }
 
+  /** 아직 미해결인 루트만 해결 시각을 채운다 (bulk 체인 적재용 — 수동 완료(R4)와 달리 note 는 건드리지 않는다). */
+  public void setResolvedIfOpen(long rootId, OffsetDateTime at) {
+    jdbc.sql("UPDATE log_nodes SET resolved_at = ? WHERE id = ? AND type = 'fail' AND resolved_at IS NULL").params(at, rootId).update();
+  }
+
+  public long rootIdOf(long id) {
+    return jdbc.sql("SELECT root_id FROM v_log_nodes WHERE id = ?").param(id).query(Long.class).single();
+  }
+
   public void setResolved(long id, OffsetDateTime at, String note) {
     jdbc.sql("UPDATE log_nodes SET resolved_at = ?, resolve_note = ? WHERE id = ?").params(at, note, id).update();
   }

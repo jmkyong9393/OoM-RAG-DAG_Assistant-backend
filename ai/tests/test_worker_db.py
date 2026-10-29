@@ -34,6 +34,14 @@ async def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node
     assert "E-500" in terms and "결제" in terms
     # 백필 결과: 시드 노드·청크에 tokens 가 모두 채워져 있다
     assert admin_conn.execute("SELECT count(*) AS c FROM policy_chunks WHERE tokens IS NULL OR title_tokens IS NULL").fetchone()["c"] == 0
+    # 사용자 사전은 조상 워크스페이스까지: 전사 공통(10)에 넣은 용어가 CS(3) 토크나이저에도 들어간다
+    from app.retrieval import db as _db
+    admin_conn.execute("INSERT INTO workspace_terms (workspace_id, term, source) VALUES (10, '서킷브레이커', 'manual') ON CONFLICT DO NOTHING")
+    admin_conn.commit()
+    try:
+        assert "서킷브레이커" in _db.workspace_terms(admin_conn, 3) and "서킷브레이커" in _db.workspace_terms(admin_conn, 10)
+    finally:
+        admin_conn.execute("DELETE FROM workspace_terms WHERE workspace_id = 10 AND term = '서킷브레이커'"); admin_conn.commit()
     # 제목 토큰은 D(기본, 표기 없음)·라벨+본문은 A 가중 — 문서 제목만의 토큰 '지침' 은 A 가 붙지 않는다 (V7)
     import re
     tsv = admin_conn.execute("SELECT tsv::text AS t, tokens, title_tokens FROM policy_chunks WHERE id = 'vpn-guide-v22-a15-1'").fetchone()

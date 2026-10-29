@@ -43,7 +43,7 @@ def main() -> int:
         print("평가셋이 없습니다 (data/evalset/*.json)"); return 1
     prof = profile()
     use_vec = ai_mode() == "openai" and prof.has_key
-    tok = Tokenizer()
+    toks: dict[int, Tokenizer] = {}   # 워크스페이스별 사용자 사전 — 파이프라인과 같은 토크나이저
     modes = ["lex", "vec", "hybrid"] if use_vec else ["lex"]
     rows, hits = [], {m: {"policy": [0, 0], "troubleshoot": [0, 0]} for m in modes}
     syn: dict[int, list[list[str]]] = {}
@@ -51,7 +51,8 @@ def main() -> int:
         for it in items:
             ws = it["workspace_id"]
             groups = syn.get(ws) or syn.setdefault(ws, synonym_groups(db.workspace_settings(conn, ws)["settings"]))
-            tokens = tok.query_tokens(it["query"], groups)   # 파이프라인과 같은 질의 토큰(동의어 확장 포함)
+            tok = toks.get(ws) or toks.setdefault(ws, Tokenizer(db.workspace_terms(conn, ws)))
+            tokens = tok.query_tokens(it["query"], groups)   # 파이프라인과 같은 질의 토큰(사용자 사전 + 동의어 확장)
             vec = embed.embed_one(prof, it["query"]) if use_vec else None
             row = {"query": it["query"], "kind": it.get("kind", "policy"), "expect": it["expect"]}
             for m in modes:

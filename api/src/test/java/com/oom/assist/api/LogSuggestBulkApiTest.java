@@ -56,7 +56,7 @@ class LogSuggestBulkApiTest extends AbstractApiTest {
            "error_code": "HTTP 504", "keywords": ["FAQ", "타임아웃"], "created_at": "2026-10-01T09:00:00Z"},
           {"ref": "cause", "type": "ref", "title": "커넥션 풀 고갈", "body": "원인", "parent_ref": "root", "source_ref": "syn-2"},
           {"type": "success", "title": "풀 크기 50 으로", "body": "해결", "parent_ref": "cause", "source_ref": "syn-3",
-           "resolution_summary": "풀 확장으로 해결"}
+           "resolution_summary": "풀 확장으로 해결", "created_at": "2026-10-01T11:30:00Z"}
         ]}""";
     MvcResult r = mvc.perform(as(post("/logs/bulk"), userLead, wsSw).content(body))
         .andExpect(status().isCreated())
@@ -72,6 +72,10 @@ class LogSuggestBulkApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.created_at").value(org.hamcrest.Matchers.startsWith("2026-10-01")));
     assertThat(jdbc.sql("SELECT source FROM log_nodes WHERE id = ?").param(root).query(String.class).single()).isEqualTo("synthetic");
     assertThat(jdbc.sql("SELECT origin FROM log_edges WHERE child_id = ?").param(fix).query(String.class).single()).isEqualTo("bulk");
+    // 체인 끝에 success 가 들어왔으니 루트는 해결 상태, 해결 시각은 success 의 created_at (대시보드 resolved_roots·median_hours 가 과거 로그에서도 맞게)
+    assertThat(jdbc.sql("SELECT resolved_at IS NOT NULL FROM log_nodes WHERE id = ?").param(root).query(Boolean.class).single()).isTrue();
+    assertThat(jdbc.sql("SELECT resolved_at = (SELECT created_at FROM log_nodes WHERE id = ?) FROM log_nodes WHERE id = ?").params(fix, root)
+        .query(Boolean.class).single()).isTrue();
     // 같은 요청을 다시 보내면 전부 existing, 새 행 없음
     mvc.perform(as(post("/logs/bulk"), userLead, wsSw).content(body)).andExpect(status().isCreated())
         .andExpect(jsonPath("$.created").value(0)).andExpect(jsonPath("$.existing").value(3)).andExpect(jsonPath("$.items[0].id").value(root));
