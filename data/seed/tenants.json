@@ -1,0 +1,11 @@
+[
+  {
+    "id": 1,
+    "slug": "oom-demo",
+    "name": "OoM 시연 회사",
+    "settings": {
+      "llm_profile": "default",
+      "employee_prefix": "OOM"
+    }
+  }
+]

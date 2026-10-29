@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "tenant_id": 1,
+    "name": "배종현",
+    "title": "팀장",
+    "employee_no": "OOM0001",
+    "email": "bae@oom.local",
+    "home_workspace_id": 1
+  },
+  {
+    "id": 2,
+    "tenant_id": 1,
+    "name": "장문경",
+    "title": "매니저",
+    "employee_no": "OOM0002",
+    "email": "jang@oom.local",
+    "home_workspace_id": 1
+  },
+  {
+    "id": 3,
+    "tenant_id": 1,
+    "name": "신동준",
+    "title": "주임",
+    "employee_no": "OOM0003",
+    "email": "shin@oom.local",
+    "home_workspace_id": 2
+  },
+  {
+    "id": 4,
+    "tenant_id": 1,
+    "name": "홍경표",
+    "title": "주임",
+    "employee_no": "OOM0004",
+    "email": "hong@oom.local",
+    "home_workspace_id": 3
+  },
+  {
+    "id": 5,
+    "tenant_id": 1,
+    "name": "김하늘",
+    "title": "상담사",
+    "employee_no": "OOM0005",
+    "email": "kim@oom.local",
+    "home_workspace_id": 3
+  }
+]

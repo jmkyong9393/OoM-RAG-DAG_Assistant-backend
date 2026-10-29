@@ -1,0 +1,72 @@
+[
+  {
+    "workspace_id": 1,
+    "parent_id": 101,
+    "child_id": 106,
+    "created_by": 2,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 101,
+    "child_id": 107,
+    "created_by": 3,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 106,
+    "child_id": 108,
+    "created_by": 2,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 106,
+    "child_id": 102,
+    "created_by": 3,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 107,
+    "child_id": 102,
+    "created_by": 3,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 107,
+    "child_id": 103,
+    "created_by": 4,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 106,
+    "child_id": 109,
+    "created_by": 4,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 1,
+    "parent_id": 106,
+    "child_id": 110,
+    "created_by": 1,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 2,
+    "parent_id": 111,
+    "child_id": 112,
+    "created_by": 3,
+    "origin": "manual"
+  },
+  {
+    "workspace_id": 2,
+    "parent_id": 112,
+    "child_id": 113,
+    "created_by": 3,
+    "origin": "manual"
+  }
+]

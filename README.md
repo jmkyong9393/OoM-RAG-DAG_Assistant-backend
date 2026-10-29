@@ -17,12 +17,12 @@
 [Next.js (Vercel)]
      │ REST + SSE
      ▼
-[api/  Spring Boot 3 · Java 21]   CRUD · 워크스페이스 · 로그/간선 · 체인 · 대시보드 · SSE 릴레이 · DB 쓰기 전담
+[api/  Spring Boot 4.1 · Java 21]  CRUD · 워크스페이스 · 로그/간선 · 체인 · 대시보드 · SSE 릴레이 · DB 쓰기 전담
      │
-     ├──▶ [ai/  Python · LangGraph]  classify → (policy_rag ∥ graph_search) → gate → generate → critic
-     │                               kiwi 토크나이징 · 임베딩 · LLM 호출 · DB 읽기 전용
+     ├──▶ [ai/  Python · FastAPI]    classify → (policy_rag ∥ graph_search) → gate → generate → critic
+     │                               kiwi 토크나이징 · 임베딩 · LLM 호출 · 정제 워커 (정제 컬럼만 쓰기)
      ▼
-[PostgreSQL 16 + pgvector]         hybrid_search_*() · chain_family() · would_create_cycle() 함수 공유
+[PostgreSQL 16 + pgvector]         hybrid_search_*() · get_chain() · would_create_cycle() 함수 공유
 ```
 
 | 폴더 | 내용 | 담당 |
@@ -37,15 +37,30 @@
 
 경계 원칙 세 가지. **DB 쓰기는 `api/`만**, **검색·체인 SQL은 `db/` 함수로 공유**, **토크나이징·임베딩·LLM은 `ai/`만.**
 
-## 시작하기 (계획)
+## 시작하기
 
 ```bash
-cp deploy/.env.example deploy/.env      # OPENAI_API_KEY 등 채우기
-make up                                 # postgres (pgvector) 기동 + schema/functions 적용
-make seed                               # 워크스페이스 3종 · 규정 JSON · 합성 로그 적재
-make api                                # Spring Boot :8080
-make ai                                 # Python AI :8000
+cp deploy/.env.example deploy/.env    # 로컬 기본값으로 바로 동작. OpenAI 키가 없으면 AI 는 fake 모드(규칙 분류·템플릿 답변)로 돈다
+make up                               # postgres(pgvector) :5432
+make migrate                          # Flyway 컨테이너로 스키마·함수·뷰 적용 (Spring 기동 시에도 자동 적용)
+make seed-reset                       # data/seed/*.json 적재 (워크스페이스 4 · 사용자 4 · 로그 13 · 문서 6)
+make api                              # Spring Boot :8080   (/api/v1, 환경변수는 deploy/.env). "Started ..." 뒤 Gradle 이 80% EXECUTING 으로 머무는 게 정상(서버 실행 중). 종료는 Ctrl+C
+make ai                               # Python AI :8000   (AI_MODE=auto: 키 있으면 openai, 없으면 fake)
+make worker ARGS=--once               # 시드 직후 1회: 토큰 백필 + pending 로그 정제. 상시 실행은 ARGS 없이, 토크나이저/임베딩 모델 변경 후엔 ARGS=--reindex
+make index                            # data/policies/*.chunks.json 규정 적재(개정 자동 폐기) + 백필. 검색 품질은 eval/hit_at_k.py
 ```
+
+`AI_MODE` — `openai`(OpenAI 호환 API, 정식 경로) · `fake`(키 없는 개발용: 실제 검색 + 규칙 기반 LLM 대체) · `dummy`(고정 이벤트, DB 불필요) · `auto`(기본: 키 있으면 openai, 없으면 fake). 공급자는 `LLM_PROFILE_<NAME>_*` env 프로필로 바꾼다. 키를 넣은 뒤 `scripts/llm_smoke.py` 로 4경로(분류·생성·정제·임베딩)를 1회 점검한다.
+
+확인:
+
+```bash
+curl -c cj -X POST localhost:8080/api/v1/auth/login -H 'Content-Type: application/json' -d '{"employee_no":"OOM0002","password":"Oom!demo-2026"}'
+curl -N -b cj -X POST localhost:8080/api/v1/chat -H 'Content-Type: application/json' -H 'X-Workspace-Id: 1' -d '{"query":"E-403 어떻게 해결했어?"}'
+```
+
+테스트: `make test` (Spring, Docker 필요 — Testcontainers pgvector), `make test-ai` (Python, DB 통합 테스트는 로컬 Postgres 가 떠 있을 때만). 호스트에서 포트가 겹치면 `deploy/.env` 의 `POSTGRES_PORT`·`PORT`·`AI_PORT` 와 URL 들만 바꾼다.
+계약·에러 코드·프론트 전환 체크리스트는 `docs/06_서비스_계약_Spring_Python_프론트.md`. SSE payload JSON Schema 는 `data/contracts/sse_events.schema.json` (`scripts/export_sse_schema.py` 로 생성).
 
 ## 문서
 
