@@ -31,7 +31,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         # load_workspace (설정은 Spring 이 넘기지만, 라벨·프로필 등 settings 는 DB 에서 읽는다)
         with db.connect() as conn:
             ws = db.workspace_settings(conn, workspace_id)
-            terms = db.workspace_terms(conn, workspace_id)
+            terms = db.user_terms(conn)
         if policy_enabled is None:
             policy_enabled = bool(ws["policy_enabled"])
         prof = load_profile(ws["settings"].get("llm_profile", "default"))
