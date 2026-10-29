@@ -1,0 +1,1119 @@
+{
+  "workspace_id": 1,
+  "version": "v1",
+  "description": "SW 개발 워크스페이스 합성 로그 v1 — 배포 403·커넥션 풀·토큰 401·빌드 캐시·OOM·외부 API 6체인 + 고아 ref 2. 전부 가공 데이터.",
+  "items": [
+    {
+      "ref": "c1-root",
+      "type": "fail",
+      "title": "배포 파이프라인에서 컨테이너 이미지 pull 403 반복",
+      "body": "스테이징 배포 단계에서 이미지 pull이 HTTP 403으로 실패. 재시도해도 동일. 전날까지 정상이었고 이미지 태그·레지스트리 주소는 그대로.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-001",
+      "error_code": "HTTP 403",
+      "keywords": [
+        "이미지 pull",
+        "레지스트리",
+        "배포 실패"
+      ],
+      "resolution_summary": "레지스트리 토큰 만료와 신규 서비스 계정 권한 누락이 겹침",
+      "created_at": "2026-07-03T09:40:00+09:00",
+      "expected_queries": [
+        "배포할 때 이미지 pull HTTP 403 뜨는데 어떻게 해결했어?",
+        "스테이징 배포가 이미지를 못 받아와요",
+        "배포하는데 이미지 못받아옴 403뜸"
+      ]
+    },
+    {
+      "ref": "c1-token",
+      "type": "fail",
+      "title": "원인: 레지스트리 접근 토큰 90일 만료",
+      "body": "파이프라인이 쓰는 레지스트리 접근 토큰이 90일 만료 정책으로 끊김. 만료 알림 메일이 퇴사자 계정으로 가고 있어 아무도 못 봄.",
+      "parent_ref": "c1-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-002",
+      "error_code": "HTTP 403",
+      "keywords": [
+        "토큰 만료",
+        "레지스트리",
+        "알림"
+      ],
+      "resolution_summary": "토큰 만료 알림 수신자 부재",
+      "created_at": "2026-07-03T11:10:00+09:00",
+      "expected_queries": [
+        "레지스트리 토큰 만료돼서 배포 안 돼요"
+      ]
+    },
+    {
+      "ref": "c1-cron",
+      "type": "success",
+      "title": "해결: 토큰 자동 갱신 잡 추가",
+      "body": "만료 7일 전에 토큰을 재발급해 시크릿을 갱신하는 주간 잡을 파이프라인에 추가. 알림 수신자를 팀 공용 채널로 변경. 적용 후 3개월 재발 없음.",
+      "parent_ref": "c1-token",
+      "source": "synthetic",
+      "source_ref": "syn-sw-003",
+      "error_code": "HTTP 403",
+      "keywords": [
+        "자동 갱신",
+        "시크릿",
+        "주간 잡"
+      ],
+      "resolution_summary": "만료 7일 전 자동 재발급 + 공용 채널 알림",
+      "created_at": "2026-07-04T15:00:00+09:00",
+      "expected_queries": [
+        "레지스트리 토큰 만료되는 거 어떻게 막았어?"
+      ]
+    },
+    {
+      "ref": "c1-manual",
+      "type": "success",
+      "title": "해결(구): 수동 재발급 스크립트",
+      "body": "운영자가 토큰을 수동 재발급해 시크릿에 넣는 스크립트. 당일 복구용. 자동 갱신 잡 도입 뒤로는 사용하지 않음.",
+      "parent_ref": "c1-token",
+      "source": "synthetic",
+      "source_ref": "syn-sw-004",
+      "error_code": "HTTP 403",
+      "keywords": [
+        "수동 재발급",
+        "스크립트"
+      ],
+      "resolution_summary": "수동 재발급으로 당일 복구",
+      "created_at": "2026-07-03T13:30:00+09:00",
+      "expected_queries": [
+        "토큰 수동으로 재발급하는 스크립트 어디 있어?"
+      ],
+      "_deprecate_reason": "자동 갱신 잡(c1-cron) 도입으로 수동 절차 폐기"
+    },
+    {
+      "ref": "c1-perm",
+      "type": "fail",
+      "title": "원인: 신규 서비스 계정에 저장소 읽기 권한 누락",
+      "body": "같은 주에 만든 신규 서비스의 배포 계정이 레지스트리 저장소 읽기 권한 없이 생성됨. 토큰 문제를 고친 뒤에도 이 서비스만 403 지속.",
+      "parent_ref": "c1-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-005",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-05T10:20:00+09:00",
+      "expected_queries": [
+        "새 서비스만 배포 403 나는 이유"
+      ]
+    },
+    {
+      "ref": "c1-iac",
+      "type": "success",
+      "title": "해결: IaC 권한 템플릿에 저장소 읽기 권한 포함",
+      "body": "서비스 계정 생성 템플릿에 레지스트리 읽기 권한을 기본 포함. 기존 계정 4개도 일괄 적용.",
+      "parent_ref": "c1-perm",
+      "source": "synthetic",
+      "source_ref": "syn-sw-006",
+      "error_code": "HTTP 403",
+      "keywords": [
+        "IaC",
+        "권한 템플릿",
+        "서비스 계정"
+      ],
+      "resolution_summary": "계정 생성 템플릿에 읽기 권한 기본 포함",
+      "created_at": "2026-07-07T14:00:00+09:00",
+      "expected_queries": [
+        "새로 만든 서비스 계정에 권한 빠지는 거 어떻게 막았어?"
+      ]
+    },
+    {
+      "ref": "c1-audit",
+      "type": "ref",
+      "title": "레지스트리 감사 로그 확인 절차",
+      "body": "403 원인 구분법: 감사 로그에서 denied 사유가 token_expired 면 토큰, permission 이면 계정 권한. 콘솔 > 감사 > 최근 24시간 필터.",
+      "parent_ref": "c1-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-007",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-05T16:00:00+09:00",
+      "expected_queries": [
+        "레지스트리 403 원인 어떻게 구분해?"
+      ]
+    },
+    {
+      "ref": "c1-std",
+      "type": "success",
+      "title": "해결: 서비스 계정 발급·만료 표준화",
+      "body": "토큰 만료와 권한 누락이 모두 계정 관리 부재에서 비롯돼, 발급 양식·권한 세트·만료 알림을 하나의 표준으로 묶음. 두 원인을 함께 닫음.",
+      "parent_refs": [
+        "c1-token",
+        "c1-perm"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-sw-008",
+      "error_code": "HTTP 403",
+      "keywords": [
+        "서비스 계정",
+        "표준화",
+        "만료 알림"
+      ],
+      "resolution_summary": "발급·권한·만료 알림을 단일 표준으로",
+      "created_at": "2026-07-15T11:00:00+09:00",
+      "expected_queries": [
+        "서비스 계정 관리 표준 만든 사례 보여줘"
+      ]
+    },
+    {
+      "ref": "c1-check",
+      "type": "ref",
+      "title": "배포 체크리스트: 이미지 태그 고정·pull 시크릿 점검",
+      "body": "배포 전 확인 항목: 이미지 태그가 latest가 아닌지, pull 시크릿 만료일이 30일 이상 남았는지, 대상 네임스페이스에 시크릿이 있는지.",
+      "parent_ref": "c1-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-009",
+      "error_code": null,
+      "keywords": [
+        "체크리스트",
+        "pull 시크릿",
+        "이미지 태그"
+      ],
+      "resolution_summary": "배포 전 시크릿·태그 점검 항목",
+      "created_at": "2026-07-16T09:30:00+09:00",
+      "expected_queries": [
+        "배포 전에 뭐 확인해야 해?"
+      ]
+    },
+    {
+      "ref": "c1-over",
+      "type": "fail",
+      "title": "권한 템플릿 적용 후 배포 계정이 쓰기 권한까지 획득",
+      "body": "템플릿에 읽기만 넣으려다 역할 범위를 잘못 지정해 push 권한이 함께 부여됨. 보안 점검에서 발견. 역할을 읽기 전용으로 재지정.",
+      "parent_ref": "c1-perm",
+      "source": "synthetic",
+      "source_ref": "syn-sw-010",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-22T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c2-root",
+      "type": "fail",
+      "title": "DB 커넥션 풀 고갈로 API 응답 지연·타임아웃",
+      "body": "점심 피크에 API 응답이 5초를 넘기고 일부 요청이 TimeoutException으로 실패. 풀 활성 커넥션이 상한에 붙어 있고 대기 큐가 쌓임.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-011",
+      "error_code": "TimeoutException",
+      "keywords": [
+        "커넥션 풀",
+        "타임아웃",
+        "피크"
+      ],
+      "resolution_summary": "트랜잭션 내 외부 호출·풀 크기·커넥션 누수가 겹침",
+      "created_at": "2026-07-10T12:40:00+09:00",
+      "expected_queries": [
+        "커넥션 풀 고갈 TimeoutException 어떻게 해결했어?",
+        "점심시간만 되면 API가 느려지는데 예전에 비슷한 일 있었어?",
+        "커넥션풀 꽉찼을때 어케했어"
+      ]
+    },
+    {
+      "ref": "c2-tx",
+      "type": "fail",
+      "title": "원인: 트랜잭션 안에서 외부 HTTP 호출",
+      "body": "주문 저장 트랜잭션 안에서 외부 알림 API를 호출해, 외부가 느릴수록 커넥션을 오래 점유.",
+      "parent_ref": "c2-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-012",
+      "error_code": "TimeoutException",
+      "keywords": [
+        "트랜잭션",
+        "외부 호출",
+        "커넥션 점유"
+      ],
+      "resolution_summary": "트랜잭션 안 외부 호출이 커넥션 점유 시간을 늘림",
+      "created_at": "2026-07-10T15:00:00+09:00",
+      "expected_queries": [
+        "트랜잭션 안에서 외부 API 부르면 어떻게 돼?"
+      ]
+    },
+    {
+      "ref": "c2-tx-fix",
+      "type": "success",
+      "title": "해결: 외부 호출을 트랜잭션 밖으로 이동",
+      "body": "알림 호출을 커밋 이후 이벤트로 분리. 평균 커넥션 점유 시간 1.8초 → 0.2초.",
+      "parent_ref": "c2-tx",
+      "source": "synthetic",
+      "source_ref": "syn-sw-013",
+      "error_code": "TimeoutException",
+      "keywords": [
+        "커밋 후 이벤트",
+        "점유 시간"
+      ],
+      "resolution_summary": "외부 호출을 커밋 이후 이벤트로 분리",
+      "created_at": "2026-07-11T17:00:00+09:00",
+      "expected_queries": [
+        "외부 호출 트랜잭션 밖으로 뺀 사례"
+      ]
+    },
+    {
+      "ref": "c2-size",
+      "type": "fail",
+      "title": "원인: 풀 크기 10 고정, 피크에 부족",
+      "body": "초기 설정 그대로 풀 최대 10. 피크 동시 요청 30 이상이면 대기가 불가피.",
+      "parent_ref": "c2-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-014",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-10T16:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c2-size-fix",
+      "type": "success",
+      "title": "해결: 풀 최대 20 + 대기 타임아웃 3초",
+      "body": "풀 최대 20, 커넥션 대기 타임아웃 3초로 조정해 무한 대기 대신 빠른 실패. 피크 타임아웃 0건.",
+      "parent_ref": "c2-size",
+      "source": "synthetic",
+      "source_ref": "syn-sw-015",
+      "error_code": "TimeoutException",
+      "keywords": [
+        "풀 크기",
+        "대기 타임아웃"
+      ],
+      "resolution_summary": "풀 20·대기 3초",
+      "created_at": "2026-07-12T10:00:00+09:00",
+      "expected_queries": [
+        "커넥션 풀 사이즈 얼마로 늘렸어?"
+      ]
+    },
+    {
+      "ref": "c2-diag",
+      "type": "ref",
+      "title": "커넥션 점유 진단 쿼리",
+      "body": "pg_stat_activity에서 state='idle in transaction' 이 오래된 세션을 찾는 쿼리와, 풀 메트릭(active·idle·pending) 보는 대시보드 위치.",
+      "parent_ref": "c2-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-016",
+      "error_code": null,
+      "keywords": [
+        "pg_stat_activity",
+        "진단",
+        "풀 메트릭"
+      ],
+      "resolution_summary": "커넥션 점유 세션 찾는 법",
+      "created_at": "2026-07-11T09:00:00+09:00",
+      "expected_queries": [
+        "커넥션 누수 어떻게 찾아?"
+      ]
+    },
+    {
+      "ref": "c2-leak",
+      "type": "fail",
+      "title": "원인: 레거시 모듈의 커넥션 close 누락",
+      "body": "예외 경로에서 커넥션을 반납하지 않는 레거시 코드 2곳. 예외가 날 때마다 풀에서 1개씩 사라짐.",
+      "parent_ref": "c2-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-017",
+      "error_code": "TimeoutException",
+      "keywords": [
+        "커넥션 누수",
+        "레거시"
+      ],
+      "resolution_summary": "예외 경로 close 누락",
+      "created_at": "2026-07-14T11:00:00+09:00",
+      "expected_queries": [
+        "커넥션 누수 났던 사례 있어?"
+      ]
+    },
+    {
+      "ref": "c2-leak-fix",
+      "type": "success",
+      "title": "해결: try-with-resources 리팩터 + 누수 감지 옵션",
+      "body": "해당 모듈을 try-with-resources로 바꾸고 풀의 누수 감지 임계값 60초를 켜서 재발 시 로그로 드러나게 함.",
+      "parent_ref": "c2-leak",
+      "source": "synthetic",
+      "source_ref": "syn-sw-018",
+      "error_code": "TimeoutException",
+      "keywords": [
+        "try-with-resources",
+        "누수 감지"
+      ],
+      "resolution_summary": "자원 자동 반납 + 누수 감지 60초",
+      "created_at": "2026-07-16T15:00:00+09:00",
+      "expected_queries": [
+        "커넥션 누수 막은 방법"
+      ]
+    },
+    {
+      "ref": "c2-max",
+      "type": "fail",
+      "title": "풀 확대 후 DB max_connections 초과",
+      "body": "인스턴스 3대 × 풀 20 = 60이 DB max_connections 50을 넘어 일부 인스턴스가 연결 거부. 인스턴스별 풀 상한 합산 규칙이 필요. 조사 중.",
+      "parent_ref": "c2-size-fix",
+      "source": "synthetic",
+      "source_ref": "syn-sw-019",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-20T09:30:00+09:00",
+      "expected_queries": [
+        "풀 늘렸더니 DB 연결 거부되는데"
+      ]
+    },
+    {
+      "ref": "c3-root",
+      "type": "fail",
+      "title": "모바일 앱 로그인 직후 401 반복",
+      "body": "앱에서 로그인하면 수 초 안에 401이 돌아와 다시 로그인 화면으로. 특정 기기·특정 시간대에 몰림. 서버 에러 로그엔 token expired만 찍힘.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-020",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "401",
+        "토큰 만료",
+        "모바일"
+      ],
+      "resolution_summary": "리프레시 회전 경합·JWKS 캐시·기기 시간 오차가 겹침",
+      "created_at": "2026-08-01T10:00:00+09:00",
+      "expected_queries": [
+        "로그인하자마자 HTTP 401 나는 문제 어떻게 해결했어?",
+        "앱이 로그인 직후에 자꾸 로그아웃돼요",
+        "토큰 만료되서 로그인 튕겨요"
+      ]
+    },
+    {
+      "ref": "c3-rotate",
+      "type": "fail",
+      "title": "원인: 리프레시 토큰 회전 시 이전 토큰 즉시 폐기",
+      "body": "앱이 동시에 2개 요청을 보내면 첫 요청이 리프레시를 소비하고 두 번째가 폐기된 토큰으로 401.",
+      "parent_ref": "c3-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-021",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "리프레시 토큰",
+        "회전",
+        "경합"
+      ],
+      "resolution_summary": "회전 직후 동시 요청 경합",
+      "created_at": "2026-08-01T14:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c3-grace",
+      "type": "success",
+      "title": "해결: 리프레시 토큰 유예 30초",
+      "body": "회전 후 이전 토큰을 30초간 허용. 경합으로 인한 401이 0으로.",
+      "parent_ref": "c3-rotate",
+      "source": "synthetic",
+      "source_ref": "syn-sw-022",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "유예 기간",
+        "30초"
+      ],
+      "resolution_summary": "이전 토큰 30초 유예",
+      "created_at": "2026-08-02T16:00:00+09:00",
+      "expected_queries": [
+        "리프레시 토큰 유예 기간 둔 사례"
+      ]
+    },
+    {
+      "ref": "c3-jwks",
+      "type": "fail",
+      "title": "원인: 게이트웨이의 공개키(JWKS) 캐시가 만료된 키 사용",
+      "body": "인증 서버가 키를 교체했는데 게이트웨이 캐시 TTL이 24시간이라 새 키로 서명된 토큰을 검증 실패.",
+      "parent_ref": "c3-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-023",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-03T11:00:00+09:00",
+      "expected_queries": [
+        "키 교체했더니 토큰 검증 실패해요"
+      ]
+    },
+    {
+      "ref": "c3-jwks-fix",
+      "type": "success",
+      "title": "해결: JWKS 캐시 TTL 1시간 + kid 미스 시 즉시 재조회",
+      "body": "TTL을 1시간으로 줄이고, 토큰의 kid가 캐시에 없으면 즉시 JWKS를 다시 받도록 변경.",
+      "parent_ref": "c3-jwks",
+      "source": "synthetic",
+      "source_ref": "syn-sw-024",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "JWKS",
+        "캐시 TTL",
+        "kid"
+      ],
+      "resolution_summary": "TTL 1시간 + kid 미스 즉시 재조회",
+      "created_at": "2026-08-04T13:00:00+09:00",
+      "expected_queries": [
+        "JWKS 캐시 문제 해결한 거"
+      ]
+    },
+    {
+      "ref": "c3-decode",
+      "type": "ref",
+      "title": "토큰 디코딩해서 exp·iat·kid 확인하는 법",
+      "body": "401 분석 첫 단계. 토큰 페이로드를 디코딩해 exp가 서버 시각보다 과거인지, kid가 현재 JWKS에 있는지 확인.",
+      "parent_ref": "c3-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-025",
+      "error_code": null,
+      "keywords": [
+        "디코딩",
+        "exp",
+        "kid"
+      ],
+      "resolution_summary": "401 분석 절차",
+      "created_at": "2026-08-01T11:30:00+09:00",
+      "expected_queries": [
+        "토큰 왜 만료됐는지 확인하는 법"
+      ]
+    },
+    {
+      "ref": "c3-clock",
+      "type": "fail",
+      "title": "원인: 기기 시간을 수동 설정한 사용자",
+      "body": "일부 사용자가 기기 시간을 수동으로 바꿔 iat가 미래로 찍힘. 서버가 미래 토큰으로 판단해 거부.",
+      "parent_ref": "c3-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-026",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-05T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c3-skew",
+      "type": "success",
+      "title": "해결: 시각 오차 허용 5분 + 앱 안내 문구",
+      "body": "iat·exp 검증에 5분 오차를 허용하고, 시간 오차가 크면 앱이 '기기 시간을 자동으로 설정하세요' 안내.",
+      "parent_ref": "c3-clock",
+      "source": "synthetic",
+      "source_ref": "syn-sw-027",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "시각 오차",
+        "5분",
+        "안내"
+      ],
+      "resolution_summary": "5분 허용 + 기기 시간 안내",
+      "created_at": "2026-08-06T15:00:00+09:00",
+      "expected_queries": [
+        "기기 시간 때문에 401 나는 거 어떻게 했어?"
+      ]
+    },
+    {
+      "ref": "c3-cdn",
+      "type": "fail",
+      "title": "원인 후보: CDN이 401 응답을 캐싱",
+      "body": "유효한 토큰으로도 401이 반복된 사례에서 CDN 캐시 키에 인증 헤더가 빠져 있었음. 재현 중.",
+      "parent_ref": "c3-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-028",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-08T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c3-lb",
+      "type": "fail",
+      "title": "원인 후보: 로드밸런서 세션 고정 해제 뒤 노드별 키 불일치",
+      "body": "세션 고정을 끈 날부터 일부 노드가 옛 키를 들고 있던 정황. 노드별 JWKS 캐시 시각 대조 필요.",
+      "parent_ref": "c3-jwks",
+      "source": "synthetic",
+      "source_ref": "syn-sw-029",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-09T09:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c4-root",
+      "type": "fail",
+      "title": "CI 빌드가 캐시 복원 후 컴파일 오류",
+      "body": "캐시를 쓰지 않으면 성공하고 캐시 복원 뒤에만 심볼 누락 오류. 에러 코드 없이 컴파일러 메시지만 남음.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-030",
+      "error_code": null,
+      "keywords": [
+        "빌드 캐시",
+        "컴파일 오류",
+        "CI"
+      ],
+      "resolution_summary": "캐시 키 누락과 러너 디스크 부족이 겹침",
+      "created_at": "2026-08-12T09:00:00+09:00",
+      "expected_queries": [
+        "빌드 캐시 손상됐을 때 어떻게 했어?",
+        "ci 캐시 깨진거 어케 고쳤지",
+        "빌드 캐쉬 깨졌을때 어떻게 했어"
+      ]
+    },
+    {
+      "ref": "c4-key",
+      "type": "fail",
+      "title": "원인: 캐시 키가 브랜치명만 포함",
+      "body": "의존성 lock 파일이 바뀌어도 같은 키를 써서 옛 의존성 캐시가 복원됨.",
+      "parent_ref": "c4-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-031",
+      "error_code": null,
+      "keywords": [
+        "캐시 키",
+        "lock 파일"
+      ],
+      "resolution_summary": "lock 변경이 키에 반영되지 않음",
+      "created_at": "2026-08-12T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c4-key-fix",
+      "type": "success",
+      "title": "해결: 캐시 키에 lock 파일 해시 포함",
+      "body": "키 = 브랜치 + lock 파일 해시. 의존성이 바뀌면 자동으로 새 캐시.",
+      "parent_ref": "c4-key",
+      "source": "synthetic",
+      "source_ref": "syn-sw-032",
+      "error_code": null,
+      "keywords": [
+        "캐시 키",
+        "해시"
+      ],
+      "resolution_summary": "키에 lock 해시 포함",
+      "created_at": "2026-08-13T10:00:00+09:00",
+      "expected_queries": [
+        "빌드 캐시 키에 lock 파일 해시 넣은 사례"
+      ]
+    },
+    {
+      "ref": "c4-disk",
+      "type": "fail",
+      "title": "원인: 러너 디스크 가득 차 캐시 일부만 기록",
+      "body": "디스크 98% 상태에서 캐시 저장이 중간에 끊겨 불완전한 아카이브가 올라감.",
+      "parent_ref": "c4-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-033",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-14T14:00:00+09:00",
+      "expected_queries": [
+        "러너 디스크 꽉 차서 캐시 깨진 적 있어?"
+      ]
+    },
+    {
+      "ref": "c4-disk-fix",
+      "type": "success",
+      "title": "해결: 러너 디스크 정리 크론 + 캐시 크기 상한 2GB",
+      "body": "매일 새벽 7일 지난 작업 디렉터리 삭제, 캐시 아카이브 2GB 초과 시 저장 생략.",
+      "parent_ref": "c4-disk",
+      "source": "synthetic",
+      "source_ref": "syn-sw-034",
+      "error_code": null,
+      "keywords": [
+        "디스크 정리",
+        "캐시 상한",
+        "2GB"
+      ],
+      "resolution_summary": "정리 크론 + 상한 2GB",
+      "created_at": "2026-08-15T16:00:00+09:00",
+      "expected_queries": [
+        "빌드 캐시 용량 2GB로 제한한 사례"
+      ]
+    },
+    {
+      "ref": "c4-wrong",
+      "type": "fail",
+      "title": "추정 원인(폐기): 컴파일러 버전 불일치",
+      "body": "처음엔 러너 간 컴파일러 버전 차이를 의심했으나 버전을 통일해도 재현됨. 무관으로 결론.",
+      "parent_ref": "c4-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-035",
+      "error_code": null,
+      "keywords": [
+        "컴파일러 버전"
+      ],
+      "resolution_summary": "무관으로 판명",
+      "created_at": "2026-08-12T15:00:00+09:00",
+      "expected_queries": [],
+      "_deprecate_reason": "재현 실험으로 무관 판명 — 실제 원인은 c4-key·c4-disk"
+    },
+    {
+      "ref": "c4-inval",
+      "type": "ref",
+      "title": "캐시 무효화 명령과 키 규칙",
+      "body": "수동 무효화: 캐시 이름에 접두어 버전을 올린다(v1→v2). 키 규칙 문서 위치와 예시.",
+      "parent_ref": "c4-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-036",
+      "error_code": null,
+      "keywords": [
+        "캐시 무효화",
+        "키 규칙"
+      ],
+      "resolution_summary": "무효화 방법",
+      "created_at": "2026-08-13T13:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c4-std",
+      "type": "success",
+      "title": "해결: 빌드 캐시 운영 표준(키 규칙·상한·주간 초기화)",
+      "body": "키 규칙·크기 상한·매주 일요일 전체 초기화를 표준으로 묶어 두 원인을 함께 닫음.",
+      "parent_refs": [
+        "c4-key",
+        "c4-disk"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-sw-037",
+      "error_code": null,
+      "keywords": [
+        "운영 표준",
+        "주간 초기화"
+      ],
+      "resolution_summary": "키·상한·주간 초기화 표준",
+      "created_at": "2026-08-20T10:00:00+09:00",
+      "expected_queries": [
+        "빌드 캐시 운영 기준 만든 거 있어?"
+      ]
+    },
+    {
+      "ref": "c4-slow",
+      "type": "fail",
+      "title": "캐시 상한 적용 후 일부 빌드 시간 3배 증가",
+      "body": "대형 모듈은 캐시가 2GB를 넘겨 매번 전체 빌드. 모듈별 분할 캐시 검토 중.",
+      "parent_ref": "c4-disk-fix",
+      "source": "synthetic",
+      "source_ref": "syn-sw-038",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-25T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c5-root",
+      "type": "fail",
+      "title": "배치 워커 컨테이너 OOMKilled 반복",
+      "body": "야간 정산 배치가 새벽 2시경 OOMKilled로 종료되고 재시작 반복. 메모리 그래프가 선형 증가 후 제한에 닿음.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-039",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "OOMKilled",
+        "배치",
+        "메모리"
+      ],
+      "resolution_summary": "JVM 힙 설정·전체 적재·제한값이 겹침",
+      "created_at": "2026-09-01T03:00:00+09:00",
+      "expected_queries": [
+        "OOMKilled 났을 때 어떻게 해결했어?",
+        "배치 컨테이너가 새벽에 자꾸 죽어요",
+        "oom 났는데 메모리 얼마로 올림?"
+      ]
+    },
+    {
+      "ref": "c5-heap",
+      "type": "fail",
+      "title": "원인: JVM이 컨테이너 메모리 제한을 인식하지 못함",
+      "body": "힙 상한이 호스트 메모리 기준으로 잡혀 컨테이너 제한을 넘김.",
+      "parent_ref": "c5-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-040",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "JVM 힙",
+        "컨테이너 제한"
+      ],
+      "resolution_summary": "힙이 호스트 기준으로 산정",
+      "created_at": "2026-09-01T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c5-heap-fix",
+      "type": "success",
+      "title": "해결: MaxRAMPercentage 75% 지정",
+      "body": "힙을 컨테이너 제한의 75%로 고정. 제한 1Gi 기준 힙 768Mi.",
+      "parent_ref": "c5-heap",
+      "source": "synthetic",
+      "source_ref": "syn-sw-041",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "MaxRAMPercentage",
+        "75%"
+      ],
+      "resolution_summary": "힙 비율 75%",
+      "created_at": "2026-09-02T14:00:00+09:00",
+      "expected_queries": [
+        "JVM 힙을 컨테이너 제한 기준으로 얼마로 잡았어?"
+      ]
+    },
+    {
+      "ref": "c5-load",
+      "type": "fail",
+      "title": "원인: 배치가 전체 결과를 메모리에 적재",
+      "body": "정산 대상 전체(수십만 건)를 리스트로 받아 처리. 데이터가 늘수록 메모리 선형 증가.",
+      "parent_ref": "c5-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-042",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-02T09:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c5-page",
+      "type": "success",
+      "title": "해결: 커서 기반 1,000건 페이징",
+      "body": "커서로 1,000건씩 읽고 처리 후 해제. 최대 메모리 사용 2.1GB → 300MB.",
+      "parent_ref": "c5-load",
+      "source": "synthetic",
+      "source_ref": "syn-sw-043",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "페이징",
+        "커서",
+        "1,000건"
+      ],
+      "resolution_summary": "1,000건 페이징",
+      "created_at": "2026-09-03T17:00:00+09:00",
+      "expected_queries": [
+        "배치 메모리 줄인 사례"
+      ]
+    },
+    {
+      "ref": "c5-watch",
+      "type": "ref",
+      "title": "컨테이너 메모리 사용량·OOM 이벤트 보는 법",
+      "body": "메트릭 대시보드의 working set 그래프와, 종료 사유(OOMKilled)를 이벤트에서 확인하는 명령.",
+      "parent_ref": "c5-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-044",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-01T11:30:00+09:00",
+      "expected_queries": [
+        "컨테이너 메모리 어디서 봐?"
+      ]
+    },
+    {
+      "ref": "c5-limit",
+      "type": "fail",
+      "title": "원인: 메모리 제한 512Mi로 과소 설정",
+      "body": "배치 특성과 무관하게 웹 서비스와 같은 512Mi를 복사해 씀.",
+      "parent_ref": "c5-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-045",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "메모리 제한",
+        "512Mi"
+      ],
+      "resolution_summary": "제한값 과소",
+      "created_at": "2026-09-04T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c5-limit-fix",
+      "type": "success",
+      "title": "해결: 제한 1Gi · 요청 768Mi로 재산정",
+      "body": "실측 최대 사용량의 1.5배로 제한, 요청은 평균의 1.2배. 배치 전용 값으로 분리.",
+      "parent_ref": "c5-limit",
+      "source": "synthetic",
+      "source_ref": "syn-sw-046",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "메모리 제한",
+        "1Gi",
+        "768Mi"
+      ],
+      "resolution_summary": "제한 1Gi·요청 768Mi",
+      "created_at": "2026-09-05T15:00:00+09:00",
+      "expected_queries": [
+        "배치 메모리 제한 얼마로 잡았어?"
+      ]
+    },
+    {
+      "ref": "c5-meta",
+      "type": "fail",
+      "title": "힙 비율 조정 후 메타스페이스 부족으로 재시작",
+      "body": "힙은 안정됐지만 네이티브 영역이 줄어 메타스페이스 부족 오류. 힙 외 메모리를 고려하지 않음.",
+      "parent_ref": "c5-heap-fix",
+      "source": "synthetic",
+      "source_ref": "syn-sw-047",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-10T02:30:00+09:00",
+      "expected_queries": [
+        "힙 비율 낮춘 뒤 메타스페이스 부족 오류 나요"
+      ]
+    },
+    {
+      "ref": "c5-meta-fix",
+      "type": "success",
+      "title": "해결: 메타스페이스 상한 명시 + 제한 재산정",
+      "body": "MaxMetaspaceSize 256m 명시, 힙 비율 70%로 조정해 네이티브 여유 확보.",
+      "parent_ref": "c5-meta",
+      "source": "synthetic",
+      "source_ref": "syn-sw-048",
+      "error_code": "OOMKilled",
+      "keywords": [
+        "메타스페이스",
+        "256m",
+        "70%"
+      ],
+      "resolution_summary": "메타스페이스 256m + 힙 70%",
+      "created_at": "2026-09-11T16:00:00+09:00",
+      "expected_queries": [
+        "메타스페이스 상한 지정한 사례"
+      ]
+    },
+    {
+      "ref": "c6-root",
+      "type": "fail",
+      "title": "결제 연동 API 호출 502·타임아웃 급증",
+      "body": "오후 3시부터 결제 연동 호출의 30%가 HTTP 502 또는 10초 타임아웃. 우리 쪽 서버 자원은 정상.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-049",
+      "error_code": "HTTP 502",
+      "keywords": [
+        "외부 API",
+        "502",
+        "타임아웃",
+        "결제 연동"
+      ],
+      "resolution_summary": "상대 측 점검과 재시도 폭주가 겹침",
+      "created_at": "2026-09-15T15:20:00+09:00",
+      "expected_queries": [
+        "결제 연동 HTTP 502 터졌을 때 어떻게 했어?",
+        "결제 연동이 자꾸 타임아웃 나요",
+        "결제api 502남 어쩌지"
+      ]
+    },
+    {
+      "ref": "c6-notice",
+      "type": "fail",
+      "title": "원인: 연동사 정기 점검 공지 누락",
+      "body": "연동사가 점검 공지를 구 담당자 메일로 보냄. 점검 시간 동안 502 지속.",
+      "parent_ref": "c6-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-050",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-15T16:00:00+09:00",
+      "expected_queries": [
+        "연동사 점검 공지 못 받아서 장애 난 적"
+      ]
+    },
+    {
+      "ref": "c6-cb",
+      "type": "success",
+      "title": "해결: 서킷브레이커 + 폴백",
+      "body": "실패율 50% 이상이면 10초 열림, 열린 동안은 '잠시 후 재시도' 폴백 응답. 연동사 장애가 우리 장애로 번지지 않게.",
+      "parent_ref": "c6-notice",
+      "source": "synthetic",
+      "source_ref": "syn-sw-051",
+      "error_code": "HTTP 502",
+      "keywords": [
+        "서킷브레이커",
+        "폴백",
+        "50%",
+        "10초"
+      ],
+      "resolution_summary": "실패율 50%·10초 서킷 + 폴백",
+      "created_at": "2026-09-16T14:00:00+09:00",
+      "expected_queries": [
+        "서킷브레이커 적용한 사례"
+      ]
+    },
+    {
+      "ref": "c6-retry",
+      "type": "fail",
+      "title": "원인: 즉시 재시도 3회로 호출 폭주",
+      "body": "실패 시 간격 없이 3회 재시도해 상대 복구를 늦추고 우리 스레드도 소진.",
+      "parent_ref": "c6-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-052",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-15T17:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c6-backoff",
+      "type": "success",
+      "title": "해결: 지수 백오프 1·2·4초 + 재시도 2회",
+      "body": "재시도를 2회로 줄이고 1초·2초·4초 지수 백오프. 재시도로 인한 추가 호출 70% 감소.",
+      "parent_ref": "c6-retry",
+      "source": "synthetic",
+      "source_ref": "syn-sw-053",
+      "error_code": "HTTP 502",
+      "keywords": [
+        "지수 백오프",
+        "재시도 2회"
+      ],
+      "resolution_summary": "백오프 1·2·4초, 재시도 2회",
+      "created_at": "2026-09-17T11:00:00+09:00",
+      "expected_queries": [
+        "재시도 백오프 어떻게 잡았어?"
+      ]
+    },
+    {
+      "ref": "c6-runbook",
+      "type": "ref",
+      "title": "외부 연동 장애 대응 절차",
+      "body": "① 상대 상태 페이지 확인 ② 서킷 상태 확인 ③ 폴백 전환 공지 ④ 복구 후 재처리 큐 실행.",
+      "parent_ref": "c6-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-054",
+      "error_code": null,
+      "keywords": [
+        "대응 절차",
+        "재처리 큐"
+      ],
+      "resolution_summary": "외부 연동 장애 4단계 절차",
+      "created_at": "2026-09-16T09:00:00+09:00",
+      "expected_queries": [
+        "외부 연동 장애 났을 때 순서"
+      ]
+    },
+    {
+      "ref": "c6-deploy",
+      "type": "fail",
+      "title": "배포 직후 ECONNREFUSED — 신규 버전이 잘못된 엔드포인트 호출",
+      "body": "신규 버전이 연동사 테스트 엔드포인트를 바라봐 ECONNREFUSED. 배포 후 5분 관찰에서 에러율 0.6%로 롤백 기준(1%)에는 미달했지만 결제 경로라 담당자 판단으로 롤백.",
+      "parent_ref": "c6-root",
+      "source": "synthetic",
+      "source_ref": "syn-sw-055",
+      "error_code": "ECONNREFUSED",
+      "keywords": [
+        "ECONNREFUSED",
+        "엔드포인트",
+        "롤백"
+      ],
+      "resolution_summary": "잘못된 엔드포인트 → 기준 미달이지만 수동 롤백",
+      "created_at": "2026-09-20T10:30:00+09:00",
+      "expected_queries": [
+        "배포하자마자 ECONNREFUSED 난 사례",
+        "롤백 기준 안 넘었는데 롤백한 적 있어?",
+        "배포 직후 결제 연동 연결 거부 났을 때"
+      ]
+    },
+    {
+      "ref": "c6-rollback",
+      "type": "success",
+      "title": "해결: 롤백 + 엔드포인트를 환경변수로 분리",
+      "body": "이전 버전으로 롤백 후 엔드포인트를 코드 상수에서 환경별 설정으로 이동.",
+      "parent_ref": "c6-deploy",
+      "source": "synthetic",
+      "source_ref": "syn-sw-056",
+      "error_code": "ECONNREFUSED",
+      "keywords": [
+        "롤백",
+        "환경변수",
+        "엔드포인트"
+      ],
+      "resolution_summary": "롤백 + 환경별 설정 분리",
+      "created_at": "2026-09-20T12:00:00+09:00",
+      "expected_queries": [
+        "엔드포인트 환경변수로 뺀 사례"
+      ]
+    },
+    {
+      "ref": "c6-again",
+      "type": "fail",
+      "title": "롤백 후 재배포에서 설정 변경 누락으로 재발",
+      "body": "환경변수는 추가했지만 운영 값 등록을 빠뜨려 기본값(테스트)으로 다시 연결. 조사 중.",
+      "parent_ref": "c6-deploy",
+      "source": "synthetic",
+      "source_ref": "syn-sw-057",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-22T09:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "c6-gate",
+      "type": "success",
+      "title": "해결: 연동 설정 검증 단계를 배포 파이프라인에 추가",
+      "body": "배포 전 단계에서 외부 엔드포인트·재시도 설정을 환경별 기대값과 대조해 불일치면 배포 중단. 재시도 폭주와 엔드포인트 오류를 함께 막음.",
+      "parent_refs": [
+        "c6-retry",
+        "c6-deploy"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-sw-058",
+      "error_code": null,
+      "keywords": [
+        "배포 검증",
+        "설정 대조"
+      ],
+      "resolution_summary": "배포 전 연동 설정 검증 게이트",
+      "created_at": "2026-09-25T15:00:00+09:00",
+      "expected_queries": [
+        "배포 전에 설정 검증하는 단계 만든 거"
+      ]
+    },
+    {
+      "ref": "o1-localdb",
+      "type": "ref",
+      "title": "로컬 개발 DB 초기화 메모",
+      "body": "로컬 compose의 DB 볼륨을 지우고 마이그레이션·시드를 다시 돌리는 순서. 포트 충돌 시 env 에서만 바꾼다.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-059",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-02T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "o2-mirror",
+      "type": "ref",
+      "title": "레지스트리 미러 설정 메모",
+      "body": "외부 레지스트리 장애 대비 사내 미러 주소와 전환 방법. 미러는 24시간 지연 동기화.",
+      "source": "synthetic",
+      "source_ref": "syn-sw-060",
+      "error_code": null,
+      "keywords": [
+        "레지스트리 미러",
+        "동기화"
+      ],
+      "resolution_summary": "미러 전환 방법",
+      "created_at": "2026-10-05T11:00:00+09:00",
+      "expected_queries": []
+    }
+  ]
+}
