@@ -32,10 +32,10 @@ def workspace_settings(conn, ws: int) -> dict[str, Any]:
     return {"policy_enabled": row["policy_enabled"], "settings": row["settings"] or {}}
 
 
-def workspace_terms(conn, ws: int) -> list[str]:
-    """kiwi 사용자 사전: 해당 워크스페이스 + 조상(전사 공통)의 용어. 질의·청크·노드 토크나이즈가 모두 이 함수를 쓴다."""
-    return [r["term"] for r in conn.execute(
-        "SELECT DISTINCT term FROM workspace_terms WHERE workspace_id IN (SELECT workspace_ancestors(%s)) ORDER BY term", (ws,))]
+def user_terms(conn) -> list[str]:
+    """kiwi 사용자 사전 = workspace_terms 전체의 합집합. kiwi 의 add_user_word 는 프로세스 전역이라 워크스페이스별로 나눠 봐도
+    먼저 읽은 사전이 뒤에 영향을 준다 — 그래서 질의·청크·노드·평가가 전부 같은 합집합을 쓴다(용어는 분절 규칙일 뿐 검색 범위가 아니다)."""
+    return [r["term"] for r in conn.execute("SELECT DISTINCT term FROM workspace_terms ORDER BY term")]
 
 
 # ── 검색 (DB 함수) ───────────────────────────────────────────────────────────

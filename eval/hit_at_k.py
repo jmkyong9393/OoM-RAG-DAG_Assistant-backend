@@ -51,7 +51,7 @@ def main() -> int:
         for it in items:
             ws = it["workspace_id"]
             groups = syn.get(ws) or syn.setdefault(ws, synonym_groups(db.workspace_settings(conn, ws)["settings"]))
-            tok = toks.get(ws) or toks.setdefault(ws, Tokenizer(db.workspace_terms(conn, ws)))
+            tok = toks.get(ws) or toks.setdefault(ws, Tokenizer(db.user_terms(conn)))
             tokens = tok.query_tokens(it["query"], groups)   # 파이프라인과 같은 질의 토큰(사용자 사전 + 동의어 확장)
             vec = embed.embed_one(prof, it["query"]) if use_vec else None
             row = {"query": it["query"], "kind": it.get("kind", "policy"), "expect": it["expect"]}

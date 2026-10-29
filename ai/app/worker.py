@@ -22,7 +22,7 @@ async def refine_one(conn, row: dict, tokenizer_cache: dict[int, Tokenizer]) -> 
     ws = row["workspace_id"]
     tok = tokenizer_cache.get(ws)
     if tok is None:
-        tok = tokenizer_cache[ws] = Tokenizer(db.workspace_terms(conn, ws))
+        tok = tokenizer_cache[ws] = Tokenizer(db.user_terms(conn))
     text = f"{row['title']}\n{row['body']}"
     tokens = tok.tokens(text)
     try:
@@ -55,8 +55,8 @@ async def backfill_chunk_tokens(conn, cache: dict[int, Tokenizer]) -> int:
     for i, r in enumerate(rows):
         v = vecs.get(i)
         ws = r["workspace_id"]
-        # 청크도 질의와 같은 사용자 사전(워크스페이스 + 조상)으로 토크나이즈 — 아니면 '서킷브레이커' 가 질의에선 한 토큰, 청크에선 두 토큰이 된다
-        tok = cache.get(ws) or cache.setdefault(ws, Tokenizer(db.workspace_terms(conn, ws)))
+        # 청크도 질의와 같은 사용자 사전(전체 합집합)으로 토크나이즈 — 아니면 '서킷브레이커' 가 질의에선 한 토큰, 청크에선 두 토큰이 된다
+        tok = cache.get(ws) or cache.setdefault(ws, Tokenizer(db.user_terms(conn)))
         db.set_chunk_tokens(conn, r["id"], tok.tokens(f"{r['article_label']}\n{r['text']}"), tok.tokens(r["doc_title"]),
                             v, prof.embedding_model if v else None)
     return len(rows)
@@ -71,7 +71,7 @@ async def backfill_node_tokens(conn, cache: dict[int, Tokenizer]) -> int:
     vecs = await asyncio.to_thread(embed.embed, prof, texts) if ai_mode() == "openai" else None
     for i, r in enumerate(rows):
         ws = r["workspace_id"]
-        tok = cache.get(ws) or cache.setdefault(ws, Tokenizer(db.workspace_terms(conn, ws)))
+        tok = cache.get(ws) or cache.setdefault(ws, Tokenizer(db.user_terms(conn)))
         extra = " ".join((r["keywords"] or []) + ([r["error_code"]] if r["error_code"] else []))
         db.set_node_tokens(conn, r["id"], tok.tokens(texts[i] + "\n" + extra), vecs[i] if vecs else None, prof.embedding_model if vecs else None)
     return len(rows)

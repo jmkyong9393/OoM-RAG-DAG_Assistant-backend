@@ -17,6 +17,13 @@ def test_extract_error_code_normalizes(text, expected):
     assert extract_error_code(text) == expected
 
 
+def test_colloquial_expiry_synonym_expands_query():
+    """구어 '날짜 지난' 은 유통기한 묶음으로 확장된다(평가셋 '날짜 지난 물건' 이 hybrid 2위로 올라온 근거, 2026-10-29)."""
+    tok = Tokenizer()
+    expanded = tok.query_tokens("날짜 지난 물건이 들어 있었어요", tokenize.synonym_groups({})).split()
+    assert "유통" in expanded and "기한" in expanded, expanded
+
+
 def test_query_tokens_expand_synonyms_only_on_query_side():
     """기본 묶음(가전제품↔전자제품, 유통기한↔소비기한, 환불↔환급)이 질의 토큰에만 OR 로 붙고, 묶음이 없으면 tokens() 와 같다."""
     tok = Tokenizer()
