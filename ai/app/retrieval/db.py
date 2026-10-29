@@ -33,7 +33,9 @@ def workspace_settings(conn, ws: int) -> dict[str, Any]:
 
 
 def workspace_terms(conn, ws: int) -> list[str]:
-    return [r["term"] for r in conn.execute("SELECT term FROM workspace_terms WHERE workspace_id = %s", (ws,))]
+    """kiwi 사용자 사전: 해당 워크스페이스 + 조상(전사 공통)의 용어. 질의·청크·노드 토크나이즈가 모두 이 함수를 쓴다."""
+    return [r["term"] for r in conn.execute(
+        "SELECT DISTINCT term FROM workspace_terms WHERE workspace_id IN (SELECT workspace_ancestors(%s)) ORDER BY term", (ws,))]
 
 
 # ── 검색 (DB 함수) ───────────────────────────────────────────────────────────
@@ -130,7 +132,7 @@ def set_node_tokens(conn, node_id: int, tokens: str, vec: list[float] | None, em
 
 def chunks_without_tokens(conn, limit: int = 200) -> list[dict]:
     """문서 제목·조문 라벨도 함께 돌려준다 — 핵심어(예: 'VPN')가 본문이 아니라 제목·라벨에만 있는 청크가 많다."""
-    return conn.execute("""SELECT c.id, d.title AS doc_title, c.article_label, c.text, c.embedding IS NULL AS needs_vec
+    return conn.execute("""SELECT c.id, c.workspace_id, d.title AS doc_title, c.article_label, c.text, c.embedding IS NULL AS needs_vec
                            FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
                            WHERE c.tokens IS NULL ORDER BY c.id LIMIT %s""", (limit,)).fetchall()
 

@@ -40,7 +40,7 @@ async def refine_one(conn, row: dict, tokenizer_cache: dict[int, Tokenizer]) -> 
         return False
 
 
-async def backfill_chunk_tokens(conn, tokenizer: Tokenizer) -> int:
+async def backfill_chunk_tokens(conn, cache: dict[int, Tokenizer]) -> int:
     rows = db.chunks_without_tokens(conn)
     if not rows:
         return 0
@@ -54,7 +54,10 @@ async def backfill_chunk_tokens(conn, tokenizer: Tokenizer) -> int:
         vecs = dict(zip(need, got))
     for i, r in enumerate(rows):
         v = vecs.get(i)
-        db.set_chunk_tokens(conn, r["id"], tokenizer.tokens(f"{r['article_label']}\n{r['text']}"), tokenizer.tokens(r["doc_title"]),
+        ws = r["workspace_id"]
+        # 청크도 질의와 같은 사용자 사전(워크스페이스 + 조상)으로 토크나이즈 — 아니면 '서킷브레이커' 가 질의에선 한 토큰, 청크에선 두 토큰이 된다
+        tok = cache.get(ws) or cache.setdefault(ws, Tokenizer(db.workspace_terms(conn, ws)))
+        db.set_chunk_tokens(conn, r["id"], tok.tokens(f"{r['article_label']}\n{r['text']}"), tok.tokens(r["doc_title"]),
                             v, prof.embedding_model if v else None)
     return len(rows)
 
@@ -81,8 +84,7 @@ async def run_once(reindex: bool = False) -> dict:
         if reindex:
             db.reset_tokens(conn)
         # 한 번에 200건씩(임베딩 요청 크기) 비어 있는 행이 없을 때까지 반복 — --reindex 직후 수백 건도 한 주기에 끝낸다
-        tokenizer = Tokenizer()
-        while (n := await backfill_chunk_tokens(conn, tokenizer)) > 0:
+        while (n := await backfill_chunk_tokens(conn, cache)) > 0:
             stats["chunks"] += n
         while (n := await backfill_node_tokens(conn, cache)) > 0:
             stats["nodes"] += n

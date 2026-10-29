@@ -100,6 +100,8 @@ public class LogBulkService {
       }
       long id;
       String sourceRef = blank(it.sourceRef()) ? null : it.sourceRef().trim();
+      // 해결 시각은 success 노드의 created_at(과거 로그를 적재할 때 대시보드 해결 시간이 "지금 - 7월" 로 왜곡되지 않게)
+      OffsetDateTime resolvedAt = it.createdAt() != null ? it.createdAt() : OffsetDateTime.now();
       if (parentIds.isEmpty() && "success".equals(it.type())) {
         // R2: success 루트 → problem_title 로 fail 루트 생성 + 완료 (단건 등록과 같은 규칙. 정제 컬럼은 INSERT 시에만 쓸 수 있어 여기서 직접 넣는다)
         if (blank(it.problemTitle())) throw ApiException.badRequest("PROBLEM_TITLE_REQUIRED", ref + ": success without parent needs problem_title");
@@ -107,7 +109,7 @@ public class LogBulkService {
         id = repo.insertNodeFull(ws, "success", it.title().trim(), it.body().trim(), ctx.userId(), source, sourceRef,
             it.errorCode(), it.keywords(), it.resolutionSummary(), it.createdAt());
         repo.insertEdge(ws, root, id, ctx.userId(), "bulk");
-        repo.setResolved(root, OffsetDateTime.now(), null);
+        repo.setResolved(root, resolvedAt, null);
         repo.audit(ctx.tenantId(), ws, "log_nodes", String.valueOf(root), "resolved", ctx.userName(), null, it.problemTitle().trim());
       } else {
         for (Long parentId : parentIds) {
@@ -119,6 +121,9 @@ public class LogBulkService {
         id = repo.insertNodeFull(ws, it.type(), it.title().trim(), it.body().trim(), ctx.userId(), source,
             sourceRef, it.errorCode(), it.keywords(), it.resolutionSummary(), it.createdAt());
         for (Long parentId : parentIds) repo.insertEdge(ws, parentId, id, ctx.userId(), "bulk");
+        // 체인에 success 가 붙으면 그 체인의 루트(들)는 해결된 것 — 단건 등록(R3)과 같은 의미. 이미 해결된 루트는 그대로
+        if ("success".equals(it.type()))
+          for (Long parentId : parentIds) repo.setResolvedIfOpen(repo.rootIdOf(parentId), resolvedAt);
       }
       byRef.put(ref, id);
       out.add(new ItemResult(ref, id, "created"));
