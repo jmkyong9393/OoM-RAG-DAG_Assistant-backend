@@ -1,0 +1,136 @@
+# 단일 호스트 운영 compose (Lightsail 4 GB). Caddy → web(Next) / api(Spring) / ai(Python) + worker + postgres.
+# 실행(박스): docker compose -f docker-compose.prod.yml --env-file .env pull && up -d
+# 마이그레이션: docker compose -f docker-compose.prod.yml --env-file .env --profile migrate run --rm flyway  (api 기동 시에도 Flyway 가 돈다)
+# 로컬 검증(이미지 직접 빌드): docker compose -f docker-compose.prod.yml --env-file .env build && up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: oom-prod-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oom}
+      POSTGRES_USER: ${POSTGRES_USER:-oom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - oom-prod-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oom} -d ${POSTGRES_DB:-oom}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    mem_limit: 512m
+
+  flyway:
+    image: flyway/flyway:11
+    profiles: ["migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../api/src/main/resources/db/migration:/flyway/sql:ro
+    command: >
+      -url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oom}
+      -user=${POSTGRES_USER:-oom} -password=${POSTGRES_PASSWORD}
+      -placeholders.oom_api_password=${OOM_API_PASSWORD:?set OOM_API_PASSWORD}
+      -placeholders.oom_ai_password=${OOM_AI_PASSWORD:?set OOM_AI_PASSWORD}
+      migrate
+
+  api:
+    image: ${API_IMAGE:-oom-api:local}
+    build: ../api
+    environment:
+      PORT: "8080"
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oom}
+      # 앱은 최소 권한 역할 oom_api (V2 roles · V5 security). 내장 Flyway 만 관리자 계정으로 돌고, 역할 비밀번호는 placeholder 로 받는다
+      DB_USER: oom_api
+      DB_PASSWORD: ${OOM_API_PASSWORD:?set OOM_API_PASSWORD}
+      FLYWAY_USER: ${POSTGRES_USER:-oom}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD}
+      OOM_API_PASSWORD: ${OOM_API_PASSWORD}
+      OOM_AI_PASSWORD: ${OOM_AI_PASSWORD:?set OOM_AI_PASSWORD}
+      AI_BASE_URL: http://ai:8000
+      CORS_ORIGINS: ${SITE_ORIGIN:-http://localhost}
+      SESSION_SAME_SITE: Lax
+      SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+      SEED_PASSWORD: ${SEED_PASSWORD:-Oom!demo-2026}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/actuator/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 40s
+    restart: unless-stopped
+    mem_limit: 1g
+
+  ai:
+    image: ${AI_IMAGE:-oom-ai:local}
+    build: ../ai
+    environment: &ai-env
+      AI_DB_URL: postgresql://oom_ai:${OOM_AI_PASSWORD}@postgres:5432/${POSTGRES_DB:-oom}
+      AI_MODE: ${AI_MODE:-openai}
+      LLM_PROFILE_DEFAULT_BASE_URL: ${LLM_PROFILE_DEFAULT_BASE_URL:-https://api.openai.com/v1}
+      LLM_PROFILE_DEFAULT_API_KEY: ${LLM_PROFILE_DEFAULT_API_KEY}
+      LLM_PROFILE_DEFAULT_MODEL_LIGHT: ${LLM_PROFILE_DEFAULT_MODEL_LIGHT:-}
+      LLM_PROFILE_DEFAULT_MODEL_ANSWER: ${LLM_PROFILE_DEFAULT_MODEL_ANSWER:-}
+      LLM_PROFILE_DEFAULT_EMBEDDING_MODEL: ${LLM_PROFILE_DEFAULT_EMBEDDING_MODEL:-text-embedding-3-small}
+      ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-400}
+      WORKER_POLL_SEC: ${WORKER_POLL_SEC:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/ai/health',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    mem_limit: 1g
+
+  worker:
+    image: ${AI_IMAGE:-oom-ai:local}
+    command: ["uv", "run", "--no-sync", "python", "-m", "app.worker"]
+    environment: *ai-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 768m
+
+  web:
+    image: ${WEB_IMAGE:?set WEB_IMAGE (프론트 레포 Dockerfile 로 빌드한 이미지)}
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      API_ORIGIN: http://api:8080            # 서버 컴포넌트(lib/api/server.ts)가 Spring 을 직접 부르는 주소
+      NEXT_PUBLIC_API_BASE: /api/v1          # 브라우저는 Caddy 같은 오리진으로
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 512m
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - oom-prod-caddy-data:/data
+      - oom-prod-caddy-config:/config
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+    mem_limit: 128m
+
+volumes:
+  oom-prod-pgdata:
+  oom-prod-caddy-data:
+  oom-prod-caddy-config:

@@ -1,0 +1,24 @@
+# 단일 호스트 진입점. SITE_ADDRESS 가 도메인이면 HTTPS 자동(Let's Encrypt), 비어 있으면 localhost(자체 서명).
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+
+	# Spring (context-path /api/v1). SSE 는 버퍼링 없이 흘려보낸다.
+	handle /api/v1/* {
+		reverse_proxy api:8080 {
+			flush_interval -1
+			transport http {
+				read_timeout 300s
+			}
+		}
+	}
+
+	# 그 외 전부 Next.js
+	handle {
+		reverse_proxy web:3000
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
