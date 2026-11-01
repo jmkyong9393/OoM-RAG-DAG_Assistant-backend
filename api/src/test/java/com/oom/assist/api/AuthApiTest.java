@@ -124,6 +124,13 @@ class AuthApiTest extends AbstractApiTest {
   }
 
   @Test
+  void privacyPolicyIsServedAsMarkdownWithoutLogin() throws Exception {
+    MvcResult r = mvc.perform(get("/auth/privacy-policy")).andExpect(status().isOk()).andReturn();
+    assertThat(r.getResponse().getContentType()).startsWith("text/markdown");
+    assertThat(body(r)).contains("개인정보 처리방침").contains("비밀번호");
+  }
+
+  @Test
   void logoutInvalidatesSessionServerSide() throws Exception {
     Cookie c = sessionCookie(login(empLead, PASSWORD));
     mvc.perform(get("/me").cookie(c)).andExpect(status().isOk());
