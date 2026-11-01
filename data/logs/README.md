@@ -26,6 +26,7 @@
 
 - `ref` 는 파일 안에서만 쓰는 참조. 부모는 **앞에 나온 항목**만 가리킬 수 있다(bulk 규칙). `parent_refs` 가 다중 부모.
 - `source_ref` 로 재적재가 멱등(`existing`). 시드(`fe-mock-*`)와 겹치지 않는다.
+- id 는 결정적: `make seed-reset` 뒤 `make load-logs` 는 파일을 알파벳순(hr-ga → sw-dev)으로 넣어 **ws2 114~153, ws1 154~213**. `*.ids.json` 이 ref→id 대응표(커밋 대상, D-3 평가셋이 사용).
 - `success` 의 `created_at` 은 루트보다 뒤 — bulk 가 루트 `resolved_at` 을 이 값으로 채운다.
 - 에러 코드 표기는 의도적으로 섞었다: `HTTP 403`·`HTTP 502`·`E-403`(추출됨) / `TimeoutException`·`OOMKilled`·`ECONNREFUSED`·`ORA-12154`(현재 정규식이 못 잡음) / 없음.
 
