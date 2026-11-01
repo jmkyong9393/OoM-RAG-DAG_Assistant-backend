@@ -54,7 +54,7 @@ class AuthApiTest extends AbstractApiTest {
     MvcResult r = login(empBackend, PASSWORD);
     assertThat(r.getResponse().getStatus()).isEqualTo(200);
     Cookie c = sessionCookie(r);
-    assertThat(setCookieHeader(r)).contains("HttpOnly").contains("SameSite=Lax").doesNotContain("Secure");
+    assertThat(setCookieHeader(r)).contains("HttpOnly").contains("SameSite=Lax").contains("Path=/;").doesNotContain("Secure"); // Path=/ : 페이지 요청에도 실려야 SSR 포워딩이 된다
     String b = body(r);
     assertThat((int) JsonPath.read(b, "$.id")).isEqualTo((int) userBackend);
     assertThat((String) JsonPath.read(b, "$.employee_no")).isEqualTo(empBackend);

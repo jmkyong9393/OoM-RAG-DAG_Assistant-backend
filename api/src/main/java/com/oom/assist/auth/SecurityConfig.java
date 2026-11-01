@@ -61,6 +61,7 @@ public class SecurityConfig {
     s.setUseHttpOnlyCookie(true);
     s.setSameSite(props.session().sameSite());
     s.setUseSecureCookie(props.session().secure());
+    s.setCookiePath("/"); // 기본값은 컨텍스트 경로(/api/v1) — 그러면 Next 서버 컴포넌트가 받는 페이지 요청(/w/…)에 쿠키가 안 실려 SSR 포워딩이 401 (F-1 실측)
     return s;
   }
 
