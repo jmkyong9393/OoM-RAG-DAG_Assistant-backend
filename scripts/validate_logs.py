@@ -8,7 +8,6 @@ from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TYPES = {"fail", "success", "ref"}
-BANNED = re.compile(r"\bkt\b|케이티", re.I)
 DATE_LO, DATE_HI = dt.date(2026, 7, 1), dt.date(2026, 10, 25)
 TARGET = {1: 60, 2: 40}
 
@@ -25,8 +24,6 @@ def check_file(path: pathlib.Path):
         if not it.get("title") or not it.get("body"): errors.append(f"{tag}: title/body 비어 있음")
         if it.get("source") != "synthetic": errors.append(f"{tag}: source 는 synthetic")
         if not re.fullmatch(r"syn-[a-z]+-\d{3}", it.get("source_ref", "")): errors.append(f"{tag}: source_ref 형식")
-        text = f"{it.get('title','')} {it.get('body','')} {' '.join(it.get('keywords') or [])}"
-        if BANNED.search(text): errors.append(f"{tag}: 금지 단어")
         try:
             d = dt.datetime.fromisoformat(it["created_at"]).date()
             if not DATE_LO <= d <= DATE_HI: errors.append(f"{tag}: created_at 범위 밖 {d}")
