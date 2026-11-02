@@ -92,7 +92,7 @@ class SessionFeedbackDashboardApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.queries.by_intent", hasSize(3)))
         .andExpect(jsonPath("$.queries.by_intent[1].intent").value("troubleshoot"))
         .andExpect(jsonPath("$.queries.by_intent[1].count").value(1))
-        .andExpect(jsonPath("$.no_evidence.rate", closeTo(1.0 / 3, 1e-9)))
+        .andExpect(jsonPath("$.no_evidence.rate").value(33.3))
         .andExpect(jsonPath("$.no_evidence.recent", hasSize(1)))
         .andExpect(jsonPath("$.resolve_time.median_hours").value(48.0))
         .andExpect(jsonPath("$.resolve_time.sample").value(1))
