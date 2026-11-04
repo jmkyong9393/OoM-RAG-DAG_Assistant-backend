@@ -23,7 +23,26 @@ PDF 하이라이트가 필요하면 `bboxes` 에 사각형 목록을 넣고 `fil
 }
 ```
 
-원문에서 만들기: `uv run scripts/build_policy_json.py 원문.md --slug <slug> --workspace <id> --title "<제목>" --version v1.0 [--supersedes <구 slug>]`
+## 적재 흐름 (D-4) — `make index` 한 번
+
+```
+data/policies/src/<slug>/            ← 집필자(프론트팀 §A-1). slug 는 폴더명 = meta.json slug = 청크 id 접두어
+├── <slug>.md                        원문 정본
+├── meta.json                        slug·workspace_id·title·version·doc_type·source_type·file_path·effective_from·supersedes·tags·terms·author·summary
+├── <slug>.questions.md              평가 질의 15건 → data/evalset/<slug>_v1.json (D-4 ④)
+└── <slug>.pdf                       PDF 문서만. 쪽 번호는 자동 추출
+```
+
+`make index` 는 `src/*/meta.json` 을 순회해 ① `build_policy_json.py --meta` 로 `<slug>.chunks.json` 생성(결정적 — 같은 원문이면 같은 파일)
+② `<slug>.pdf` 가 있으면 `pdf_locate.py --write` 로 조문 쪽 번호(`page`)와 라벨 줄 사각형(`bboxes`) ③ `index_policy.py` 로 DB 적재(해시 같으면 스킵, R8 개정 폐기,
+`terms` → `workspace_terms(source='manual')`) ④ `app.worker --once --reindex` 로 토큰·임베딩 백필 — **`--reindex` 인 이유**: kiwi 사용자 사전은 전 워크스페이스
+합집합 하나라 새 `terms` 가 들어오면 기존 청크·노드도 다시 토크나이즈해야 한다(임베딩은 재사용).
+
+- `make pdf SLUG=<slug>`: 쪽 번호만 다시 채우고 PDF 를 서빙 위치 `data/files/policies/<slug>.pdf` 로 복사(`file_path: policies/<slug>.pdf`). 서빙 API 는 게이트 이후.
+- 못 찾은 조문은 `page: null` 로 남고 목록이 출력된다 — PDF 의 조문 제목 줄이 Markdown 과 글자 단위로 같아야 한다(§A-4).
+- 변환기만 돌려 보기(집필 자가 점검): `uv run scripts/build_policy_json.py --meta data/policies/src/<slug>/meta.json --out build/check`
+
+원문에서 만들기(인자 직접): `uv run scripts/build_policy_json.py 원문.md --slug <slug> --workspace <id> --title "<제목>" --version v1.0 [--supersedes <구 slug>]`
 (`제N조`·`제N조의M`·`Q18.`·`## 제목`·`[별표]` 줄을 경계로 자르고, 긴 조문은 항 ①②③ 경계에서 `--max-chars`(기본 700) 이하로 나눈다.
 표(`| 셀 | 셀 |` 행)가 있는 절은 행 경계에서 나눈다)
 
@@ -33,7 +52,7 @@ HWPX(한글) 원문이면 먼저 `uv run scripts/hwpx_to_md.py 별표1.hwpx 별�
 
 | slug | 원문 | 청크 | 비고 |
 |---|---|---|---|
-| `consumer-dispute-2025` | `src/consumer-dispute-2025/` 공정위고시 제2025-14호 본문 + 별표 Ⅰ~Ⅳ (law.go.kr HWPX) | 232 (label 129) | 워크스페이스 3(CS). 시드 `consumer-dispute` 를 폐기(`--supersedes`) |
+| `consumer-dispute-2025` | `src/consumer-dispute-2025/` 공정위고시 제2025-14호 본문 + 별표 Ⅰ~Ⅳ (law.go.kr HWPX) | 284 (label 129 — 10/29 표 행 분할 규칙 반영본) | 워크스페이스 3(CS). 시드 `consumer-dispute` 를 폐기(`--supersedes`) |
 | `vpn-guide-v22` | (시드) | 3 | 워크스페이스 2 |
 
 규칙

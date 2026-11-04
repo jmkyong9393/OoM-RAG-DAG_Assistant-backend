@@ -17,6 +17,10 @@ graph = [
     "langgraph>=0.2",
     "kiwipiepy>=0.18",
 ]
+# PDF 조문 쪽 번호 추출(scripts/pdf_locate.py, make pdf). 서비스 런타임엔 불필요
+pdf = [
+    "pymupdf>=1.25,<2",
+]
 
 # uv sync 가 기본으로 포함하는 개발 의존성 (pytest · TestClient 용 httpx)
 [dependency-groups]
