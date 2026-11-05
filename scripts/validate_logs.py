@@ -15,6 +15,7 @@ SETS = {
     "retail": {"files": ["sw-dev_v1", "hr-ga_v1"], "full": True, "target": {"sw-dev_v1": 60, "hr-ga_v1": 40}},
     "it": {"files": ["it-dev_v1", "it-cs_v1"], "full": True, "target": {"it-dev_v1": 60, "it-cs_v1": 40}},
     "retail-cs": {"files": ["cs_v1"], "full": False},
+    "it-hr": {"files": ["it-hr_v1"], "full": False},
 }
 
 

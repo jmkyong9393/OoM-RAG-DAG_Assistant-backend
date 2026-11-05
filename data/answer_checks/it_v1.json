@@ -1,0 +1,22 @@
+[
+ {"workspace_id": 21, "query": "경보 안 보면 몇 분 뒤에 윗선으로 넘어가?", "note": "예외: 당시 자동 이관 30분, 현재 기준 15분. 둘을 함께 말해야 한다",
+  "cite_chunks_any": ["it-dev-incident-2026-11-a5-1"], "cite_nodes_any": [{"log": "it-dev_v1", "ref": "d1-page"}, {"log": "it-dev_v1", "ref": "d1-page-fix"}], "contains_all": ["15분", "30분"]},
+ {"workspace_id": 21, "query": "연휴 배포 동결 기간에 배포한 적 있어?", "note": "예외: 추석 Hard 동결 중 임원 승인 없이 배포한 사례",
+  "cite_chunks_any": ["it-dev-incident-2026-11-a23-1"], "cite_nodes_any": [{"log": "it-dev_v1", "ref": "d3-hard"}], "contains_all": ["임원"], "contains_none": ["9영업일"]},
+ {"workspace_id": 21, "query": "HA 안 쓰는 고객도 크레딧 받을 수 있어?", "note": "예외: 대상이 아닌 고객 3곳에 영업 판단으로 10% 지급",
+  "cite_chunks_any": ["it-dev-incident-2026-11-a14-1"], "cite_nodes_any": [{"log": "it-dev_v1", "ref": "d8-nonha"}], "contains_all": ["10%"]},
+ {"workspace_id": 23, "query": "상담원이 잘못 안내한 환불 금액 그대로 준 사례", "note": "예외: 회원 사정 해지는 잔여 금액의 10% 공제인데 오안내 금액대로 환불",
+  "cite_chunks_any": ["it-refund-2026-11-a10-1"], "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s1-goodwill"}], "contains_all": ["10%"]},
+ {"workspace_id": 21, "query": "캐시가 한꺼번에 만료돼서 DB 터진 사례", "note": "규정에 기준 없음(캐시 만료 분산)",
+  "cite_nodes_any": [{"log": "it-dev_v1", "ref": "d6-ttl"}, {"log": "it-dev_v1", "ref": "d6-jitter"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+ {"workspace_id": 23, "query": "카드사 이의제기 들어왔을 때 어떻게 대응했어?", "note": "규정에 기준 없음(카드사 이의제기 대응)",
+  "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s6-root"}, {"log": "it-cs_v1", "ref": "s6-flow"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+ {"workspace_id": 23, "query": "상담원이 2단계 인증 대신 풀어줘도 돼?", "note": "규정에 기준 없음(상담원 수동 해제의 본인 확인 기준)",
+  "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s3-bypass"}, {"log": "it-cs_v1", "ref": "s3-bypass-fix"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+ {"workspace_id": 23, "query": "환불 며칠 안에 해줘야 해?", "note": "따른 조치: 제11조 3영업일(당시 팀 목표는 5영업일)",
+  "cite_chunks_any": ["it-refund-2026-11-a11-1"], "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s5-sla"}, {"log": "it-cs_v1", "ref": "s5-root"}], "contains_all": ["3영업일"]},
+ {"workspace_id": 21, "query": "SEV-2 장애 사후분석 회의는 며칠 안에 열어야 해?", "note": "규정 질의: 제17조 5영업일",
+  "cite_chunks_any": ["it-dev-incident-2026-11-a17-1"], "contains_all": ["5영업일"], "contains_none": ["멱등", "동결"]},
+ {"workspace_id": 22, "query": "서류 결과는 며칠 안에 지원자한테 알려줘야 해?", "note": "규정 질의: 채용 규정 제15조",
+  "cite_chunks_any": ["it-recruit-2026-11-a15-1"]}
+]

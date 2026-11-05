@@ -1,0 +1,335 @@
+[
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "레퍼런스 체크 의뢰 버튼 안눌림 consent_required 뜸",
+  "expect": [
+   "n:419",
+   "n:422",
+   "n:423"
+  ],
+  "note": "code · r1-gate"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "레퍼런스 체크 동의 없이 진행돼서 항의 들어온 사례 어떻게 처리했어?",
+  "expect": [
+   "n:419",
+   "n:422",
+   "n:423"
+  ],
+  "note": "symptom · r1-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "레퍼체크 동의 안받고 돌렸는데 어케함",
+  "expect": [
+   "n:419",
+   "n:422",
+   "n:423"
+  ],
+  "note": "symptom · r1-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "면접 본 지 2주 다 돼 가는데 결과가 안 왔대요",
+  "expect": [
+   "n:426",
+   "n:428",
+   "n:431"
+  ],
+  "note": "symptom · r2-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "입사 제안 보냈는데 금액을 다시 낮춰도 되나요",
+  "expect": [
+   "n:432",
+   "n:434"
+  ],
+  "note": "symptom · r3-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "허가 없이 겸직한 직원 확인됐을 때 어떻게 처리했어?",
+  "expect": [
+   "n:436",
+   "n:439",
+   "n:440"
+  ],
+  "note": "symptom · r4-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "투잡 뛰는 직원 걸리면 어케 처리함",
+  "expect": [
+   "n:436",
+   "n:439",
+   "n:440"
+  ],
+  "note": "symptom · r4-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "협력사가 집으로 선물을 보냈는데 받아도 되나요",
+  "expect": [
+   "n:441",
+   "n:444",
+   "n:445"
+  ],
+  "note": "symptom · r5-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "불합격자가 포트폴리오 돌려달래요",
+  "expect": [
+   "n:447",
+   "n:449",
+   "n:450"
+  ],
+  "note": "symptom · r6-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "최종 합격 전에 입사 서류 요구해서 문제 된 사례 어떻게 했어?",
+  "expect": [
+   "n:452",
+   "n:454",
+   "n:456"
+  ],
+  "note": "symptom · r7-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "입사서류 주민번호 언제 받는거임",
+  "expect": [
+   "n:452",
+   "n:454",
+   "n:456"
+  ],
+  "note": "symptom · r7-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "지원자가 자기 정보 지워달라고 하면 바로 지워줘야 해?",
+  "expect": [
+   "n:419",
+   "n:422",
+   "n:423"
+  ],
+  "note": "reverse · r1-delete"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "처우 제안 메일 회신 기한 며칠 줘?",
+  "expect": [
+   "n:432",
+   "n:434"
+  ],
+  "note": "reverse · r3-proof-fix"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "받은 선물 반송은 어떻게 해?",
+  "expect": [
+   "n:441",
+   "n:444",
+   "n:445"
+  ],
+  "note": "reverse · r5-return"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "서류 반환 택배비 누가 냄",
+  "expect": [
+   "n:447",
+   "n:449",
+   "n:450"
+  ],
+  "note": "reverse · r6-late"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "인재풀 정보는 몇 년 보관해?",
+  "expect": [
+   "n:452",
+   "n:454",
+   "n:456"
+  ],
+  "note": "reverse · r7-purge-fix"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "지원자가 평판 조회에 동의한 적 없다고 항의해요",
+  "expect": [
+   "n:419",
+   "n:422",
+   "n:423"
+  ],
+  "note": "symptom · r1-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "레퍼런스 체크 몇 명한테 해? 현 직장도 포함이야?",
+  "expect": [
+   "n:419",
+   "n:422",
+   "n:423",
+   "n:424"
+  ],
+  "note": "other · r1-scope"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "면접관이 평가표 안 내면 어떻게 해?",
+  "expect": [
+   "n:426",
+   "n:427",
+   "n:428",
+   "n:431"
+  ],
+  "note": "other · r2-eval"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "탈락이유 물어보면 알려줘도 되나여",
+  "expect": [
+   "n:426",
+   "n:428",
+   "n:429",
+   "n:431"
+  ],
+  "note": "other · r2-reason"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "처우 제안 보낸 다음에 연봉 바꿔서 문제 된 사례 어떻게 처리했어?",
+  "expect": [
+   "n:432",
+   "n:434"
+  ],
+  "note": "symptom · r3-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "직원이 퇴근 후에 다른 회사 일 하고 돈 받는대요",
+  "expect": [
+   "n:436",
+   "n:439",
+   "n:440"
+  ],
+  "note": "symptom · r4-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "추천한 지인 면접에 추천인이 면접관으로 들어가도 돼?",
+  "expect": [
+   "n:436",
+   "n:438",
+   "n:439",
+   "n:440"
+  ],
+  "note": "other · r4-interviewer"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "협력사에서 명절 선물 받았을 때 어떻게 처리했어?",
+  "expect": [
+   "n:441",
+   "n:444",
+   "n:445"
+  ],
+  "note": "symptom · r5-root"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "한도 넘는 선물 이미 뜯었으면 어떻게 해?",
+  "expect": [
+   "n:441",
+   "n:444",
+   "n:445"
+  ],
+  "note": "reverse · r5-return"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "협력사랑 밥먹을때 인당 얼마까지임",
+  "expect": [
+   "n:441",
+   "n:444",
+   "n:445",
+   "n:446"
+  ],
+  "note": "other · r5-limit"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "채용서류 반환 안내는 언제 해야 해?",
+  "expect": [
+   "n:447",
+   "n:448",
+   "n:449",
+   "n:450"
+  ],
+  "note": "other · r6-notice"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "채용서류 반환 청구 들어오면 뭐부터 확인해?",
+  "expect": [
+   "n:447",
+   "n:449",
+   "n:450",
+   "n:451"
+  ],
+  "note": "other · r6-guide"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "지원자 서류 언제까지 보관해?",
+  "expect": [
+   "n:452",
+   "n:454",
+   "n:455",
+   "n:456"
+  ],
+  "note": "other · r7-purge"
+ },
+ {
+  "workspace_id": 22,
+  "kind": "troubleshoot",
+  "query": "퇴사자 인사기록 언제까지 보관해?",
+  "expect": [
+   "n:458"
+  ],
+  "note": "other · o1-retire"
+ }
+]

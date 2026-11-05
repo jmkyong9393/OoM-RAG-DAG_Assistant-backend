@@ -283,7 +283,7 @@ class CaseFloor(NamedTuple):
 
 # 벡터 거리 분포는 임베딩 모델마다 달라 보정한 모델에만 적용한다
 CASE_FLOOR = {"text-embedding-3-small": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.45),
-              "text-embedding-3-large": CaseFloor(near=0.58, far=0.66, terms=2, sure=0.40)}   # 1536 차원으로 줄여 받은 벡터 기준
+              "text-embedding-3-large": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.40)}   # 1536 차원으로 줄여 받은 벡터 기준
 JUDGE_TIMEOUT = 4.0
 
 
@@ -346,18 +346,36 @@ async def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error
     return await asyncio.to_thread(_load_chain, ws, entry)
 
 
+def _same_line(entry: int, edges: list[dict]) -> set[int]:
+    """진입 노드와 같은 줄기: 진입 노드, 그 조상, 그 자손. 같은 체인의 다른 가지는 빠진다."""
+    up, down = {}, {}
+    for e in edges:
+        up.setdefault(e["child_id"], []).append(e["parent_id"])
+        down.setdefault(e["parent_id"], []).append(e["child_id"])
+    seen = {entry}
+    for link in (up, down):
+        todo = [entry]
+        while todo:
+            for nxt in link.get(todo.pop(), []):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    todo.append(nxt)
+    return seen
+
+
 def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     with db.connect() as conn:
         # 루트 기준 체인: 진입 노드의 루트에서 하향 (BE-HANDOFF-001 §4 ④)
         root = db.root_of(conn, ws, entry) or entry
         ch = db.chain(conn, ws, root, 4, 30)
     nodes = sorted(ch["nodes"], key=lambda n: (n["depth"], n["id"]))  # 마커 번호 = depth 안정 정렬 순서
+    near = _same_line(entry, ch["edges"])
     ctx, ev_nodes = [], []
     for i, n in enumerate(nodes):
         ref = f"N{i + 1}"
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
                     "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
-                    "entry": n["id"] == entry})
+                    "entry": n["id"] == entry, "near": n["id"] in near})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
                                   last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None))
