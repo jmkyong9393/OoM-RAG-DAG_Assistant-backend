@@ -31,7 +31,7 @@ async def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node
     assert n["tsv"] is not None
     assert n["embedding"] is None, "fake 모드에서는 임베딩을 만들지 않는다"
     terms = {r["term"] for r in admin_conn.execute("SELECT term FROM workspace_terms WHERE workspace_id = 1 AND source = 'auto'")}
-    assert "E-500" in terms and "결제" in terms
+    assert "E-500" in terms and "결제" not in terms, "에러 코드는 사전에 넣고, 이미 한 토큰인 일반 명사는 넣지 않는다"
     # 백필 결과: 시드 노드·청크에 tokens 가 모두 채워져 있다
     assert admin_conn.execute("SELECT count(*) AS c FROM policy_chunks WHERE tokens IS NULL OR title_tokens IS NULL").fetchone()["c"] == 0
     # 사용자 사전은 전 워크스페이스 합집합(kiwi 사용자 단어가 프로세스 전역이라 나눌 수 없다): 전사 공통(10)에 넣은 용어가 사전에 들어간다
@@ -93,3 +93,14 @@ def test_classify_context_reads_workspace_data():
                               WHERE d.status = 'active' AND c.text LIKE '%%E-403%%' LIMIT 1""").fetchone()
         if row:   # make index 로 VPN 지침(제15·17조)이 적재된 상태에서만 확인
             assert db.classify_context(conn, row["workspace_id"], "E-403")["code_in_policy"] is True
+
+
+def test_dictionary_terms_keep_only_words_the_analyzer_splits():
+    from app.retrieval.tokenize import Tokenizer
+    tok = Tokenizer()
+    got = worker.dictionary_terms(tok, ["기한", "권한", "네이티브 영역", "90일", "봇", "서킷브레이커", " "], "E-500")
+    assert "기한" not in got and "권한" not in got, "이미 한 토큰인 일반 명사"
+    assert "네이티브 영역" not in got and "90일" not in got and "봇" not in got
+    assert got[-1] == "E-500"
+    if tok.backend == "kiwi":
+        assert ("서킷브레이커" in got) == (tok.tokens("서킷브레이커").split() != ["서킷브레이커"])
