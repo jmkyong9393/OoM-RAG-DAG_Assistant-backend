@@ -188,7 +188,7 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     # 규정이 개정된 사례(진입 사례와 같은 줄기만): 지금 기준과 다를 수 있다는 것을 빠뜨리면 옛 기준을 현재 기준처럼 답한다. 사례가 여럿이어도 한 줄로
     line = [n for n in live if n.get("entry") or n.get("near")]
     amended = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "amended"]
-    replaced = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "replaced"]
+    replaced = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "replaced" and p["relation"] != "gap"]
     if amended:
         refs = " ".join(dict.fromkeys(f"[{p['ref']}]" for _, p in amended))
         ver = amended[0][1].get("from_version")
@@ -207,7 +207,7 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
         elif p["relation"] == "gap":
             out.append(f"[{entry['ref']}] 이 다루는 부분({p.get('topic') or '이 조치'})은 회사 규정에 기준이 없다. "
                        f"'이 부분은 규정에 기준이 없다'는 문장을 답변에 넣고 [{entry['ref']}] 를 붙인다.")
-        elif p["relation"] == "follows" and (entry["type"] == "success" or not fixes):
+        elif p["relation"] == "follows" and p.get("ref") and (entry["type"] == "success" or not fixes):
             out.append(f"[{entry['ref']}] 의 조치가 따른 규정 [{p['ref']}] 을 한 문장으로 밝힌다.")
     if entry and entry["type"] != "success" and fixes and case_required:
         # 해결 줄에 실제로 붙어 있는 표시에 맞춰 지시한다 — 근거가 없는 줄에 [P…] 를 붙이라고 하면 없는 마커를 지어낸다

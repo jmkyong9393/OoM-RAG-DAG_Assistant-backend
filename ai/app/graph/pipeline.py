@@ -220,7 +220,7 @@ def _policy_entry(n: int, r: dict, source: str) -> dict:
 
 LINK_TOP = 2      # 규정 → 사례: 상위 몇 개 조문에 연결된 사례를 후보로 볼 것인가
 MAX_LINKED = 3    # 사례 → 규정: 체인이 가리키는 조문 중 근거에 더할 최대 수
-ARTICLE_RE = re.compile(r"\[?(제\d+조(?:의\d+)?|별표 ?\d+)")
+ARTICLE_RE = re.compile(r"\[?(제\d+조(?:의\d+)?|별표 ?\d+|Q\d+)")   # 조문 · 별표 · FAQ 항목
 
 
 def _article_keys(policies: list[dict]) -> list[tuple[str, str]]:

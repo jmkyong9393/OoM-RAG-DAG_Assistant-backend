@@ -27,7 +27,8 @@ def _event(nodes, entry):
 def test_article_keys_and_label_match():
     ps = [{"slug": "ops", "article_label": "제5조 (배포 후 관찰과 롤백)"}, {"slug": "ops", "article_label": "[별표 3] 서비스 운영 기준"},
           {"slug": "ops", "article_label": "제5조 (배포 후 관찰과 롤백)"}, {"slug": "faq", "article_label": "Q3. 인증번호가 안 와요"}]
-    assert pipeline._article_keys(ps) == [("ops", "제5조"), ("ops", "별표 3")]
+    assert pipeline._article_keys(ps) == [("ops", "제5조"), ("ops", "별표 3"), ("faq", "Q3")], "FAQ 항목도 사례와 이어지는 조문이다"
+    assert db.same_article("Q3. 인증번호가 안 와요", "Q3") and not db.same_article("Q30. 탈퇴", "Q3")
     assert db.same_article("제1조 (목적)", "제1조") and not db.same_article("제10조 (자원)", "제1조")
     assert db.same_article("[별표 2] 배포 전 점검표", "별표 2") and not db.same_article("[별표 21] x", "별표 2")
 
@@ -88,6 +89,12 @@ def test_link_policies_marks_cases_whose_rule_was_revised(monkeypatch):
     assert any("70% 가 당시(v1 판) 기준" in m for m in must) and not any("70% 가 현재 기준" in m for m in must), "예외 사례 지시에도 같은 치환"
     # 개정되지 않은 사례의 메모는 그대로다
     assert llm._note_text({"note": "70% 가 현재 기준"}) == "70% 가 현재 기준"
+    # 진입 사례가 '기준 없음'이거나, 따르던 조문이 개정판에 없을 때도 없는 라벨·마커를 지시에 넣지 않는다
+    for entry in (nodes[2], nodes[1]):
+        for n in nodes:
+            n["entry"] = n is entry
+        must = llm._must_include(nodes)
+        assert not any("None" in m for m in must), must
 
 
 def test_linked_candidates_are_always_judged():

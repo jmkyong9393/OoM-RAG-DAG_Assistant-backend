@@ -51,7 +51,7 @@ public class LogController {
     if ("viewer".equals(ctx.role())) throw ApiException.forbidden("viewer cannot edit");
     if (body == null || body.policyRefs() == null) throw ApiException.badRequest("VALIDATION", "policy_refs is required");
     service.get(ctx, id);   // 이 부서의 로그가 아니면 404
-    policyRefs.write(id, policyRefs.normalize(ctx.workspaceId(), body.policyRefs()));
+    policyRefs.write(id, policyRefs.normalize(ctx.workspaceId(), body.policyRefs(), policyRefs.storedKeys(id)));
     repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), "policy_refs_set", ctx.userName(), "refs=" + body.policyRefs().size(), null);
     return policyRefs.read(ctx.workspaceId(), id);
   }

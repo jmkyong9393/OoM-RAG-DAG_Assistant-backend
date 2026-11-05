@@ -25,14 +25,9 @@ def to_ref(link: dict) -> dict:
     return {k: link[k] for k in ("policy", "article", "relation", "note") if link.get(k)}
 
 
-def same_article(label: str, article: str) -> bool:
-    head = (label or "").strip().lstrip("[")
-    return head.startswith(article) and not head[len(article):len(article) + 1].isdigit()
-
-
 def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
     doc = json.loads(path.read_text(encoding="utf-8"))
-    ids, by_node, warn = {}, {}, []
+    ids, by_node, warn, note = {}, {}, [], []
     for link in doc["links"]:
         if link.get("relation") not in RELATIONS:
             sys.exit(f"{path.name}: relation 은 {RELATIONS} 중 하나 — {link}")
@@ -56,11 +51,12 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
         for link in links:
             if link["relation"] == "gap":
                 continue
-            labels = [r[0] for r in conn.execute("""
-                SELECT c.article_label FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
-                WHERE d.status = 'active' AND d.slug = %s AND c.workspace_id IN (SELECT workspace_ancestors(%s))""", (link["policy"], ws))]
-            if not any(same_article(l, link["article"]) for l in labels):
+            # 개정 사슬을 따라 확인한다 — 규정이 개정된 뒤에도 지금 조문으로 이어지는 근거는 정상이다
+            st = conn.execute("SELECT status FROM resolve_policy_ref(%s, %s, %s)", (ws, link["policy"], link["article"])).fetchone()
+            if not st:
                 warn.append(f"조문 없음: {link['policy']} {link['article']} (노드 {node}, ws{ws})")
+            elif st[0] in ("replaced", "retired"):
+                note.append(f"개정판에 대응 조문 없음: {link['policy']} {link['article']} (노드 {node}) — GET /policy-revisions/impact 에서 다시 연결한다")
         if not dry:
             conn.execute("UPDATE log_nodes SET attributes = coalesce(attributes, '{}'::jsonb) || jsonb_build_object('policy_refs', %s::jsonb) WHERE id = %s",
                          (Jsonb([to_ref(l) for l in links]), node))
@@ -69,6 +65,8 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
         conn.execute("""INSERT INTO audit_log (tenant_id, table_name, row_id, action, actor, source, reason)
                         VALUES ((SELECT id FROM tenants WHERE slug = %s), 'log_nodes', '-', 'policy_refs_linked', 'script', 'script', %s)""",
                      (doc.get("tenant"), f"{path.name}: nodes={updated} links={len(doc['links'])}"))
+    for n in note:
+        print("  참고:", n)
     return updated, len(doc["links"]), warn
 
 
