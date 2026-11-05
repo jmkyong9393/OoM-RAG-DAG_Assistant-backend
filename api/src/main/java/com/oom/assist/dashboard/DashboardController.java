@@ -82,7 +82,7 @@ public class DashboardController {
         FROM search_sessions WHERE workspace_id = ? AND status = 'done'
         """).param(ws).query().singleRow();
     long doneTotal = ((Number) ne.get("done_total")).longValue();
-    noEvidence.put("rate", doneTotal == 0 ? null : ((Number) ne.get("none")).doubleValue() / doneTotal);
+    noEvidence.put("rate", doneTotal == 0 ? null : Math.round(((Number) ne.get("none")).doubleValue() / doneTotal * 1000) / 10.0);
     noEvidence.put("recent", jdbc.sql("""
         SELECT id AS session_id, query, intent, created_at FROM search_sessions
         WHERE workspace_id = ? AND status = 'done' AND cardinality(verified_ids) = 0 ORDER BY created_at DESC LIMIT 5

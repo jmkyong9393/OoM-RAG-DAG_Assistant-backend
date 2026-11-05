@@ -1,7 +1,7 @@
 # 로컬 개발 진입점. Windows는 Git Bash 또는 WSL에서 실행.
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: pdf up down migrate api ai index worker seed seed-reset test test-ai psql logs
+.PHONY: pdf up down migrate api ai index worker seed seed-reset load-logs test test-ai psql logs
 
 up:            ## postgres 기동
 	$(COMPOSE) up -d postgres
@@ -40,6 +40,9 @@ pdf:           ## PDF 쪽 번호 채우기 + 서빙 위치 복사. make pdf SLUG
 	test -n "$(SLUG)" || { echo "SLUG=<slug> 필요"; exit 1; }
 	cd ai && uv run --extra pdf python ../scripts/pdf_locate.py "../data/policies/$(SLUG).chunks.json" --write
 	mkdir -p data/files/policies && cp "data/policies/src/$(SLUG)/$(SLUG).pdf" "data/files/policies/$(SLUG).pdf" && echo "copied → data/files/policies/$(SLUG).pdf"
+
+load-logs:     ## data/logs/*_v1.json → POST /logs/bulk (멱등, source_ref) + 폐기 PATCH. api 가 떠 있어야 한다. 이어서 make worker ARGS=--once
+	set -a; . deploy/.env; set +a; python scripts/load_logs.py
 
 worker:        ## 정제 워커 (pending 로그 정제 · 토큰/임베딩 백필). make worker ARGS=--once 는 1회만
 	set -a; . deploy/.env; set +a; cd ai && uv run python -m app.worker $(ARGS)

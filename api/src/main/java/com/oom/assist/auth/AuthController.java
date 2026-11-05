@@ -10,6 +10,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -42,14 +48,16 @@ public class AuthController {
   private final PasswordEncoder encoder;
   private final JdbcClient jdbc;
   private final LoginAttempts attempts;
+  private final Path privacyPolicyPath;
 
   public AuthController(AuthenticationManager authManager, SecurityContextRepository contextRepo, PasswordEncoder encoder, JdbcClient jdbc,
-      LoginAttempts attempts) {
+      LoginAttempts attempts, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
     this.authManager = authManager;
     this.contextRepo = contextRepo;
     this.encoder = encoder;
     this.jdbc = jdbc;
     this.attempts = attempts;
+    this.privacyPolicyPath = Path.of(privacyPolicyPath);
   }
 
   public record LoginRequest(@NotBlank String employeeNo, @NotBlank String password) {}
@@ -103,6 +111,21 @@ public class AuthController {
   public Map<String, Object> passwordPolicy() {
     return Map.of("rule", PasswordPolicy.RULE_TEXT, "max_age_days", PasswordPolicy.MAX_AGE_DAYS,
         "lock_after_failures", LoginAttempts.MAX_FAILURES, "lock_minutes", LoginAttempts.LOCK_MINUTES);
+  }
+
+  /**
+   * 개인정보 처리방침 문안 (동의 화면·푸터). 공개. 원문 data/legal/privacy_policy.md 를 요청 때 읽는다(수정이 재기동 없이 반영) — 동의 화면이 문안을 하드코딩하지 않게 (F-3).
+   * 경로는 oom.legal.privacy-policy-path (기본 ../data/legal — make api·테스트의 작업 폴더가 api/). 파일이 없으면 404 (운영 이미지엔 data/ 가 없으므로 마운트 또는 PRIVACY_POLICY_PATH 필요).
+   * produces 는 쓰지 않는다 — WebConfig 가 Accept 를 무시하고 JSON 을 기본으로 두어 406 이 난다. 응답 Content-Type 만 지정.
+   */
+  @GetMapping("/auth/privacy-policy")
+  public ResponseEntity<String> privacyPolicy() {
+    try {
+      String text = Files.readString(privacyPolicyPath, StandardCharsets.UTF_8);
+      return ResponseEntity.ok().contentType(new MediaType("text", "markdown", StandardCharsets.UTF_8)).body(text);
+    } catch (IOException e) {
+      throw ApiException.notFound("privacy policy (" + privacyPolicyPath + ")");
+    }
   }
 
   @PatchMapping("/auth/password")
