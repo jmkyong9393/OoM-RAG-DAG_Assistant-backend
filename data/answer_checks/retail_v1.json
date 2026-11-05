@@ -18,5 +18,8 @@
  {"workspace_id": 1, "query": "사후분석은 장애 복구하고 며칠 안에 써야 돼?", "note": "규정 질의: 사례 없이 규정만으로 답한다",
   "cite_chunks_any": ["retail-deploy-incident-2026-11-a16-1"], "contains_all": ["3영업일"]},
  {"workspace_id": 3, "query": "얼린 고기 잘못 샀다고 물러달라는데 해줘도 되나요?", "note": "규정 질의: 회사 규정(제9조)이 고시보다 앞선다",
-  "cite_chunks_any": ["retail-refund-2026-11-a9-1"]}
+  "cite_chunks_any": ["retail-refund-2026-11-a9-1"]},
+ {"workspace_id": 1, "query": "금요일 오후에 긴급 배포한 적 있어? 규정상 되는 거야?", "note": "원칙(금요일 배포 안 함)과 예외(긴급 배포는 팀장 승인)를 함께 말해야 한다", "cite_chunks_any": ["retail-deploy-incident-2026-11-a3-1"], "contains_all": ["팀장"], "contains_none": ["허용되지 않", "불가능"]},
+ {"workspace_id": 3, "query": "단순 변심 반품은 받고 나서 며칠 안에 해야 돼?", "note": "규정 질의: 딸려 온 사례의 무관한 예외(배송 지연 예외 환불)를 답에 섞지 않는다", "cite_chunks_any": ["retail-refund-2026-11-a3-1"], "contains_all": ["7일"], "contains_none": ["다루지 않", "전액 환불"]},
+ {"workspace_id": 3, "query": "유통기한 임박 상품 받았다는데 환불해줘야 돼?", "note": "조문은 기한 경과·하자·단순 변심만 정한다. 임박을 하자라고 판정하지 않는다", "contains_any": ["직접 정한 조문은 없"], "contains_none": ["간주"]}
 ]

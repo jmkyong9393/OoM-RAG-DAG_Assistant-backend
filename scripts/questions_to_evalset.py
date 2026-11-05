@@ -5,7 +5,8 @@ questions.md 표의 '정답 조문' 열을 변환 결과(<slug>.chunks.json)의 
   제18조의2 ①②           → {slug}-a18-2-*
   Q18                     → {slug}-q18-* (FAQ)
   별표 2 설치 후 대형 가전·가구 행 → [별표 2] 청크 중 그 글자가 들어 있는 행(청크). 공백은 무시하고 비교
-  (+ 제20조 ②)            → 같은 문서면 expect 에 추가, 다른 문서면 note 에만 남김
+  (+ 제20조 ②)            → 같은 문서면 expect 에 추가
+  (+ 급여 규정 제18조 ①)  → 다른 문서면 expect_also(둘째 문서의 정답). 그 부서에서 검색되지 않는 문서(다른 부서 규정)면 note 에만 남김
 항을 안 쓴 조문은 그 조문의 청크 전부. 매핑이 0건이면 오류로 멈춘다(평가셋에 빈 정답이 들어가지 않게).
 
 실행: uv run scripts/questions_to_evalset.py --meta data/policies/src/<slug>/meta.json [--out data/evalset]
@@ -81,6 +82,43 @@ def map_refs(text: str, chunks: list[dict], slug: str) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
+def load_docs(tenant: str | None) -> list[dict]:
+    """다른 문서 참조를 풀 문서 목록(같은 회사, 변환된 것만): 제목 · slug · 부서 · 청크."""
+    docs = []
+    for m in sorted((ROOT / "data" / "policies" / "src").glob("*/meta.json")):
+        d = json.loads(m.read_text(encoding="utf-8"))
+        cp = ROOT / "data" / "policies" / f"{d['slug']}.chunks.json"
+        if cp.exists() and d.get("tenant") == tenant:
+            docs.append({"title": d["title"], "slug": d["slug"], "ws": int(d["workspace_id"]),
+                         "chunks": json.loads(cp.read_text(encoding="utf-8"))["chunks"]})
+    return docs
+
+
+def scope_of(ws: int) -> set[int]:
+    """그 부서에서 검색되는 부서 = 자기와 조상 (data/seed/workspaces.json)."""
+    parent = {w["id"]: w.get("parent_id") for w in json.loads((ROOT / "data" / "seed" / "workspaces.json").read_text(encoding="utf-8"))}
+    out: set[int] = set()
+    cur: int | None = ws
+    while cur is not None and cur not in out:
+        out.add(cur)
+        cur = parent.get(cur)
+    return out
+
+
+def map_cross(other: str, docs: list[dict], scope: set[int]) -> tuple[list[str], list[str]]:
+    """'문서명 제N조, 다른 문서명 제M조' → (검색 범위 안 문서의 청크 id, 범위 밖 문서 제목)."""
+    spans = sorted(((other.find(d["title"]), d) for d in docs if d["title"] in other), key=lambda x: x[0])
+    ids: list[str] = []
+    outside: list[str] = []
+    for i, (pos, d) in enumerate(spans):
+        seg = other[pos + len(d["title"]): spans[i + 1][0] if i + 1 < len(spans) else len(other)]
+        if d["ws"] not in scope:
+            outside.append(d["title"])
+            continue
+        ids += [x for x in map_refs(seg, d["chunks"], d["slug"]) if x not in ids]
+    return ids, outside
+
+
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
@@ -95,6 +133,7 @@ def main() -> int:
     rows = parse_rows(src.read_text(encoding="utf-8"))
     if len(rows) != 15:
         print(f"{src}: 질의 {len(rows)}건 (15건 필요)")
+    docs, scope = [d for d in load_docs(meta.get("tenant")) if d["slug"] != slug], scope_of(ws)
     items, bad = [], []
     for r in rows:
         own, other = split_refs(r["answer"])
@@ -105,8 +144,13 @@ def main() -> int:
         note = f"{r['type']} | {r['answer']} | {r['gist']}"
         if not expect:
             bad.append((r["no"], r["answer"]))
-        items.append({"workspace_id": ws, "kind": "policy", "query": r["query"], "expect": [f"c:{x}" for x in expect], "note": note})
-        print(f"  {r['no']:>2} {r['type']:<3} {r['answer']:<48} → {expect}")
+        item = {"workspace_id": ws, "kind": "policy", "query": r["query"], "expect": [f"c:{x}" for x in expect], "note": note}
+        also, outside = map_cross(other, docs, scope) if other else ([], [])
+        if also:
+            item["expect_also"] = [f"c:{x}" for x in also]
+        items.append(item)
+        print(f"  {r['no']:>2} {r['type']:<3} {r['answer']:<48} → {expect}" + (f" + {also}" if also else "")
+              + (f"  (검색 범위 밖: {', '.join(outside)})" if outside else ""))
     if bad:
         print(f"매핑 실패 {len(bad)}건: {bad}")
         return 1

@@ -18,5 +18,6 @@
  {"workspace_id": 21, "query": "SEV-2 장애 사후분석 회의는 며칠 안에 열어야 해?", "note": "규정 질의: 제17조 5영업일",
   "cite_chunks_any": ["it-dev-incident-2026-11-a17-1"], "contains_all": ["5영업일"], "contains_none": ["멱등", "동결"]},
  {"workspace_id": 22, "query": "서류 결과는 며칠 안에 지원자한테 알려줘야 해?", "note": "규정 질의: 채용 규정 제15조",
-  "cite_chunks_any": ["it-recruit-2026-11-a15-1"]}
+  "cite_chunks_any": ["it-recruit-2026-11-a15-1"]},
+ {"workspace_id": 21, "query": "금요일 저녁에 급한 수정 배포해도 돼?", "note": "원칙(Soft 동결)과 예외(C3·C4·마이그레이션 없는 배포는 온콜 엔지니어와 협의)를 함께 말해야 한다", "cite_chunks_any": ["it-dev-incident-2026-11-a23-1"], "contains_all": ["협의"], "contains_none": ["불가능합니다"]}
 ]
