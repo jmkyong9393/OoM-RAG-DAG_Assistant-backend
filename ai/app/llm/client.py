@@ -30,6 +30,11 @@ POLICY_WEAK_HINTS = ("해야 해", "해야 하", "해야 되", "해야 돼", "�
 # 의무·허용·기준값을 묻는 어미와 수량 표현: "써야 하는", "끝내야 돼", "내보내도 돼", "몇 주", "얼마나" — 목록으로는 동사마다 다 적을 수 없다.
 # 규정+사례형 부서(개발·총무)의 규정 질문은 "장애"·"배치" 같은 단어를 품고 있어, 이 표현이 없으면 사례 전용으로 분류돼 규정 검색이 빠진다
 OBLIGATION_RE = re.compile(r"[가-힣]야\s?(?:해|하|돼|되|합|됩)|[가-힣]도\s?(?:돼|되|됩)|몇\s?(?:초|번|회|분|시간|시|일|주|개월|달|년|개|명|퍼센트|%|급|자)|얼마나|얼마까지|얼마 안")
+# 경험을 묻는 표현: "어떻게 했어", "롤백한 적 있어", "만든 거", "얼마로 잡았어?" — 사례(DAG)가 답을 가진 질문이다. 규정 힌트와 함께 오면 both
+EXPERIENCE_RE = re.compile(r"어떻게\s?(?:했|풀었|고쳤|해결했|처리했|막았)|어케|[가-힣]\s적\s?(?:있|없)|(?:만든|바꾼|고친|적용한|도입한)\s?(?:거|것|사례)"
+                           r"|(?:했|잡았|풀었|고쳤|바꿨|막았|넣었|뺐|정했)(?:어|지|나|는지)(?:요)?\s*\??$")
+# 증상을 호소하는 표현: "자꾸 로그아웃돼요", "이미지를 못 받아와요", "상신이 안 돼요" — 조치를 정한 규정과 사례를 함께 본다(both)
+SYMPTOM_RE = re.compile(r"(?:자꾸|계속|갑자기|반복해서)\s?[^?]{0,20}(?:돼요|되요|돼|됨|겨요|져요|떠요|뜸|나요|남)|못\s?[가-힣]{1,6}(?:와요|해요|가요|옴|함)|안\s?(?:돼요|됩니다|되네)")
 HTTP_STATUS_RE = re.compile(r"(?<!\d)[45]\d\d(?!\d)")   # '504', '429로', '403 떨어지는데' — 접두어 없는 HTTP 상태 코드
 
 
@@ -37,7 +42,8 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
     """힌트만으로 결정되면 IntentResult, 애매하면 None. 에러 코드는 troubleshoot 의 강한 신호."""
     q = query.lower()
     has_policy = any(h in q for h in POLICY_HINTS)
-    has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q))
+    has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q)) or bool(EXPERIENCE_RE.search(q))
+    symptom = bool(SYMPTOM_RE.search(q))
     weak_trouble = any(h in q for h in TROUBLE_WEAK_HINTS)
     weak_policy = any(h in q for h in POLICY_WEAK_HINTS) or bool(OBLIGATION_RE.search(q))
     if has_policy and (has_trouble or weak_trouble):
@@ -50,6 +56,8 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
         return IntentResult(intent="policy", reason="rule: obligation/threshold hints")
     if has_trouble:
         return IntentResult(intent="troubleshoot", reason="rule: error code" if error_code else "rule: trouble hints")
+    if symptom:
+        return IntentResult(intent="both", reason="rule: symptom")
     return None
 
 
@@ -62,12 +70,18 @@ class Usage:
 
 # ── 분류 ─────────────────────────────────────────────────────────────────────
 
-async def classify(profile: LlmProfile, query: str, error_code: str | None, policy_enabled: bool, usage: Usage) -> IntentResult:
-    """규칙 먼저, LLM 은 애매할 때만 — 분류 LLM 호출(≈4 s)이 첫 토큰 체감의 대부분이라 힌트로 결정되면 건너뛴다."""
+async def classify(profile: LlmProfile, query: str, error_code: str | None, policy_enabled: bool, usage: Usage,
+                   has_cases: bool = True, code_in_policy: bool = False) -> IntentResult:
+    """규칙 먼저, LLM 은 애매할 때만 — 분류 LLM 호출(≈4 s)이 첫 토큰 체감의 대부분이라 힌트로 결정되면 건너뛴다.
+    has_cases·code_in_policy 는 그 부서의 데이터에서 온다(db.classify_context) — 단어 목록이 아니라 회사마다 다른 사정으로 판단한다."""
     if not policy_enabled:
         return IntentResult(intent="troubleshoot", reason="dag_only mode")
+    if not has_cases:   # 등록된 사례가 없는 부서(규정 참조형)는 사례 검색이 빈손이다 — 분류할 것 없이 규정만 본다
+        return IntentResult(intent="policy", reason="rule: no cases in workspace")
     ruled = rule_classify(query, error_code)
     if ruled is not None:
+        if ruled.intent == "troubleshoot" and error_code and code_in_policy:   # 그 에러 코드의 조치를 규정이 정해 두었다 → 규정도 함께
+            return IntentResult(intent="both", reason="rule: error code appears in policy")
         return ruled
     if ai_mode() == "openai" and profile.has_key:
         system = ("You classify a Korean enterprise question into exactly one intent. "

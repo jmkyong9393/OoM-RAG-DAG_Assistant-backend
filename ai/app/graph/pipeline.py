@@ -29,23 +29,24 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
     retrieved: list[str] = []
     try:
         # load_workspace (설정은 Spring 이 넘기지만, 라벨·프로필 등 settings 는 DB 에서 읽는다)
+        error_code = extract_error_code(query)
         with db.connect() as conn:
             ws = db.workspace_settings(conn, workspace_id)
             terms = db.user_terms(conn)
+            cctx = db.classify_context(conn, workspace_id, error_code)
         if policy_enabled is None:
             policy_enabled = bool(ws["policy_enabled"])
         prof = load_profile(ws["settings"].get("llm_profile", "default"))
         mode = "policy" if policy_enabled else "dag_only"
         tokenizer = Tokenizer(terms)
         q_tokens = tokenizer.query_tokens(query, synonym_groups(ws["settings"]))
-        error_code = extract_error_code(query)
 
         # 질의 임베딩은 분류와 병렬로 시작 (openai 모드에서만 값이 있다. 분류가 규칙으로 즉시 끝나면 임베딩이 임계 경로)
         q_vec_task = asyncio.create_task(asyncio.to_thread(embed.embed_one, prof, query))
 
         # classify — 규칙으로 결정되면 LLM 호출 없음
         yield sse("stage", StageEvent(node="supervisor", status="start").model_dump())
-        intent = (await llm.classify(prof, query, error_code, policy_enabled, usage)).intent
+        intent = (await llm.classify(prof, query, error_code, policy_enabled, usage, **cctx)).intent
         yield sse("intent", IntentEvent(intent=intent, mode=mode).model_dump())
         yield sse("stage", StageEvent(node="supervisor", status="done").model_dump())
 

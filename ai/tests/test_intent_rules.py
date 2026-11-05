@@ -56,7 +56,34 @@ def test_rules_never_contradict_evalset_kind(capsys):
     # '복구' 는 계정 복구에도 쓰이는 약한 힌트 — 단독으로는 LLM 에
     ("보안 키 잃어버린 고객 계정 복구는 어떤 절차로 해?", None, "both"),     # '절차' 규정 힌트 + 약한 힌트
     ("조직 계정 보조 이메일 복구는 어떤 규모 조직에서 못 써요?", None, None),
+    # 경험을 묻는 표현은 사례 질의다. 규정 힌트와 함께 오면 both
+    ("계정 잠겼을 때 어떻게 풀었어?", None, "troubleshoot"),
+    ("커넥션풀 꽉찼을때 어케했어", None, "troubleshoot"),
+    ("배포 전에 설정 검증하는 단계 만든 거", None, "troubleshoot"),
+    ("롤백 기준 안 넘었는데 롤백한 적 있어?", None, "both"),
+    ("JVM 힙을 컨테이너 제한 기준으로 얼마로 잡았어?", None, "both"),
+    # 증상 호소는 조치 규정과 사례를 함께 본다
+    ("앱이 로그인 직후에 자꾸 로그아웃돼요", None, "both"),
+    ("스테이징 배포가 이미지를 못 받아와요", None, "both"),
+    ("전자결재 상신이 안 돼요", None, "both"),
+    ("날짜 지난 물건이 들어 있었어요", None, None),           # 고객 불만을 옮긴 말 — 증상·경험 표현이 아니다
 ])
 def test_rule_examples(query, code, expected):
     r = rule_classify(query, code)
     assert (r.intent if r else None) == expected
+
+
+
+async def test_classify_uses_workspace_data(fake_mode):
+    """부서 데이터로 하는 판단: 사례가 없으면 규정만, 에러 코드를 규정이 다루면 규정도 함께."""
+    from app.config import profile
+    from app.llm import client as llm
+    prof, u = profile(), llm.Usage()
+    r = await llm.classify(prof, "채용서류 반환 청구가 들어오면 어떻게 해?", None, True, u, has_cases=False)
+    assert r.intent == "policy" and "no cases" in r.reason
+    r = await llm.classify(prof, "E-403 뜨는데 어떻게 하지", "E-403", True, u, has_cases=True, code_in_policy=True)
+    assert r.intent == "both" and "appears in policy" in r.reason
+    r = await llm.classify(prof, "E-403 뜨는데 어떻게 하지", "E-403", True, u, has_cases=True, code_in_policy=False)
+    assert r.intent == "troubleshoot"
+    r = await llm.classify(prof, "E-403 뜨는데 어떻게 하지", "E-403", False, u, has_cases=False)
+    assert r.intent == "troubleshoot" and r.reason == "dag_only mode"          # 규정을 끈 부서는 그대로 사례만

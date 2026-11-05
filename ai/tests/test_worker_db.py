@@ -79,3 +79,17 @@ async def test_failed_refine_increments_attempts(fake_mode, pending_node, admin_
     admin_conn.execute("UPDATE log_nodes SET refine_attempts = 2 WHERE id = %s", (pending_node,))
     await worker.run_once()
     assert admin_conn.execute("SELECT refine_status FROM log_nodes WHERE id = %s", (pending_node,)).fetchone()["refine_status"] == "failed"
+
+
+
+def test_classify_context_reads_workspace_data():
+    """db.classify_context — 사례 유무와 에러 코드의 규정 등장 여부. 시드: ws1·ws2 에 로그, ws3 에는 없음. 시드 FAQ·VPN 지침에 E-403 없음."""
+    from app.retrieval import db
+    with db.connect() as conn:
+        assert db.classify_context(conn, 1, None) == {"has_cases": True, "code_in_policy": False}
+        assert db.classify_context(conn, 3, None)["has_cases"] is False
+        assert db.classify_context(conn, 2, "E-NOSUCH-999")["code_in_policy"] is False
+        row = conn.execute("""SELECT c.workspace_id FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
+                              WHERE d.status = 'active' AND c.text LIKE '%%E-403%%' LIMIT 1""").fetchone()
+        if row:   # make index 로 VPN 지침(제15·17조)이 적재된 상태에서만 확인
+            assert db.classify_context(conn, row["workspace_id"], "E-403")["code_in_policy"] is True
