@@ -111,6 +111,27 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
     return result
 
 
+def order_by_supersedes(docs: list[dict]) -> list[dict]:
+    """개정 사슬 순서로 정렬 — 대체되는 문서를 대체하는 문서보다 먼저 적재한다.
+    파일명 순으로 넣으면 새 문서가 먼저 들어간 뒤 옛 문서가 active 로 적재돼, 같은 제목의 문서 둘이 함께 살아남는다."""
+    by = {d["slug"]: d for d in docs}
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    def visit(d: dict) -> None:
+        if d["slug"] in seen:
+            return
+        seen.add(d["slug"])
+        old = by.get(d.get("supersedes"))
+        if old is not None:
+            visit(old)
+        out.append(d)
+
+    for d in docs:
+        visit(d)
+    return out
+
+
 def main(argv: list[str]) -> int:
     dry = "--dry-run" in argv
     paths = [Path(a) for a in argv if not a.startswith("--")] or sorted((ROOT / "data" / "policies").glob("*.chunks.json"))
@@ -125,6 +146,7 @@ def main(argv: list[str]) -> int:
             print("\n".join("ERROR " + e for e in errs))
             return 1
         docs.append(doc)
+    docs = order_by_supersedes(docs)
     with psycopg.connect(DSN, row_factory=dict_row) as conn:
         for doc in docs:
             with conn.transaction():
