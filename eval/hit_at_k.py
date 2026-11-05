@@ -54,10 +54,11 @@ def main() -> int:
             tok = toks.get(ws) or toks.setdefault(ws, Tokenizer(db.user_terms(conn)))
             tokens = tok.query_tokens(it["query"], groups)   # 파이프라인과 같은 질의 토큰(사용자 사전 + 동의어 확장)
             vec = embed.embed_one(prof, it["query"]) if use_vec else None
-            row = {"query": it["query"], "kind": it.get("kind", "policy"), "expect": it["expect"]}
+            absent = it.get("expect_absent") or []   # 폐기 노드 등 결과에 없어야 하는 id
+            row = {"query": it["query"], "kind": it.get("kind", "policy"), "expect": it["expect"], "expect_absent": absent}
             for m in modes:
                 got = search(conn, it, m, tokens, vec, a.k)
-                hit = any(e in got for e in it["expect"])
+                hit = (any(e in got for e in it["expect"]) if it["expect"] else True) and not any(x in got for x in absent)
                 rank = next((i + 1 for i, g in enumerate(got) if g in it["expect"]), None)
                 row[m] = {"hit": hit, "rank": rank, "top": got[:3]}
                 hits[m][row["kind"]][0] += int(hit); hits[m][row["kind"]][1] += 1
@@ -73,7 +74,8 @@ def main() -> int:
     if misses:
         print("\n놓친 질의:")
         for r in misses:
-            print(f"  [{r['kind']}] {r['query']!r} expect={r['expect']} " + " ".join(f"{m}:{r[m]['top']}" for m in modes))
+            absent = f" absent={r['expect_absent']}" if r["expect_absent"] else ""
+            print(f"  [{r['kind']}] {r['query']!r} expect={r['expect']}{absent} " + " ".join(f"{m}:{r[m]['top']}" for m in modes))
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
         a.json.write_text(json.dumps({"k": a.k, "vector": use_vec, "summary": hits, "rows": rows}, ensure_ascii=False, indent=2), encoding="utf-8")

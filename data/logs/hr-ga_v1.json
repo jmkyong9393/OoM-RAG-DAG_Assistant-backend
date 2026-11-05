@@ -1,0 +1,750 @@
+{
+  "workspace_id": 2,
+  "version": "v1",
+  "description": "인사·총무 워크스페이스 합성 로그 v1 — VPN E-403·계정 잠김·메일함 용량·출입카드·결재 지연·장비 반납 6체인 + 고아 ref 1. 전부 가공 데이터.",
+  "items": [
+    {
+      "ref": "h1-root",
+      "type": "fail",
+      "title": "재택 첫날 VPN 접속 시 E-403",
+      "body": "재택 전환 직원들이 VPN 접속에서 E-403. 전산팀은 서버 정상이라 답함. 신규 재택자에게 집중.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-001",
+      "error_code": "E-403",
+      "keywords": [
+        "VPN",
+        "E-403",
+        "재택"
+      ],
+      "resolution_summary": "보안교육 미이수 권한 정지와 단말 인증서 만료",
+      "created_at": "2026-07-07T09:10:00+09:00",
+      "expected_queries": [
+        "재택에서 VPN E-403 오류 나는데 어떻게 해결했어?",
+        "vpn 403 떠요 재택인데 어떻게 해결했어요",
+        "vpn 403 뜸 재택 첫날임"
+      ]
+    },
+    {
+      "ref": "h1-edu",
+      "type": "fail",
+      "title": "원인: 보안교육 미이수로 VPN 권한 자동 정지",
+      "body": "분기 보안교육 미이수자는 다음 달 1일 VPN 권한이 자동 정지되는 정책. 안내 메일이 스팸함으로 분류됨.",
+      "parent_ref": "h1-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-002",
+      "error_code": "E-403",
+      "keywords": [
+        "보안교육",
+        "권한 정지"
+      ],
+      "resolution_summary": "교육 미이수 자동 정지",
+      "created_at": "2026-07-07T11:00:00+09:00",
+      "expected_queries": [
+        "보안교육 안 들으면 VPN 끊겨?"
+      ]
+    },
+    {
+      "ref": "h1-edu-fix",
+      "type": "success",
+      "title": "해결: 교육 이수 후 권한 재부여 요청",
+      "body": "교육 이수 → 포털에서 권한 재부여 신청 → 익일 반영. 정지 예정자에게 2주 전 사내 메신저 알림 추가.",
+      "parent_ref": "h1-edu",
+      "source": "synthetic",
+      "source_ref": "syn-hr-003",
+      "error_code": "E-403",
+      "keywords": [
+        "권한 재부여",
+        "메신저 알림"
+      ],
+      "resolution_summary": "이수 후 재부여 + 2주 전 알림",
+      "created_at": "2026-07-08T14:00:00+09:00",
+      "expected_queries": [
+        "VPN 권한 다시 받으려면"
+      ]
+    },
+    {
+      "ref": "h1-cert",
+      "type": "fail",
+      "title": "원인: 단말 인증서 만료",
+      "body": "노트북 인증서 유효기간 1년이 지나 VPN 인증 실패. 교육 이수자도 같은 코드.",
+      "parent_ref": "h1-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-004",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-09T10:00:00+09:00",
+      "expected_queries": [
+        "노트북 인증서 만료되면 VPN 어떻게 돼?"
+      ]
+    },
+    {
+      "ref": "h1-cert-fix",
+      "type": "success",
+      "title": "해결: 인증서 재발급 절차",
+      "body": "포털 > 보안 > 인증서 재발급 신청, 승인 후 설치 프로그램 실행. 소요 1시간.",
+      "parent_ref": "h1-cert",
+      "source": "synthetic",
+      "source_ref": "syn-hr-005",
+      "error_code": "E-403",
+      "keywords": [
+        "인증서 재발급",
+        "포털"
+      ],
+      "resolution_summary": "포털 재발급 1시간",
+      "created_at": "2026-07-09T15:00:00+09:00",
+      "expected_queries": [
+        "인증서 재발급 어디서 해?"
+      ]
+    },
+    {
+      "ref": "h1-status",
+      "type": "ref",
+      "title": "VPN 권한 상태 확인하는 곳",
+      "body": "포털 > 내 계정 > 접근 권한에서 VPN 항목 상태(정상/정지/만료 예정)와 사유 확인.",
+      "parent_ref": "h1-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-006",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-08T09:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "h1-wifi",
+      "type": "fail",
+      "title": "원인: 공용 와이파이에서 VPN 포트 차단",
+      "body": "카페 와이파이가 VPN 포트를 막아 접속 실패. 휴대폰 핫스팟에서는 정상. 안내문 보강 검토 중.",
+      "parent_ref": "h1-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-007",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-12T13:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "h2-root",
+      "type": "fail",
+      "title": "비밀번호 5회 오류로 계정 잠김 반복",
+      "body": "비밀번호를 5회 틀려 계정이 잠기는 일이 여러 직원에게 반복됨. 본인은 제대로 입력했다고 하는 경우가 많고, 월요일 오전에 특히 몰림. 정책상 15분 뒤 자동 해제되지만 업무 시작 시간이라 바로 풀어 달라는 요청이 뒤따름.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-008",
+      "error_code": null,
+      "keywords": [
+        "계정 잠김",
+        "5회",
+        "15분"
+      ],
+      "resolution_summary": "저장된 옛 비밀번호 자동 재시도와 망각이 원인",
+      "created_at": "2026-07-21T09:00:00+09:00",
+      "expected_queries": [
+        "계정 잠겼을 때 어떻게 풀었어?",
+        "비밀번호 5번 틀려서 계정 잠기는 거 왜 자꾸 반복돼?",
+        "비번 틀려서 잠겼는데 어케 품"
+      ]
+    },
+    {
+      "ref": "h2-saved",
+      "type": "fail",
+      "title": "원인: 비밀번호 변경 후 메일 앱이 옛 비밀번호로 자동 재시도",
+      "body": "휴대폰 메일 앱에 저장된 옛 비밀번호가 백그라운드에서 반복 시도해 5회를 채움.",
+      "parent_ref": "h2-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-009",
+      "error_code": null,
+      "keywords": [
+        "메일 앱",
+        "저장된 비밀번호",
+        "자동 재시도"
+      ],
+      "resolution_summary": "기기 저장 비밀번호의 자동 재시도",
+      "created_at": "2026-07-21T11:00:00+09:00",
+      "expected_queries": [
+        "비번 바꿨는데 계정이 계속 잠겨요"
+      ]
+    },
+    {
+      "ref": "h2-saved-fix",
+      "type": "success",
+      "title": "해결: 변경 직후 기기별 저장 비밀번호 안내 + 잠금 전 알림",
+      "body": "비밀번호 변경 완료 화면에 기기별 갱신 안내를 넣고, 3회 실패 시 메신저로 사전 경고.",
+      "parent_ref": "h2-saved",
+      "source": "synthetic",
+      "source_ref": "syn-hr-010",
+      "error_code": null,
+      "keywords": [
+        "사전 경고",
+        "3회",
+        "기기 안내"
+      ],
+      "resolution_summary": "변경 안내 + 3회 사전 경고",
+      "created_at": "2026-07-23T16:00:00+09:00",
+      "expected_queries": [
+        "잠기기 전에 알려주는 기능 만든 거"
+      ]
+    },
+    {
+      "ref": "h2-forget",
+      "type": "fail",
+      "title": "원인: 연휴 뒤 비밀번호 망각",
+      "body": "긴 연휴 직후 비밀번호를 잊고 반복 시도. 매 연휴 뒤 반복되는 패턴.",
+      "parent_ref": "h2-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-011",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-22T09:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "h2-self",
+      "type": "success",
+      "title": "해결: 셀프 잠금 해제 도입(사번 + 휴대폰 인증)",
+      "body": "포털에서 사번과 휴대폰 인증으로 본인이 즉시 해제. 도입 후 해제 요청 80% 감소.",
+      "parent_ref": "h2-forget",
+      "source": "synthetic",
+      "source_ref": "syn-hr-012",
+      "error_code": null,
+      "keywords": [
+        "셀프 해제",
+        "휴대폰 인증"
+      ],
+      "resolution_summary": "셀프 잠금 해제",
+      "created_at": "2026-08-05T10:00:00+09:00",
+      "expected_queries": [
+        "계정 잠금 스스로 푸는 방법"
+      ]
+    },
+    {
+      "ref": "h2-form",
+      "type": "ref",
+      "title": "잠금 해제 요청 양식(구)",
+      "body": "셀프 해제 도입 전 사용하던 메일 양식. 사번·성명·부서·사유 기재 후 보안팀 발송.",
+      "parent_ref": "h2-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-013",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-21T10:00:00+09:00",
+      "expected_queries": [
+        "잠금 해제 요청 양식 어디 있어?"
+      ],
+      "_deprecate_reason": "셀프 잠금 해제(h2-self) 도입으로 양식 폐지"
+    },
+    {
+      "ref": "h2-guide",
+      "type": "success",
+      "title": "해결: 잠금 정책 안내문 통합",
+      "body": "기기 저장 비밀번호와 연휴 망각 두 원인을 한 안내문으로 묶어 비밀번호 변경 화면과 연휴 전 공지에 게시.",
+      "parent_refs": [
+        "h2-saved",
+        "h2-forget"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-hr-014",
+      "error_code": null,
+      "keywords": [
+        "안내문",
+        "공지"
+      ],
+      "resolution_summary": "원인별 안내 통합 게시",
+      "created_at": "2026-08-10T14:00:00+09:00",
+      "expected_queries": [
+        "계정 잠금 안내문 어디 있어?"
+      ]
+    },
+    {
+      "ref": "h3-root",
+      "type": "fail",
+      "title": "메일함 용량 초과로 수신 실패",
+      "body": "용량 10GB 초과 계정이 외부 메일을 못 받음. 발신자에게 반송 메일이 가서 대외 민원 발생.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-015",
+      "error_code": null,
+      "keywords": [
+        "메일함 용량",
+        "수신 실패",
+        "반송"
+      ],
+      "resolution_summary": "대용량 첨부 보관과 휴지통 보관 기간이 원인",
+      "created_at": "2026-08-18T10:00:00+09:00",
+      "expected_queries": [
+        "메일함 꽉 차서 메일 못 받는 문제 어떻게 했어?",
+        "메일이 반송된다는데요",
+        "메일함 용량초과로 매일 못받아요"
+      ]
+    },
+    {
+      "ref": "h3-attach",
+      "type": "fail",
+      "title": "원인: 대용량 첨부를 메일함에 보관",
+      "body": "용량의 70%가 첨부파일. 10MB 이상 첨부가 수천 건.",
+      "parent_ref": "h3-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-016",
+      "error_code": null,
+      "keywords": [
+        "대용량 첨부",
+        "70%"
+      ],
+      "resolution_summary": "첨부가 용량 대부분 차지",
+      "created_at": "2026-08-18T13:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "h3-attach-fix",
+      "type": "success",
+      "title": "해결: 첨부 분리 보관 + 1년 아카이브 정책",
+      "body": "10MB 이상 첨부는 공유 드라이브로 자동 이동, 1년 지난 메일은 아카이브. 평균 사용량 40% 감소.",
+      "parent_ref": "h3-attach",
+      "source": "synthetic",
+      "source_ref": "syn-hr-017",
+      "error_code": null,
+      "keywords": [
+        "첨부 분리",
+        "아카이브",
+        "1년"
+      ],
+      "resolution_summary": "첨부 분리 + 1년 아카이브",
+      "created_at": "2026-08-22T15:00:00+09:00",
+      "expected_queries": [
+        "메일함 첨부 때문에 꽉 차는 거 어떻게 해결했어?"
+      ]
+    },
+    {
+      "ref": "h3-trash",
+      "type": "fail",
+      "title": "원인: 삭제 메일이 휴지통에 90일 보관",
+      "body": "삭제해도 90일간 용량에 포함. 사용자는 비웠다고 생각함.",
+      "parent_ref": "h3-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-018",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-19T11:00:00+09:00",
+      "expected_queries": [
+        "메일 지웠는데 용량이 안 줄어요"
+      ]
+    },
+    {
+      "ref": "h3-trash-fix",
+      "type": "success",
+      "title": "해결: 휴지통 30일 자동 비움",
+      "body": "보관 기간을 30일로 줄이고 용량 90% 도달 시 경고 메일.",
+      "parent_ref": "h3-trash",
+      "source": "synthetic",
+      "source_ref": "syn-hr-019",
+      "error_code": null,
+      "keywords": [
+        "휴지통",
+        "30일",
+        "경고 메일"
+      ],
+      "resolution_summary": "휴지통 30일 + 90% 경고",
+      "created_at": "2026-08-23T10:00:00+09:00",
+      "expected_queries": [
+        "휴지통 자동으로 비우게 한 거"
+      ]
+    },
+    {
+      "ref": "h3-guide",
+      "type": "ref",
+      "title": "메일함 용량 확인·정리 가이드",
+      "body": "설정 > 용량에서 폴더별 사용량 확인, 첨부 큰 순 정렬 후 정리하는 순서.",
+      "parent_ref": "h3-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-020",
+      "error_code": null,
+      "keywords": [
+        "용량 확인",
+        "정리"
+      ],
+      "resolution_summary": "용량 정리 순서",
+      "created_at": "2026-08-20T09:00:00+09:00",
+      "expected_queries": [
+        "메일함 정리 어떻게 해?"
+      ]
+    },
+    {
+      "ref": "h4-root",
+      "type": "fail",
+      "title": "신규 입사자 출입카드 인식 안 됨",
+      "body": "입사 첫날 출입문에서 카드 인식 실패. 경비실 임시 출입 처리 반복.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-021",
+      "error_code": null,
+      "keywords": [
+        "출입카드",
+        "신규 입사",
+        "인식 실패"
+      ],
+      "resolution_summary": "발령일·활성일 불일치와 카드 손상",
+      "created_at": "2026-09-01T08:30:00+09:00",
+      "expected_queries": [
+        "신입 출입카드 안 될 때 어떻게 했어?",
+        "입사 첫날 카드가 안 찍혀요"
+      ]
+    },
+    {
+      "ref": "h4-date",
+      "type": "fail",
+      "title": "원인: 인사 시스템 발령일과 카드 활성일 불일치",
+      "body": "카드 활성화가 발령 처리 다음날 새벽 배치로 돌아 첫날은 미활성.",
+      "parent_ref": "h4-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-022",
+      "error_code": null,
+      "keywords": [
+        "발령일",
+        "활성일",
+        "배치"
+      ],
+      "resolution_summary": "활성 배치가 하루 늦음",
+      "created_at": "2026-09-01T10:00:00+09:00",
+      "expected_queries": [
+        "출입카드 활성화 왜 하루 늦어?"
+      ]
+    },
+    {
+      "ref": "h4-date-fix",
+      "type": "success",
+      "title": "해결: 발령 전날 활성화 자동화",
+      "body": "발령 등록 시 전날 저녁 활성화로 배치 시점 변경. 적용 후 첫날 민원 0건.",
+      "parent_ref": "h4-date",
+      "source": "synthetic",
+      "source_ref": "syn-hr-023",
+      "error_code": null,
+      "keywords": [
+        "자동 활성화",
+        "전날"
+      ],
+      "resolution_summary": "전날 저녁 활성화",
+      "created_at": "2026-09-03T14:00:00+09:00",
+      "expected_queries": [
+        "신입 출입카드 첫날부터 되게 하려고 뭐 바꿨어?"
+      ]
+    },
+    {
+      "ref": "h4-mag",
+      "type": "fail",
+      "title": "원인: 카드 자성 손상",
+      "body": "휴대폰 케이스 자석에 붙여 다녀 손상. 신규자뿐 아니라 기존 직원도 간헐 발생.",
+      "parent_ref": "h4-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-024",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-02T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "h4-reissue",
+      "type": "success",
+      "title": "해결: 카드 재발급 + 보관 안내",
+      "body": "총무 포털에서 재발급 신청, 당일 수령. 자석 접촉 주의 안내를 카드 봉투에 인쇄.",
+      "parent_ref": "h4-mag",
+      "source": "synthetic",
+      "source_ref": "syn-hr-025",
+      "error_code": null,
+      "keywords": [
+        "재발급",
+        "보관 안내"
+      ],
+      "resolution_summary": "당일 재발급 + 안내",
+      "created_at": "2026-09-02T16:00:00+09:00",
+      "expected_queries": [
+        "출입카드 재발급 어떻게 해?"
+      ]
+    },
+    {
+      "ref": "h4-night",
+      "type": "fail",
+      "title": "야간 출입 구역 권한 미포함",
+      "body": "기본 권한에 야간·서버실 구역이 빠져 당직자가 못 들어감. 권한 세트 재정의 검토 중.",
+      "parent_ref": "h4-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-026",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-08T22:10:00+09:00",
+      "expected_queries": [
+        "야간에 출입카드 안 되는 이유"
+      ]
+    },
+    {
+      "ref": "h5-root",
+      "type": "fail",
+      "title": "전자결재 상신 시 오류로 결재 지연",
+      "body": "상신 버튼을 누르면 ORA-12154 오류가 표시되고 문서가 임시저장 상태로 남음. 월말 결재가 밀림.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-027",
+      "error_code": "ORA-12154",
+      "keywords": [
+        "전자결재",
+        "ORA-12154",
+        "상신 오류"
+      ],
+      "resolution_summary": "DB 접속 설정 미반영과 대결자 미지정",
+      "created_at": "2026-09-26T14:00:00+09:00",
+      "expected_queries": [
+        "결재 올릴 때 ORA-12154 나는 거 어떻게 해결했어?",
+        "전자결재 상신이 안 돼요",
+        "결재 올리면 ora 에러나요"
+      ]
+    },
+    {
+      "ref": "h5-tns",
+      "type": "fail",
+      "title": "원인: 결재 시스템 DB 접속 설정 변경 미반영",
+      "body": "전산팀 회신: DB 주소 변경 후 일부 서버에 접속 설정(tnsnames)이 배포되지 않음.",
+      "parent_ref": "h5-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-028",
+      "error_code": "ORA-12154",
+      "keywords": [
+        "tnsnames",
+        "접속 설정",
+        "배포 누락"
+      ],
+      "resolution_summary": "접속 설정 일부 서버 미배포",
+      "created_at": "2026-09-26T16:30:00+09:00",
+      "expected_queries": [
+        "ORA-12154 원인이 뭐였어?"
+      ]
+    },
+    {
+      "ref": "h5-tns-fix",
+      "type": "success",
+      "title": "해결: 접속 설정 재배포 + 상신 재시도 안내",
+      "body": "전산팀이 전 서버에 접속 설정을 재배포한 뒤 정상화. 임시저장 상태로 남은 문서는 다시 열어 상신하면 됨. 월말 결재 밀린 부서에 전사 공지.",
+      "parent_ref": "h5-tns",
+      "source": "synthetic",
+      "source_ref": "syn-hr-029",
+      "error_code": "ORA-12154",
+      "keywords": [
+        "재배포",
+        "재시도 안내"
+      ],
+      "resolution_summary": "설정 재배포 후 재상신",
+      "created_at": "2026-09-27T10:00:00+09:00",
+      "expected_queries": [
+        "결재 ORA 오류 났을 때 뭘로 해결했어?"
+      ]
+    },
+    {
+      "ref": "h5-deputy",
+      "type": "fail",
+      "title": "원인: 결재자 휴가 중 대결자 미지정으로 결재 대기 상태 지속",
+      "body": "접수된 결재 지연 중 일부는 ORA 오류가 아니라, 결재자가 휴가를 가면서 대결자를 지정하지 않아 문서가 결재 대기에서 넘어가지 않은 경우였음. 오류 문의와 함께 들어와 구분이 늦어짐.",
+      "parent_ref": "h5-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-030",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-29T09:00:00+09:00",
+      "expected_queries": [
+        "결재가 오류도 없는데 안 넘어가는 이유가 뭐였어?"
+      ]
+    },
+    {
+      "ref": "h5-deputy-fix",
+      "type": "success",
+      "title": "해결: 휴가 등록 시 대결자 필수 입력",
+      "body": "휴가 신청 화면에서 대결자 미입력 시 저장 불가. 기존 미지정 건은 부서장 일괄 지정.",
+      "parent_ref": "h5-deputy",
+      "source": "synthetic",
+      "source_ref": "syn-hr-031",
+      "error_code": null,
+      "keywords": [
+        "대결자",
+        "필수 입력"
+      ],
+      "resolution_summary": "휴가 등록 시 대결자 필수",
+      "created_at": "2026-10-01T11:00:00+09:00",
+      "expected_queries": [
+        "대결자 필수로 바꾼 사례"
+      ]
+    },
+    {
+      "ref": "h5-track",
+      "type": "ref",
+      "title": "결재 상태 조회·독촉 절차",
+      "body": "결재함 > 진행 문서에서 현재 결재자 확인, 3일 경과 시 메신저 독촉, 7일 경과 시 부서장 에스컬레이션.",
+      "parent_ref": "h5-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-032",
+      "error_code": null,
+      "keywords": [
+        "결재 상태",
+        "독촉",
+        "에스컬레이션"
+      ],
+      "resolution_summary": "3일 독촉·7일 에스컬레이션",
+      "created_at": "2026-09-28T09:30:00+09:00",
+      "expected_queries": [
+        "결재 어디서 멈췄는지 어떻게 봐?"
+      ]
+    },
+    {
+      "ref": "h5-bot",
+      "type": "success",
+      "title": "해결: 결재 기한 알림 봇",
+      "body": "진행 3일 경과 문서를 매일 오전 결재자에게 메신저로 알림. 대결자 미지정 건도 함께 표시.",
+      "parent_ref": "h5-deputy",
+      "source": "synthetic",
+      "source_ref": "syn-hr-033",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-08T10:00:00+09:00",
+      "expected_queries": [
+        "결재 독촉 자동으로 보내는 거 있어?"
+      ]
+    },
+    {
+      "ref": "h6-root",
+      "type": "fail",
+      "title": "재택·퇴사 장비 미회수 반복",
+      "body": "재택 종료·퇴사 후 노트북·모니터가 회수되지 않은 건이 분기 12건. 자산 대장과 실물 불일치.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-034",
+      "error_code": null,
+      "keywords": [
+        "장비 반납",
+        "미회수",
+        "자산 대장"
+      ],
+      "resolution_summary": "체크리스트 누락과 반납 배송 파손",
+      "created_at": "2026-10-06T10:00:00+09:00",
+      "expected_queries": [
+        "재택 장비 반납 안 된 건 어떻게 처리했어?",
+        "퇴사자 노트북 회수가 안 됐어요"
+      ]
+    },
+    {
+      "ref": "h6-list",
+      "type": "fail",
+      "title": "원인: 퇴사 체크리스트에 장비 항목 없음",
+      "body": "퇴사 절차서에 계정 회수만 있고 장비 반납이 빠짐. 담당자 구두 안내에 의존.",
+      "parent_ref": "h6-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-035",
+      "error_code": null,
+      "keywords": [
+        "퇴사 체크리스트",
+        "장비 항목"
+      ],
+      "resolution_summary": "절차서에 장비 반납 누락",
+      "created_at": "2026-10-06T13:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "h6-list-fix",
+      "type": "success",
+      "title": "해결: 체크리스트 추가 + 자산 시스템 연동",
+      "body": "퇴사·재택 종료 체크리스트에 장비 반납을 필수 항목으로 넣고, 반납 확인 전엔 퇴직 정산 완료 불가.",
+      "parent_ref": "h6-list",
+      "source": "synthetic",
+      "source_ref": "syn-hr-036",
+      "error_code": null,
+      "keywords": [
+        "체크리스트",
+        "자산 연동",
+        "정산"
+      ],
+      "resolution_summary": "반납 필수 + 정산 연동",
+      "created_at": "2026-10-10T15:00:00+09:00",
+      "expected_queries": [
+        "퇴사할때 장비 반납 안하는거 어떻게 해결했어?"
+      ]
+    },
+    {
+      "ref": "h6-broken",
+      "type": "fail",
+      "title": "원인: 반납 택배 파손",
+      "body": "개인 포장으로 보낸 모니터 2대가 파손 도착. 보상 책임이 불명확해 반납 처리가 보류되고, 이후 반납 자체를 미루는 직원이 생김.",
+      "parent_ref": "h6-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-037",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-07T11:00:00+09:00",
+      "expected_queries": [
+        "모니터 택배로 보냈는데 파손되면 어떻게 하지?"
+      ]
+    },
+    {
+      "ref": "h6-pack",
+      "type": "success",
+      "title": "해결: 지정 포장재 + 보험 택배",
+      "body": "총무에서 지정 포장재를 먼저 발송하고 보험 택배로 회수. 파손 시 보험 처리.",
+      "parent_ref": "h6-broken",
+      "source": "synthetic",
+      "source_ref": "syn-hr-038",
+      "error_code": null,
+      "keywords": [
+        "지정 포장재",
+        "보험 택배"
+      ],
+      "resolution_summary": "포장재 선발송 + 보험",
+      "created_at": "2026-10-12T14:00:00+09:00",
+      "expected_queries": [
+        "장비 택배 파손 문제 어떻게 해결했어?"
+      ]
+    },
+    {
+      "ref": "h6-guide",
+      "type": "ref",
+      "title": "장비 반납 절차 안내",
+      "body": "반납 신청 → 포장재 수령 → 보험 택배 발송 → 자산 대장 확인 → 완료 메일. 소요 5영업일.",
+      "parent_ref": "h6-root",
+      "source": "synthetic",
+      "source_ref": "syn-hr-039",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-13T09:00:00+09:00",
+      "expected_queries": [
+        "장비 반납 절차 알려줘"
+      ]
+    },
+    {
+      "ref": "o1-wifi",
+      "type": "ref",
+      "title": "사내 와이파이 비밀번호 변경 주기 메모",
+      "body": "분기 1회 변경, 변경일 1주 전 공지. 게스트망은 월 1회.",
+      "source": "synthetic",
+      "source_ref": "syn-hr-040",
+      "error_code": null,
+      "keywords": [
+        "와이파이",
+        "변경 주기"
+      ],
+      "resolution_summary": "와이파이 비밀번호 변경 주기",
+      "created_at": "2026-10-20T10:00:00+09:00",
+      "expected_queries": []
+    }
+  ]
+}
