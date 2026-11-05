@@ -61,7 +61,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             yield sse("stage", StageEvent(node="graph_search", status="start").model_dump())
         results = await asyncio.gather(
             asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec) if do_policy else _noop(),
-            asyncio.to_thread(_graph_search, workspace_id, q_tokens, q_vec, error_code) if do_graph else _noop(),
+            asyncio.to_thread(_graph_search, workspace_id, q_tokens, q_vec, error_code, CASE_FLOOR.get(prof.embedding_model)) if do_graph else _noop(),
             return_exceptions=True)
         pol, gra = results
         if do_policy:
@@ -79,8 +79,18 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
                 chain_ctx, chain_event = gra
                 if chain_event:
                     yield sse("chain", chain_event.model_dump())
-                yield sse("stage", StageEvent(node="graph_search", status="done").model_dump())
+                yield sse("stage", StageEvent(node="graph_search", status="done", detail=None if chain_ctx else "no_relevant_case").model_dump())
                 retrieved += [f"n:{n['id']}" for n in chain_ctx]
+        # 사례만 찾기로 했는데 관련 사례가 없으면 규정에서 근거를 찾는다
+        if do_graph and not do_policy and policy_enabled and not chain_ctx:
+            yield sse("stage", StageEvent(node="policy_rag", status="start", detail="fallback").model_dump())
+            try:
+                policy_ctx = await asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec)
+                yield sse("policy", [PolicyRef(**p).model_dump() for p in policy_ctx])
+                yield sse("stage", StageEvent(node="policy_rag", status="done").model_dump())
+                retrieved += [f"c:{p['chunk_id']}" for p in policy_ctx]
+            except Exception as e:  # noqa: BLE001 — 폴백 실패는 '근거 없음'으로 이어진다
+                yield sse("stage", StageEvent(node="policy_rag", status="error", detail=str(e)[:200]).model_dump())
         retrieval_ms = int((time.perf_counter() - t0) * 1000)
 
         # gate
@@ -126,19 +136,50 @@ async def _noop():
     return None
 
 
+COMPANY_SLOTS = 2   # 근거 5건 중 회사 규정에 보장하는 자리 (후보 20건 안에 있을 때)
+
+
+def _with_company_rules(rows: list[dict], k: int = 5, slots: int = COMPANY_SLOTS) -> list[dict]:
+    """외부 기준(고시)은 분량이 많아 같은 주제의 회사 규정을 밀어낸다. 상위 k 에 회사 규정이 모자라면 가장 낮은 순위의 고시와 바꾼다."""
+    top, rest = rows[:k], rows[k:]
+    pool = [r for r in rest if r["doc_type"] != "고시"]
+    need = slots - sum(r["doc_type"] != "고시" for r in top)
+    while need > 0 and pool:
+        ext = [r for r in top if r["doc_type"] == "고시"]
+        if not ext:
+            break
+        top.remove(ext[-1])
+        top.append(pool.pop(0))
+        need -= 1
+    return top
+
+
 def _policy_rag(ws: int, q_tokens: str, q_vec: list[float] | None) -> list[dict]:
     with db.connect() as conn:
-        rows = db.search_chunks(conn, ws, q_tokens, q_vec, 5)
+        rows = _with_company_rules(db.search_chunks(conn, ws, q_tokens, q_vec, 20))
     return [{"ref": f"P{i + 1}", "chunk_id": r["id"], "doc_id": r["doc_id"], "doc_title": r["doc_title"], "version": r["version"],
              "article_label": r["article_label"], "page": r["page"], "text": r["text"]} for i, r in enumerate(rows)]
 
 
-def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None) -> tuple[list[dict], ChainEvent | None]:
+# 사례 관련성 하한 (근거리, 원거리, 원거리일 때 필요한 일치 단어 수). 벡터 거리 분포는 임베딩 모델마다 달라 보정한 모델에만 적용한다.
+CASE_FLOOR = {"text-embedding-3-small": (0.62, 0.70, 2)}
+
+
+def _relevant(hit: dict, floor: tuple[float, float, int] | None) -> bool:
+    """에러 코드 일치, 벡터 거리가 가까움, 조금 멀어도 질의 단어가 여럿 일치 — 셋 중 하나면 근거로 쓴다. 벡터가 없으면 판단하지 않는다."""
+    if floor is None or hit["exact"] or hit["distance"] is None:
+        return True
+    near, far, terms = floor
+    return hit["distance"] <= near or (hit["distance"] <= far and hit["lex_terms"] >= terms)
+
+
+def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,
+                  floor: tuple[float, float, int] | None = None) -> tuple[list[dict], ChainEvent | None]:
     with db.connect() as conn:
-        hits = db.search_nodes(conn, ws, q_tokens, q_vec, error_code, 1)
-        if not hits:
+        hits = db.search_case_entry(conn, ws, q_tokens, q_vec, error_code, 3)
+        entry = next((h["node_id"] for h in hits if _relevant(h, floor)), None)
+        if entry is None:
             return [], None
-        entry = hits[0]["node_id"]
         # 루트 기준 체인: 진입 노드의 루트에서 하향 (BE-HANDOFF-001 §4 ④)
         root = db.root_of(conn, ws, entry) or entry
         ch = db.chain(conn, ws, root, 4, 30)

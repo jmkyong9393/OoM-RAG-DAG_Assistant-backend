@@ -61,7 +61,7 @@ def search_chunks(conn, ws: int, tokens: str | None, vec: list[float] | None, k:
         return []
     ids = [r["chunk_id"] for r in rows]
     detail = {r["id"]: r for r in conn.execute("""
-        SELECT c.id, c.doc_id, d.title AS doc_title, d.version, c.article_label, c.page, c.text
+        SELECT c.id, c.doc_id, d.title AS doc_title, d.version, d.doc_type, c.article_label, c.page, c.text
         FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id WHERE c.id = ANY(%s)""", (ids,))}
     return [{**detail[i], "score": s["score"]} for i, s in zip(ids, rows) if i in detail]
 
@@ -69,6 +69,13 @@ def search_chunks(conn, ws: int, tokens: str | None, vec: list[float] | None, k:
 def search_nodes(conn, ws: int, tokens: str | None, vec: list[float] | None, error_code: str | None, k: int = 5) -> list[dict]:
     return conn.execute(
         "SELECT node_id, score FROM hybrid_search_nodes(%s, %s, %s::vector, %s, %s)",
+        (ws, tokens, vec_literal(vec), error_code, k)).fetchall()
+
+
+def search_case_entry(conn, ws: int, tokens: str | None, vec: list[float] | None, error_code: str | None, k: int = 3) -> list[dict]:
+    """어시스턴트용 사례 진입 후보. 각 행에 관련성 근거(exact · lex_terms · distance)가 붙는다."""
+    return conn.execute(
+        "SELECT node_id, score, exact, lex_terms, distance FROM search_case_entry(%s, %s, %s::vector, %s, %s)",
         (ws, tokens, vec_literal(vec), error_code, k)).fetchall()
 
 

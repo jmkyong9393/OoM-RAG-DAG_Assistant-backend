@@ -16,7 +16,7 @@
     "parent_id": 10,
     "kind": "dept",
     "name": "SW 개발",
-    "policy_enabled": false,
+    "policy_enabled": true,
     "settings": {
       "language": "ko"
     }

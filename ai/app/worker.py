@@ -1,5 +1,5 @@
 """정제 워커. log_nodes.refine_status = pending 을 폴링해(SKIP LOCKED) LLM 정제 → kiwi 토큰 → 임베딩 → UPDATE.
-실패는 attempts+1, 3회면 failed. 키워드·에러 코드는 workspace_terms(auto) 에 누적한다.
+실패는 attempts+1, 3회면 failed. 분석기가 쪼개는 키워드와 에러 코드는 workspace_terms(auto) 에 누적한다.
 부수 작업: tokens 가 비어 있는 policy_chunks·log_nodes(정제 완료분)도 토크나이징·임베딩한다(시드 직후 어휘 검색이 바로 되게).
 
 실행: uv run python -m app.worker            (무한 루프)
@@ -18,6 +18,18 @@ from app.retrieval import db, embed
 from app.retrieval.tokenize import Tokenizer
 
 
+def dictionary_terms(tok: Tokenizer, keywords: list[str], error_code: str | None) -> list[str]:
+    """사용자 사전에 넣을 단어: 분석기가 한 토큰으로 지키지 못하는 한 단어(복합어·신조어)와 에러 코드.
+    이미 한 토큰인 일반 명사를 고유명사로 넣으면 주변 분석이 달라진다('기한 경과' → '기한'). 여러 어절·숫자로 시작하는 말은 단어가 아니다."""
+    out = []
+    for k in (x.strip() for x in keywords if x):
+        if len(k) < 2 or k[0].isdigit() or any(c.isspace() for c in k):
+            continue
+        if tok.tokens(k).split() != [k.lower()]:
+            out.append(k)
+    return out + ([error_code] if error_code else [])
+
+
 async def refine_one(conn, row: dict, tokenizer_cache: dict[int, Tokenizer]) -> bool:
     ws = row["workspace_id"]
     tok = tokenizer_cache.get(ws)
@@ -33,7 +45,7 @@ async def refine_one(conn, row: dict, tokenizer_cache: dict[int, Tokenizer]) -> 
         kw_tokens = tok.tokens(" ".join(result.keywords)) if result.keywords else ""
         db.finish_refine(conn, row["id"], result.model_dump(), (tokens + " " + kw_tokens).strip(),
                          vec, prof.embedding_model if vec else None)
-        db.add_terms(conn, ws, result.keywords + ([result.error_code] if result.error_code else []))
+        db.add_terms(conn, ws, dictionary_terms(tok, result.keywords, result.error_code))
         return True
     except Exception as e:  # noqa: BLE001
         db.fail_refine(conn, row["id"], row["refine_attempts"], f"{type(e).__name__}: {e}", tokens)
