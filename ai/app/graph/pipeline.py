@@ -331,7 +331,8 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     for i, n in enumerate(nodes):
         ref = f"N{i + 1}"
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
-                    "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs")})
+                    "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
+                    "entry": n["id"] == entry})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
                                   last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None))

@@ -100,3 +100,20 @@ async def test_case_answer_carries_the_rule_it_followed(fake_mode, backfilled, a
 def db_linked(ws, slug, article):
     with db.connect() as conn:
         return db.cases_linked_to(conn, ws, [(slug, article)])
+
+
+def test_must_include_lists_cases_exceptions_and_entry_relation():
+    def node(i, policy=None, entry=False, status="active"):
+        return {"ref": f"N{i}", "id": i, "type": "fail", "status": status, "title": "t", "resolution_summary": None, "depth": 0, "policy": policy, "entry": entry}
+    assert llm._must_include([]) == [] and llm._must_include([node(1, status="deprecated")]) == []
+    must = llm._must_include([
+        node(1, [{"relation": "follows", "ref": "P2", "label": "운영지침 제9조"}], entry=True),
+        node(2, [{"relation": "exception", "ref": "P1", "label": "운영지침 제10조", "note": "당시 75%"}]),
+        node(3, [{"relation": "gap", "topic": "합산 상한"}]),
+        node(4, [{"relation": "exception", "ref": "P1", "label": "x"}], status="deprecated")])
+    assert must[0].startswith("해결 사례를 한 문장 이상")
+    assert any("[N2]" in m and "[P1]" in m and "당시 75%" in m for m in must), "예외 사례는 체인 어디에 있든"
+    assert any("[N1]" in m and "[P2]" in m and "따른 규정" in m for m in must), "진입 사례가 따른 규정"
+    assert not any("N3" in m or "N4" in m for m in must), "진입 노드가 아닌 '기준 없음'과 폐기 노드는 넣지 않는다"
+    gap = llm._must_include([node(1, [{"relation": "gap", "topic": "합산 상한"}], entry=True)])
+    assert any("규정에 기준이 없다" in m and "합산 상한" in m for m in gap)
