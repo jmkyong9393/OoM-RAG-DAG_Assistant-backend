@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 3, "kind": "policy", "query": "단순 변심 교환·반품은 받은 날부터 며칠 안에 신청해야 해?", "expect": ["c:retail-refund-2026-11-a3-1"], "note": "기본 | 제3조 ① | 상품을 받은 날(배송완료일)부터 7일 이내에 신청"},
+  {"workspace_id": 3, "kind": "policy", "query": "불량이나 오배송 상품은 언제까지 반품 받아줄 수 있어요?", "expect": ["c:retail-refund-2026-11-a5-1"], "note": "기본 | 제5조 ① | 공급받은 날부터 3개월 이내, 안 날 또는 알 수 있었던 날부터 30일 이내"},
+  {"workspace_id": 3, "kind": "policy", "query": "반품 접수하고 상품 안 돌려보내는 고객은 언제 신청이 무효 돼?", "expect": ["c:retail-refund-2026-11-a13-1"], "note": "기본 | 제13조 ① | 신청한 날부터 14일이 지나도록 돌려보내지 않으면 신청 효력 상실"},
+  {"workspace_id": 3, "kind": "policy", "query": "반품 상품 돌려받으면 환불은 며칠 안에 해줘야 하나요?", "expect": ["c:retail-refund-2026-11-a14-1"], "note": "기본 | 제14조 ① | 반품 상품을 돌려받은 날부터 3영업일 이내에 환불"},
+  {"workspace_id": 3, "kind": "policy", "query": "환불로 받은 충전금은 유효기간이 얼마나 돼?", "expect": ["c:retail-refund-2026-11-a17-1"], "note": "기본 | 제17조 ④ | 발생일부터 5년간 유효, 소멸 30일 전에 회원에게 안내"},
+  {"workspace_id": 3, "kind": "policy", "query": "매장에서 산 상품은 며칠 안에 뭘 들고 가야 환불돼요?", "expect": ["c:retail-refund-2026-11-a24-1"], "note": "기본 | 제24조 ① | 구입일부터 7일 안에 영수증과 상품을 가지고 매장 방문"},
+  {"workspace_id": 3, "kind": "policy", "query": "입점 판매자 상품 미도착 신고 들어오면 판매자 조치 기한은?", "expect": ["c:retail-refund-2026-11-a20-1"], "note": "기본 | 제20조 ② | 판매자가 10일 안에 조치, 조치하지 않으면 회사가 거래 취소·환불 가능"},
+  {"workspace_id": 3, "kind": "policy", "query": "얼린 고기 잘못 샀다고 물러달라는데 해줘도 되나요?", "expect": ["c:retail-refund-2026-11-a9-1"], "note": "의역 | 제9조 ① | 신선·냉장·냉동식품은 단순 변심이나 주문 착오로 반품·교환하지 않음"},
+  {"workspace_id": 3, "kind": "policy", "query": "과일이 물러서 왔다는 고객한테 증빙은 언제까지 받아야 해?", "expect": ["c:retail-refund-2026-11-a5-1"], "note": "의역 | 제5조 ② | 수령 후 3일 이내에 불량 부분을 찍은 사진을 함께 제출"},
+  {"workspace_id": 3, "kind": "policy", "query": "카드로 긁은 주문 취소하면 돈은 언제쯤 들어가?", "expect": ["c:retail-refund-2026-11-a16-1"], "note": "의역 | 제16조 ③ | 신용·체크카드 결제분은 3~7일 안에 환불, 반영 시점은 카드사 정책"},
+  {"workspace_id": 3, "kind": "policy", "query": "외국에서 온 물건이 깨져 있으면 몇일 안에 접수해야 공짜로 돌려보내?", "expect": ["c:retail-refund-2026-11-a23-1"], "note": "의역(오타) | 제23조 ① | 수령 후 15일 안에 환불을 신청하면 회사가 발급한 반품 라벨로 무료 반품"},
+  {"workspace_id": 3, "kind": "policy", "query": "직매입 상품 단순 변심이면 반품배송비 얼마 빼고 환불해?", "expect": ["c:retail-refund-2026-11-s28-1"], "note": "표 | 별표 2 직매입 상품 단순 변심 반품 행 | 결제금액 19,800원 미만 5,000원, 19,800원 이상 2,500원"},
+  {"workspace_id": 3, "kind": "policy", "query": "판매 경로별로 자동 구매확정은 받고 며칠 뒤에 돼요?", "expect": ["c:retail-refund-2026-11-s27-1"], "note": "표 | 별표 1 자동 구매확정 행 | 입점 판매자 상품은 수령 후 7일(최소 3영업일), 직매입·매장은 해당 없음"},
+  {"workspace_id": 3, "kind": "policy", "query": "직매입이랑 입점 판매자 TV, 변심 반품 기간이 달라?", "expect": ["c:retail-refund-2026-11-a4-1", "c:retail-refund-2026-11-a3-1"], "note": "비교 | 제4조 ①②③, 제3조 ① | 직매입 지정 전자제품은 90일 이내, 입점 판매자 상품은 받은 날부터 7일 이내"},
+  {"workspace_id": 3, "kind": "policy", "query": "입점 판매자가 상세에 적은 반품 조건이랑 우리 규정 중 뭐가 우선이야?", "expect": ["c:retail-refund-2026-11-a10-1"], "note": "비교 | 제10조 ⑤ | 이 규정과 관계 법령의 반품 기준이 우선, 상품 결함 보상은 소비자분쟁해결기준"}
+]

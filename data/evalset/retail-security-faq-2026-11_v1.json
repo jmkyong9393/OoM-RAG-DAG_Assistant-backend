@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 3, "kind": "policy", "query": "고객이 비밀번호 몇 번 틀리면 계정이 잠기는 거야?", "expect": ["c:retail-security-faq-2026-11-q3-1"], "note": "기본 | Q3 | 비밀번호 입력 실패가 5회를 넘으면 계정을 잠금"},
+  {"workspace_id": 3, "kind": "policy", "query": "얼마나 오래 로그인 안 하면 휴면계정으로 넘어가요?", "expect": ["c:retail-security-faq-2026-11-q13-1"], "note": "기본 | Q13 | 1년 이상 이용이 없으면 장기 미이용 회원(휴면계정)으로 보고 이용 제한"},
+  {"workspace_id": 3, "kind": "policy", "query": "약관 위반으로 해지된 회원은 재가입이 얼마나 막혀?", "expect": ["c:retail-security-faq-2026-11-q16-1"], "note": "기본 | Q16 | 법령·이용약관 위반으로 해지된 회원의 재가입 제한 기간은 1년"},
+  {"workspace_id": 3, "kind": "policy", "query": "고객이 탈퇴 신청한 걸 취소해 달라는데 가능해요?", "expect": ["c:retail-security-faq-2026-11-q14-1"], "note": "기본 | Q14 | 탈퇴는 신청 뒤에는 취소할 수 없음"},
+  {"workspace_id": 3, "kind": "policy", "query": "2단계 인증은 회원이 꼭 설정해야 하는 거야?", "expect": ["c:retail-security-faq-2026-11-q5-1"], "note": "기본 | Q5 | 2단계 인증은 의무가 아니며 회사는 사용을 권장"},
+  {"workspace_id": 3, "kind": "policy", "query": "상품권 살 때 추가 인증을 꼭 해야 하는 이유가 뭐예요?", "expect": ["c:retail-security-faq-2026-11-q9-1"], "note": "기본 | Q9 | 도용·피싱 피해를 막으려고 환금성 상품 구매 시 추가 인증을 의무 적용"},
+  {"workspace_id": 3, "kind": "policy", "query": "자동 로그인은 어떤 경우에 풀린다고 안내하면 돼?", "expect": ["c:retail-security-faq-2026-11-q4-1"], "note": "기본 | Q4 | 로그아웃·로그인정보 관리 해제, 장기 미사용, 비밀번호 변경·회원 탈퇴 시 풀림"},
+  {"workspace_id": 3, "kind": "policy", "query": "간편결제 가입 안 한 고객이 계좌이체하려면 뭐가 필요해?", "expect": ["c:retail-security-faq-2026-11-q11-1"], "note": "기본 | Q11 | 일반 결제로 계좌이체를 하면 보안카드나 OTP가 꼭 있어야 함"},
+  {"workspace_id": 3, "kind": "policy", "query": "연락처 바뀐 고객은 본인 확인 전에 뭘 먼저 해야 해요?", "expect": ["c:retail-security-faq-2026-11-q6-1"], "note": "기본 | Q6 | 마이페이지의 회원정보 변경에서 연락처를 먼저 고쳐야 함"},
+  {"workspace_id": 3, "kind": "policy", "query": "확인용 숫자 코드가 폰으로 안 들어온다는데 뭘 봐야 해?", "expect": ["c:retail-security-faq-2026-11-q2-1"], "note": "의역 | Q2 | 스팸함·수신 차단 설정 확인, 입력 정보가 회원정보와 다르면 발송되지 않음"},
+  {"workspace_id": 3, "kind": "policy", "query": "남이 몰래 접속해서 쓰는 것 같다는 고객한테 뭐부터 안내해?", "expect": ["c:retail-security-faq-2026-11-q7-1"], "note": "의역 | Q7 | 곧바로 회사에 알리고 회사 안내를 따라야 함"},
+  {"workspace_id": 3, "kind": "policy", "query": "자기 정보 털렸다는 통보 받은 고객은 어디서 확인해요?", "expect": ["c:retail-security-faq-2026-11-q18-1"], "note": "의역 | Q18 | 유출 여부 조회 화면에서 내 정보가 포함됐는지 확인"},
+  {"workspace_id": 3, "kind": "policy", "query": "결제에 걸어둔 카드 비번 계속 틀려서 막혔대요 어디서 풀어야 되요?", "expect": ["c:retail-security-faq-2026-11-q12-1"], "note": "의역(오타) | Q12 | 3회 잘못 넣어 카드가 잠기면 카드사 고객센터에서 비밀번호 재설정"},
+  {"workspace_id": 3, "kind": "policy", "query": "구매회원이랑 판매회원은 탈퇴 후 재가입 제한 기간이 달라?", "expect": ["c:retail-security-faq-2026-11-q15-1"], "note": "비교 | Q15 | 스스로 탈퇴한 회원은 30일, 판매회원은 2개월"},
+  {"workspace_id": 3, "kind": "policy", "query": "탈퇴 후 부정 이용 회원 정보랑 결제 기록은 보관 기간이 달라?", "expect": ["c:retail-security-faq-2026-11-q17-1"], "note": "비교 | Q17 | 부정 이용 확인 회원 정보는 탈퇴 후 1년, 대금결제 기록은 5년 보관"}
+]

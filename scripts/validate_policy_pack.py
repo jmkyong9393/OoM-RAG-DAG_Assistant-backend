@@ -236,8 +236,22 @@ def main() -> int:
         slug = d.name; E, W = errors[slug], warns[slug]
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8")); metas[slug] = meta
         md = d / f"{slug}.md"
-        if not md.exists():   # HWPX 등 다른 원문에서 만든 문서(고시)는 메타만 본다
-            W.append("본문: <slug>.md 없음 — 형식·질의 점검 생략"); continue
+        external = meta.get("doc_type") == "고시" or meta.get("source_type") in ("hwp", "json")
+        if external or not md.exists():   # 법령·고시처럼 회사가 쓰지 않은 외부 기준 문서는 원문 형식을 고칠 수 없다 — 메타와 회사 귀속만 본다
+            miss = [k for k in META_REQUIRED if k not in meta]
+            if miss: E.append(f"meta: 필수 키 없음 {miss}")
+            extra = [k for k in meta if k not in META_REQUIRED + META_OPTIONAL]
+            if extra: E.append(f"meta: 표준 밖 키 {extra}")
+            ws = seeds["ws"].get(meta.get("workspace_id"))
+            if not ws: E.append(f"meta: workspace_id {meta.get('workspace_id')} 가 시드에 없음")
+            elif meta.get("tenant") != seeds["tenants"].get(ws["tenant_id"]): E.append(f"meta: tenant '{meta.get('tenant')}' ≠ 부서 {ws['id']} 의 회사")
+            if md.exists():
+                args = types.SimpleNamespace(slug=slug, workspace=0, title="", version="", doc_type="", source_type="markdown", file_path=None,
+                                             effective_from=None, tags=[], supersedes=None, max_chars=700)
+                ch = bpj.build(md, args)["chunks"]
+                stats[slug] = (len(ch), len({c["article_label"] for c in ch}))
+            W.append("외부 기준 문서 — 원문 형식·질의 점검 생략")
+            continue
         body = check_body(slug, md, E, W)
         check_meta(slug, d, meta, body["text"], seeds, E, W)
         hit = [b for b in block if b in body["text"]]

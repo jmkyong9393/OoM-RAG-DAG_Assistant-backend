@@ -53,11 +53,11 @@ async def test_policy_query_hits_active_version_only(fake_mode, backfilled):
     refs = d["policy"]
     assert refs and refs[0]["ref"] == "P1"
     chunk_ids = [r["chunk_id"] for r in refs]
-    # 시드 v2.1 또는 index_policy 로 적재한 v2.2 (v2.2 가 있으면 v2.1 은 R8 로 retired)
-    assert any(c.startswith("vpn-guide-v21") or c.startswith("vpn-guide-v22") for c in chunk_ids)
+    # 개정 사슬: 시드 v2.1 → (make index) v2.2 → retail-vpn-2026-11. 적재 상태에 따라 가장 새 판 하나만 검색된다
+    chain = ["vpn-guide-v21", "vpn-guide-v22", "retail-vpn-2026-11"]
+    found = [v for v in chain if any(c.startswith(v) for c in chunk_ids)]
+    assert len(found) == 1, f"VPN 지침은 active 한 판만 검색돼야 한다: {found}"
     assert not any(c.startswith("vpn-guide-v20") for c in chunk_ids), "retired 문서는 검색되지 않는다"
-    if any(c.startswith("vpn-guide-v22") for c in chunk_ids):
-        assert not any(c.startswith("vpn-guide-v21") for c in chunk_ids), "개정판이 있으면 구버전은 빠진다"
     assert all(r["doc_title"] and r["article_label"] and r["text"] for r in refs)
     assert all(i.startswith("c:") for i in d["done"]["retrieved_ids"])
     assert d["citations"]["verified"][0] == "P1"
