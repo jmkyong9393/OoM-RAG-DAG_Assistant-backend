@@ -38,6 +38,8 @@ public class PolicyRefService {
 
   public record RefInput(String relation, String policy, String article, String note, String topic) {}
   /** docTitle·articleLabel 은 지금 그 조문이 활성 규정에 있을 때만 채워진다(개정으로 사라졌으면 null). */
+  private static final String[] NONE = new String[0];   // 조회했지만 없는 조문(개정으로 사라짐)
+
   public record RefView(String relation, String policy, String article, String note, String topic, String docTitle, String articleLabel) {}
   public record ArticleOption(String policy, String docTitle, String article, String articleLabel) {}
 
@@ -80,6 +82,25 @@ public class PolicyRefService {
   public List<RefView> read(long ws, long nodeId) {
     String raw = jdbc.sql("SELECT coalesce(attributes->'policy_refs', '[]'::jsonb)::text FROM log_nodes WHERE id = ? AND workspace_id = ?")
         .params(nodeId, ws).query(String.class).optional().orElseThrow(() -> ApiException.notFound("log"));
+    return views(ws, raw, new java.util.HashMap<>());
+  }
+
+  /** 여러 노드의 근거 조문을 한 번에(체인 조회). 근거가 없는 노드는 결과에 없다. */
+  public Map<Long, List<RefView>> readMany(long ws, List<Long> nodeIds) {
+    Map<Long, List<RefView>> out = new LinkedHashMap<>();
+    if (nodeIds.isEmpty()) return out;
+    Map<String, String[]> labels = new java.util.HashMap<>();   // 같은 조문을 가리키는 노드가 많다 — 조문 라벨 조회를 한 번씩만
+    jdbc.sql("SELECT id, attributes->'policy_refs' AS refs FROM log_nodes WHERE workspace_id = ? AND id = ANY (?) AND jsonb_typeof(attributes->'policy_refs') = 'array'")
+        .params(ws, nodeIds.toArray(Long[]::new))
+        .query((rs, i) -> Map.entry(rs.getLong("id"), rs.getString("refs"))).list()
+        .forEach(e -> {
+          List<RefView> v = views(ws, e.getValue(), labels);
+          if (!v.isEmpty()) out.put(e.getKey(), v);
+        });
+    return out;
+  }
+
+  private List<RefView> views(long ws, String raw, Map<String, String[]> labels) {
     List<Map<String, String>> refs;
     try {
       refs = json.readValue(raw, new TypeReference<>() {});
@@ -88,9 +109,11 @@ public class PolicyRefService {
     }
     List<RefView> out = new ArrayList<>();
     for (Map<String, String> r : refs) {
-      String[] hit = r.get("policy") == null ? null : labelOf(ws, r.get("policy"), r.get("article"));
+      String[] hit = r.get("policy") == null ? null
+          : labels.computeIfAbsent(r.get("policy") + "|" + r.get("article"), k -> java.util.Optional.ofNullable(labelOf(ws, r.get("policy"), r.get("article"))).orElse(NONE));
+      boolean found = hit != null && hit != NONE;
       out.add(new RefView(r.get("relation"), r.get("policy"), r.get("article"), r.get("note"), r.get("topic"),
-          hit == null ? null : hit[0], hit == null ? null : hit[1]));
+          found ? hit[0] : null, found ? hit[1] : null));
     }
     return out;
   }

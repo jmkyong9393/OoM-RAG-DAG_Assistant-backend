@@ -3,6 +3,7 @@
 규칙
   - source_hash(제목·버전·청크 본문의 SHA-256)가 같은 문서는 스킵 (재실행 멱등)
   - 같은 slug 가 있는데 해시가 다르면 청크를 교체하고 문서 메타를 갱신 (재인덱싱)
+  - 같은 slug 의 workspace_id 가 바뀌었으면 문서와 청크를 그 부서로 옮긴다 (내용이 같으면 임베딩은 그대로)
   - R8 개정 자동 폐기: `supersedes` 로 지목한 slug, 또는 같은 workspace·같은 title 의 다른 active 문서를 retired 로
     (retire_reason='<version> 개정', retired_by='script', audit_log superseded)
   - tokens/embedding 은 비워 두고 정제 워커가 채운다: `python -m app.worker --once` (make index 가 이어서 실행)
@@ -71,12 +72,19 @@ def add_terms(conn, ws: int, terms: list[str]) -> int:
 def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
     slug, ws = doc["slug"], doc["workspace_id"]
     h = source_hash(doc)
-    existing = conn.execute("SELECT id, source_hash, status FROM policy_documents WHERE slug = %s", (slug,)).fetchone()
+    existing = conn.execute("SELECT id, source_hash, status, workspace_id FROM policy_documents WHERE slug = %s", (slug,)).fetchone()
     result = {"slug": slug, "action": None, "chunks": len(doc["chunks"]), "retired": [], "terms": 0}
     if not dry_run:
         result["terms"] = add_terms(conn, ws, doc.get("terms") or [])   # 문서가 스킵돼도 terms 는 멱등 적재 (meta.json 에 term 만 추가한 경우)
+    moved = bool(existing) and existing["workspace_id"] != ws
+    if moved and not dry_run:   # 부서를 옮긴 문서: 문서를 먼저 옮겨야 청크의 부서 일치 검사를 통과한다
+        conn.execute("UPDATE policy_documents SET workspace_id = %s WHERE id = %s", (ws, existing["id"]))
+        conn.execute("UPDATE policy_chunks SET workspace_id = %s WHERE doc_id = %s", (ws, existing["id"]))
+        conn.execute("""INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
+                        VALUES ((SELECT tenant_id FROM workspaces WHERE id = %s), %s, 'policy_documents', %s, 'moved', 'script', 'script', %s, %s)""",
+                     (ws, ws, str(existing["id"]), f"부서 {existing['workspace_id']} → {ws}", doc["title"]))
     if existing and existing["source_hash"] == h:
-        result["action"] = "skipped"
+        result["action"] = "moved" if moved else "skipped"
         return result
     if dry_run:
         result["action"] = "would_" + ("reindex" if existing else "index")

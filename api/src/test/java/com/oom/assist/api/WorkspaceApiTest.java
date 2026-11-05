@@ -29,7 +29,11 @@ class WorkspaceApiTest extends AbstractApiTest {
       org.springframework.test.util.ReflectionTestUtils.setField(controller, "publicTenant", "");
     }
     mvc.perform(asUser(get("/workspaces"), userLead)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
-        .andExpect(jsonPath("$[0].id").value(wsSw));
+        .andExpect(jsonPath("$[0].id").value(wsSw)).andExpect(jsonPath("$[0].suggestions", hasSize(0)));
+    // 첫 화면 추천 질문은 부서 설정에서 온다
+    jdbc.sql("UPDATE workspaces SET settings = settings || '{\"suggestions\": [\"질문 하나\", \"질문 둘\"]}'::jsonb WHERE id = ?").param(wsSw).update();
+    mvc.perform(asUser(get("/workspaces"), userLead)).andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].suggestions", hasSize(2))).andExpect(jsonPath("$[0].suggestions[0]").value("질문 하나"));
   }
 
   @Test
@@ -95,6 +99,11 @@ class WorkspaceApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.workspaces[0].case_enabled").value(true)).andExpect(jsonPath("$.workspace_id").value(wsSw));
     mvc.perform(asUser(get("/me"), userBackend)).andExpect(status().isOk()).andExpect(jsonPath("$.company_admin").value(false))
         .andExpect(jsonPath("$.workspaces[?(@.id == " + wsSw + ")].can_configure").value(false));
+    // 부서 헤더 없이도 된다 — 권한은 로그인한 사용자로만 본다 (회사 관리자는 소속하지 않은 부서도 고친다)
+    mvc.perform(asUser(patch("/workspaces/" + wsHr), userLead).contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"case_enabled\": true}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.case_enabled").value(true));
+    assertThat(jdbc.sql("SELECT actor FROM audit_log WHERE table_name = 'workspaces' AND row_id = ? ORDER BY id DESC LIMIT 1")
+        .param(String.valueOf(wsHr)).query(String.class).single()).isEqualTo("배종현");
   }
 
   @Test

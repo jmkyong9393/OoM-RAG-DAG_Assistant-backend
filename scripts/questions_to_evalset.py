@@ -126,7 +126,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "evalset")
     a = ap.parse_args()
     meta = json.loads(a.meta.read_text(encoding="utf-8"))
-    slug, ws = meta["slug"], int(meta["workspace_id"])
+    slug, ws = meta["slug"], int(meta.get("ask_workspace_id") or meta["workspace_id"])   # 전사 공통 문서는 실제로 묻는 부서에서 잰다
     src = a.meta.parent / f"{slug}.questions.md"
     chunks_path = ROOT / "data" / "policies" / f"{slug}.chunks.json"
     chunks = json.loads(chunks_path.read_text(encoding="utf-8"))["chunks"]

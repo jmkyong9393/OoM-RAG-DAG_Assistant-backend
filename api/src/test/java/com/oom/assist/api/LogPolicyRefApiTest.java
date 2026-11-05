@@ -62,6 +62,10 @@ class LogPolicyRefApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$[0].relation").value("follows")).andExpect(jsonPath("$[0].doc_title").value("운영지침"))
         .andExpect(jsonPath("$[0].article_label").value("제9조 (커넥션 풀)")).andExpect(jsonPath("$[0].note").value("풀 20"))
         .andExpect(jsonPath("$[1].relation").value("gap")).andExpect(jsonPath("$[1].topic").value("합산 상한"));
+    // 체인 조회(타임라인)의 노드에도 같은 근거가 실린다. 근거가 없는 노드는 null
+    mvc.perform(as(get("/chains/" + id), userLead, wsSw)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.nodes[0].policy_refs", hasSize(2))).andExpect(jsonPath("$.nodes[0].policy_refs[0].article_label").value("제9조 (커넥션 풀)"))
+        .andExpect(jsonPath("$.nodes[0].policy_refs[1].relation").value("gap"));
     // 저장 형태는 적재 스크립트(load_alignment.py)와 같다
     assertThat(jdbc.sql("SELECT attributes->'policy_refs'->0->>'article' FROM log_nodes WHERE id = ?").param(id).query(String.class).single()).isEqualTo("제9조");
 

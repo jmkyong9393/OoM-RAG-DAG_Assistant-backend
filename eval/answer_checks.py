@@ -5,7 +5,8 @@
    "cite_chunks_any": ["<chunk_id>", …],          # 이 중 하나를 [P…] 로 인용해야 한다
    "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c5-heap-fix"}, …],   # 이 중 하나를 [N…] 로 인용해야 한다 (id 는 data/logs/<log>.ids.json)
    "contains_all": ["75", "70"], "contains_any": ["기준이 없", "정해져 있지 않"],   # 답변 문장에 들어 있어야 하는 말
-   "contains_none": ["9영업일"]}                                                    # 들어 있으면 안 되는 말(질문과 무관한 사례가 섞였는지)
+   "contains_none": ["9영업일"],
+   "cited": true}                                                    # 들어 있으면 안 되는 말(질문과 무관한 사례가 섞였는지)
 항목마다 걸린 조건을 전부 만족하면 통과. 조건별 통과 수도 함께 낸다.
 
 실행: set -a; . deploy/.env; set +a; cd ai && uv run python ../eval/answer_checks.py [점검표…] [--json 결과경로] [--runs 1]
@@ -24,7 +25,7 @@ sys.path.insert(0, str(ROOT / "ai"))
 
 from app.graph import pipeline  # noqa: E402
 
-CHECKS = ("cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none")
+CHECKS = ("cited", "cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none")
 
 
 def parse(buf: bytes) -> list[tuple[str, object]]:
@@ -62,6 +63,8 @@ async def run_one(item: dict, cache: dict) -> dict:
     chunks = {p["chunk_id"] for p in d.get("policy") or [] if p["ref"] in cited}
     nodes = {n["id"] for n in (d.get("chain") or {}).get("nodes", []) if n["ref"] in cited}
     res = {}
+    if item.get("cited"):                      # 검증된 인용이 하나라도 있다(근거 없이 끝나지 않았다)
+        res["cited"] = bool(cited)
     if "cite_chunks_any" in item:
         res["cite_chunks_any"] = bool(chunks & set(item["cite_chunks_any"]))
     if "cite_nodes_any" in item:

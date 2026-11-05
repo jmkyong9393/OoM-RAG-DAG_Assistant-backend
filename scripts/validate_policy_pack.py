@@ -26,7 +26,7 @@ SRC = ROOT / "data" / "policies" / "src"
 SEED = ROOT / "data" / "seed"
 
 META_REQUIRED = ["slug", "tenant", "workspace_id", "title", "version", "doc_type", "source_type", "effective_from", "tags", "terms", "author", "summary"]
-META_OPTIONAL = ["file_path", "supersedes"]
+META_OPTIONAL = ["file_path", "supersedes", "ask_workspace_id"]   # ask_workspace_id: 평가 질의를 묻는 부서(문서가 전사 공통일 때)
 DOC_TYPES = {"규정", "지침", "FAQ", "매뉴얼", "약관", "방침", "고시"}
 SOURCE_TYPES = {"pdf", "hwp", "markdown", "json"}
 CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
