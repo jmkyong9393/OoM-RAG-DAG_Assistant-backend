@@ -37,9 +37,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: ai/uv.lock
-      - name: 의존성 (graph extra 포함 — kiwi·langgraph)
+      - name: 의존성 (graph·pdf extra 포함 — kiwi·langgraph·pymupdf)
         working-directory: ai
-        run: uv sync -q --extra graph
+        run: uv sync -q --extra graph --extra pdf   # pdf: pdf_locate 테스트(pymupdf)
       - name: pytest
         working-directory: ai
         run: uv run pytest -q -ra

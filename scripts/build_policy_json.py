@@ -9,6 +9,9 @@
 
 실행: uv run scripts/build_policy_json.py 원문.md --slug refund-policy-v4 --workspace 3 --title "환불규정" --version v4.0 \
         [--doc-type 규정] [--source-type markdown] [--supersedes refund-policy-v3] [--effective-from 2026-11-01] [--max-chars 700] [--out data/policies]
+  또는 uv run scripts/build_policy_json.py --meta data/policies/src/refund-policy-v4/meta.json
+        → 원문은 같은 폴더의 <slug>.md, 인자는 meta.json(프론트팀 지시서 §A-3: slug·workspace_id·title·version·doc_type·source_type·file_path·
+          effective_from·supersedes·tags·terms·author·summary). terms 는 결과의 "terms" 로 실려 index_policy.py 가 workspace_terms(manual) 에 넣는다.
 """
 from __future__ import annotations
 
@@ -115,9 +118,15 @@ def _split_rows(text: str, max_chars: int) -> list[str]:
     buf = ""
     for u in units:
         if len(u) > max_chars:
-            if buf:
-                chunks.append(buf); buf = ""
-            chunks.extend(split_long(u.strip("| ").replace(" | ", " / "), max_chars))
+            # 앞에 쌓인 짧은 행(보통 '| 분쟁유형 | 해결기준 | 비고 |' 머리글)은 긴 행의 첫 조각 앞에 붙인다 — 머리글만 있는 청크를 만들지 않고, 조각에 열 이름을 남긴다
+            head = buf if buf and len(buf) < max_chars // 4 else ""
+            if buf and not head:
+                chunks.append(buf)
+            buf = ""
+            pieces = split_long(u.strip("| ").replace(" | ", " / "), max_chars - len(head) - 1 if head else max_chars)
+            if head:
+                pieces[0] = head + "\n" + pieces[0]
+            chunks.extend(pieces)
             continue
         if len(buf) + len(u) + 1 > max_chars and buf:
             chunks.append(buf); buf = ""
@@ -125,6 +134,24 @@ def _split_rows(text: str, max_chars: int) -> list[str]:
     if buf:
         chunks.append(buf)
     return chunks
+
+
+META_REQUIRED = ("slug", "workspace_id", "title", "version")
+
+
+def load_meta(path: Path) -> dict:
+    """src/<slug>/meta.json → build() 인자 dict. slug 는 폴더 이름과 같아야 한다(청크 id 접두어·README 규칙)."""
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    missing = [k for k in META_REQUIRED if not meta.get(k)]
+    if missing:
+        raise ValueError(f"{path}: meta.json 에 {missing} 없음")
+    if path.parent.name != meta["slug"]:
+        raise ValueError(f"{path}: slug '{meta['slug']}' 가 폴더 이름 '{path.parent.name}' 과 다름")
+    terms = [t.strip() for t in meta.get("terms") or [] if isinstance(t, str) and t.strip()]
+    return dict(source=path.parent / f"{meta['slug']}.md", slug=meta["slug"], workspace=int(meta["workspace_id"]), title=meta["title"],
+                version=str(meta["version"]), doc_type=meta.get("doc_type", "규정"), source_type=meta.get("source_type", "markdown"),
+                file_path=meta.get("file_path"), effective_from=meta.get("effective_from"), supersedes=meta.get("supersedes"),
+                tags=meta.get("tags") or [], terms=terms, author=meta.get("author"), summary=meta.get("summary"))
 
 
 def build(source: Path, args) -> dict:
@@ -154,28 +181,53 @@ def build(source: Path, args) -> dict:
            "meta": {"source_file": source.name, "converter": "build_policy_json.py"}, "chunks": chunks}
     if args.supersedes:
         doc["supersedes"] = args.supersedes
+    terms = getattr(args, "terms", None)
+    if terms:                                                # meta.json terms → kiwi 사용자 사전 (index_policy.py 가 workspace_terms 에 적재)
+        doc["terms"] = list(terms)
+    for k in ("author", "summary"):
+        if getattr(args, k, None):
+            doc["meta"][k] = getattr(args, k)
     return doc
 
 
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("source", type=Path)
-    ap.add_argument("--slug", required=True); ap.add_argument("--workspace", type=int, required=True)
-    ap.add_argument("--title", required=True); ap.add_argument("--version", required=True)
+    ap.add_argument("source", type=Path, nargs="?", help="원문 .md (--meta 면 생략: <slug>.md)")
+    ap.add_argument("--meta", type=Path, default=None, help="src/<slug>/meta.json — 아래 인자를 전부 대체")
+    ap.add_argument("--slug"); ap.add_argument("--workspace", type=int)
+    ap.add_argument("--title"); ap.add_argument("--version")
     ap.add_argument("--doc-type", default="규정"); ap.add_argument("--source-type", default="markdown", choices=["pdf", "hwp", "markdown", "json"])
     ap.add_argument("--file-path", default=None); ap.add_argument("--effective-from", default=None); ap.add_argument("--supersedes", default=None)
     ap.add_argument("--tags", nargs="*", default=None); ap.add_argument("--max-chars", type=int, default=700)
     ap.add_argument("--out", type=Path, default=ROOT / "data" / "policies")
     a = ap.parse_args()
-    doc = build(a.source, a)
+    if a.meta:
+        try:
+            m = load_meta(a.meta)
+        except ValueError as e:
+            print(e); return 1
+        source = m.pop("source")
+        for k, v in m.items():
+            setattr(a, k, v)
+    else:
+        source = a.source
+        missing = [k for k in ("source", "slug", "workspace", "title", "version") if getattr(a, k) in (None, "")]
+        if missing:
+            print(f"--meta 가 없으면 필수: {missing}"); return 1
+        a.terms = None; a.author = None; a.summary = None
+    if not source.exists():
+        print(f"원문 없음: {source}"); return 1
+    doc = build(source, a)
     if not doc["chunks"]:
         print("조문을 하나도 찾지 못했습니다 (제N조 / Q N / ## 제목 패턴 필요)"); return 1
     a.out.mkdir(parents=True, exist_ok=True)
     dest = a.out / f"{a.slug}.chunks.json"
     dest.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     labels = [c["article_label"] for c in doc["chunks"]]
-    print(f"wrote {dest.relative_to(ROOT)}: {len(doc['chunks'])} chunks from {len(set(labels))} articles")
+    shown = dest.relative_to(ROOT) if dest.is_relative_to(ROOT) else dest   # --out 이 레포 밖(CI 의 /tmp/chk)이어도 죽지 않게
+    print(f"wrote {shown}: {len(doc['chunks'])} chunks from {len(set(labels))} articles"
+          + (f", terms={len(doc['terms'])}" if doc.get("terms") else ""))
     for c in doc["chunks"][:5]:
         print(f"  {c['id']:<32} {c['article_label'][:28]:<28} {len(c['text'])}자")
     if len(doc["chunks"]) > 5:
