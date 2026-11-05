@@ -78,12 +78,16 @@ def test_link_policies_marks_cases_whose_rule_was_revised(monkeypatch):
     assert nodes[1]["policy"][0]["ref"] is None and nodes[1]["policy"][0]["revision"] == "replaced" and nodes[1]["policy"][0]["label"] == "운영지침 v1 제11조"
     assert nodes[2]["policy"][0]["revision"] == "replaced", "'기준 없음'도 개정 전의 판단으로 표시한다"
     text = llm._render_context(policy, nodes)
-    assert "개정 전에 적은 메모(당시 75%. 70% 가 현재 기준)" in text and "사례는 v1 판 기준" in text
+    assert "개정 전에 적은 메모 — 당시 75%. 70% 가 당시(v1 판) 기준" in text and "사례는 v1 판 기준" in text
+    assert "현재 기준" not in text, "개정된 사례의 메모가 말하는 '현재 기준'은 개정 전 기준으로 바꿔 넘긴다"
     assert "개정 전 규정 운영지침 v1 제11조 기준의 처리" in text and "처리 당시에는 규정에 기준이 없었다" in text
     must = llm._must_include(nodes)
     assert any("개정되기 전(v1 판)" in m and "[P1]" in m for m in must), "지금 조문의 값을 현재 기준으로 쓰게 한다"
     assert any("개정 전 규정(운영지침 v1 제11조)" in m for m in must)
     assert not any("[None]" in m for m in must), "마커가 없는 근거를 마커로 쓰지 않는다"
+    assert any("70% 가 당시(v1 판) 기준" in m for m in must) and not any("70% 가 현재 기준" in m for m in must), "예외 사례 지시에도 같은 치환"
+    # 개정되지 않은 사례의 메모는 그대로다
+    assert llm._note_text({"note": "70% 가 현재 기준"}) == "70% 가 현재 기준"
 
 
 def test_linked_candidates_are_always_judged():

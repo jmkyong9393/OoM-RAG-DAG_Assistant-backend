@@ -126,7 +126,7 @@ GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 �
 (6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내(규정과 사례를 함께 쓸 때는 6문장), 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다.
 (7) 사례 줄 끝의 "(규정 관계: …)"는 그 조치와 규정의 관계를 알려 주는 자료다. 괄호를 그대로 옮겨 적지 않는다. 사례로 답할 때는 사례 문장마다 [N…] 마커를 붙이고, 이어서 규정 관계를 한 문장으로 쓴다 — 따른 조치면 "이 조치는 ○○ 제○조 기준에 따른 것이다 [P…]", 예외면 "당시에는 규정과 달리 …했다 [N…][P…]", 기준이 없으면 "이 부분은 규정에 기준이 없다 [N…]".
 (8) 질문 뒤에 [답변에 꼭 담을 것]이 있으면 그 항목을 빠짐없이 답변에 담는다. 항목의 문장을 그대로 베끼지 말고 답변의 흐름에 맞게 쓴다.
-(9) 질문이 묻는 대상(예: 연차, 특정 수당·절차·시스템)이 근거에 아예 적혀 있지 않으면 가능·불가능을 추측하지 말고 "제공된 규정에는 …에 관한 기준이 없습니다"라고 답한다. 주제가 비슷한 조문이 있어도 그 대상을 말하지 않으면 없는 것이다. 조문이 정한 조건과 질문의 상황이 서로 다른 것이면(예: 조문은 '기한 경과'를 정했는데 질문은 '기한 임박') 그 조문을 그대로 적용하지 않는다. 각 조문이 정한 조건을 그대로 밝혀 "…인 경우에는 …" 꼴로 답하고, 질문의 상황이 그 조건에 해당한다고 스스로 판정하지 않는다("하자로 간주된다", "대상이 아니다" 같은 말을 쓰지 않는다). 조문에 없는 일반론("일반적으로 …", 법령 상식)이나 조문에서 미루어 짐작한 결론을 덧붙이지 않는다 — 근거에 없으면 그 부분을 정한 규정이 없다고 답한다."""
+(9) 질문이 묻는 대상(예: 연차, 특정 수당·절차·시스템)이 근거에 아예 적혀 있지 않으면 가능·불가능을 추측하지 말고 "제공된 규정에는 …에 관한 기준이 없습니다"라고 답한다. 주제가 비슷한 조문이 있어도 그 대상을 말하지 않으면 없는 것이다. 조문이 정한 조건과 질문의 상황이 서로 다른 것이면(예: 조문은 '기한 경과'를 정했는데 질문은 '기한 임박') 첫 문장에서 가능·불가능으로 단정하지 말고 그 상황을 직접 정한 기준은 없다고 먼저 밝힌다. 이어서 각 조문이 정한 조건과 결과를 조문에 쓰인 말 그대로 "…인 경우에는 …" 꼴로 나누어 답하고, 질문의 상황이 그 조건에 해당한다고 스스로 판정하지 않는다("하자로 간주된다", "대상이 아니다", "불가능하다", "가능하다" 같은 단정을 쓰지 않는다). 조문에 없는 일반론("일반적으로 …", 법령 상식)이나 조문에서 미루어 짐작한 결론을 덧붙이지 않는다 — 근거에 없으면 그 부분을 정한 규정이 없다고 답한다."""
 
 
 async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage,
@@ -184,15 +184,16 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
         for p in n.get("policy") or []:
             if p["relation"] == "exception" and p.get("ref") and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
                 out.append(f"[{n['ref']}] 은 당시 규정([{p['ref']}])과 달리 처리한 사례다. 당시에 어떻게 했는지와 지금의 기준을 함께 쓰고 [{n['ref']}][{p['ref']}] 를 붙인다."
-                           + (f" ({p['note']})" if p.get("note") else ""))
+                           + (f" ({_note_text(p)})" if p.get("note") else ""))
     # 규정이 개정된 사례(진입 사례와 같은 줄기만): 지금 기준과 다를 수 있다는 것을 빠뜨리면 옛 기준을 현재 기준처럼 답한다. 사례가 여럿이어도 한 줄로
     line = [n for n in live if n.get("entry") or n.get("near")]
     amended = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "amended"]
     replaced = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "replaced"]
     if amended:
         refs = " ".join(dict.fromkeys(f"[{p['ref']}]" for _, p in amended))
-        out.append(f"이 사례들은 규정이 개정되기 전({amended[0][1].get('from_version')} 판)에 처리한 것이다. 현재 기준은 지금 조문 {refs} 에 적힌 값으로 쓴다 — "
-                   "메모에 '현재 기준'이라고 적힌 값은 개정 전 기준이므로 '당시 기준'이라고 쓴다. 사례에서 쓴 값, 당시 기준, 지금 기준이 다르면 셋을 구분해 한 번씩만 밝힌다.")
+        ver = amended[0][1].get("from_version")
+        out.append(f"이 사례들은 규정이 개정되기 전({ver} 판)에 처리한 것이다. '규정이 그 뒤 개정됐다'는 것을 한 문장으로 밝히고, 지금 기준은 조문 {refs} 에 적힌 값으로 쓴다. "
+                   f"메모의 '당시({ver} 판) 기준'은 개정 전 규정의 값이다 — 사례에서 쓴 값, 개정 전 기준, 지금 기준을 섞지 말고 구분해 쓴다.")
     if replaced:
         n, p = next(((n, p) for n, p in replaced if n.get("entry")), replaced[0])
         how = "과 달리 한" if p["relation"] == "exception" else "에 따른"
@@ -218,6 +219,15 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     return out[:6]
 
 
+def _note_text(p: dict) -> str:
+    """대조표의 메모. 규정이 개정된 사례면 메모가 말하는 '현재 기준'은 개정 전 기준이다 — 모델에게 바꿔 읽으라고 하지 않고 여기서 바꿔 넘긴다."""
+    note = p.get("note") or ""
+    if note and p.get("revision"):
+        ver = f"{p['from_version']} 판" if p.get("from_version") else "개정 전"
+        return "개정 전에 적은 메모 — " + note.replace("현재 기준", f"당시({ver}) 기준")
+    return note
+
+
 def _policy_note(p: dict) -> str:
     """사례 줄 끝에 붙는 근거 표시(모델에게 주는 자료). 답변에 그대로 옮기지 않게 지시문 (7)이 문장 형태를 정한다."""
     if p["relation"] == "gap" and p.get("revision"):
@@ -225,9 +235,7 @@ def _policy_note(p: dict) -> str:
     if p["relation"] == "gap":
         return f" (규정 관계: 이 부분은 규정에 기준이 없다 — {p.get('topic') or p.get('note') or ''})"
     kind = "규정과 달리 처리한 예외" if p["relation"] == "exception" else "규정을 따른 조치"
-    tail = f". {p['note']}" if p.get("note") else ""
-    if tail and p.get("revision"):   # 메모의 '현재 기준'은 개정 전의 것이다
-        tail = f". 개정 전에 적은 메모({p['note']})"
+    tail = f". {_note_text(p)}" if p.get("note") else ""
     if p.get("revision") == "replaced":   # 근거로 실리지 않는다(마커 없음) — 개정 전 기준이었다는 사실만
         return f" (규정 관계: 개정 전 규정 {p.get('label') or ''} 기준의 처리 — {kind}{tail}. 이 규정은 그 뒤 개정됐고 지금 대응하는 조문은 정해지지 않았다)"
     rev = f". 이 조문은 그 뒤 개정됐다 — 사례는 {p.get('from_version')} 판 기준이다" if p.get("revision") == "amended" else ""
