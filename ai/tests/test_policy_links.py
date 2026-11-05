@@ -137,6 +137,18 @@ def test_must_include_points_at_fix_lines_when_entry_is_a_problem():
     assert any("인용한 해결 줄" in m for m in must), "인용한 해결 줄의 규정을 밝히게 한다"
 
 
+def test_must_include_asks_for_policy_marker_only_when_fix_lines_have_one():
+    def node(i, typ, policy=None, entry=False):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": "t", "resolution_summary": None, "depth": 0, "policy": policy,
+                "entry": entry, "near": True}
+    bare = llm._must_include([node(1, "fail", entry=True), node(2, "success")])
+    assert not any("[P…]" in m for m in bare), "해결 줄에 근거 조문이 없으면 [P…] 를 붙이라고 하지 않는다"
+    gap = llm._must_include([node(1, "fail", entry=True), node(2, "success", [{"relation": "gap", "topic": "합산 상한"}])])
+    assert not any("[P…]" in m for m in gap) and any("기준이 없다" in m for m in gap), "기준 없음만 붙은 해결 줄"
+    both = llm._must_include([node(1, "fail", entry=True), node(2, "success", [{"relation": "follows", "ref": "P2", "label": "제11조"}])])
+    assert any("[P…]" in m for m in both)
+
+
 def test_same_line_is_entry_with_ancestors_and_descendants():
     from app.graph import pipeline
     edges = [{"parent_id": 1, "child_id": 2}, {"parent_id": 2, "child_id": 3}, {"parent_id": 1, "child_id": 4}, {"parent_id": 4, "child_id": 5},

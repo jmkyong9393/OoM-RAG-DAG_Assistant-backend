@@ -3,6 +3,7 @@ package com.oom.assist.chain;
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
 import com.oom.assist.common.util.Times;
+import com.oom.assist.log.PolicyRefService;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -23,12 +24,16 @@ public class ChainController {
   private static final int MAX_NODES = 60;
 
   private final JdbcClient jdbc;
+  private final PolicyRefService policyRefs;
 
-  public ChainController(JdbcClient jdbc) {
+  public ChainController(JdbcClient jdbc, PolicyRefService policyRefs) {
     this.jdbc = jdbc;
+    this.policyRefs = policyRefs;
   }
 
-  public record ChainNode(long id, String type, String status, String title, int depth, String pathLabel, String note, OffsetDateTime lastConfirmedAt) {}
+  /** policyRefs = 그 기록이 따른(또는 벗어난) 규정 조문. 없으면 null. 어시스턴트의 체인과 같은 표시를 타임라인에서도 하게 한다. */
+  public record ChainNode(long id, String type, String status, String title, int depth, String pathLabel, String note, OffsetDateTime lastConfirmedAt,
+                          List<PolicyRefService.RefView> policyRefs) {}
   public record Edge(long parentId, long childId) {}
   public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary) {}
 
@@ -42,10 +47,11 @@ public class ChainController {
         """).params(ws, entryId, Math.max(1, Math.min(depth, 8)), MAX_NODES).query().listOfRows();
     if (rows.isEmpty()) throw ApiException.notFound("chain");
 
+    List<Long> ids = rows.stream().map(r -> num(r, "id")).toList();
+    Map<Long, List<PolicyRefService.RefView>> refs = policyRefs.readMany(ws, ids);
     List<ChainNode> nodes = rows.stream().map(r -> new ChainNode(num(r, "id"), (String) r.get("type"), (String) r.get("status"), (String) r.get("title"),
         ((Number) r.get("depth")).intValue(), (String) r.get("path_label"), (String) r.get("resolution_summary"),
-        Times.offset(r.get("last_confirmed_at")))).toList();
-    List<Long> ids = nodes.stream().map(ChainNode::id).toList();
+        Times.offset(r.get("last_confirmed_at")), refs.get(num(r, "id")))).toList();
     List<Edge> edges = jdbc.sql("SELECT parent_id, child_id FROM log_edges WHERE parent_id = ANY (?) AND child_id = ANY (?) ORDER BY parent_id, child_id")
         .params(ids.toArray(Long[]::new), ids.toArray(Long[]::new))
         .query((rs, i) -> new Edge(rs.getLong("parent_id"), rs.getLong("child_id"))).list();

@@ -1,7 +1,8 @@
 {
   "slug": "retail-vpn-2026-11",
   "tenant": "retail",
-  "workspace_id": 2,
+  "workspace_id": 10,
+  "ask_workspace_id": 2,
   "title": "VPN·원격접속 운영지침",
   "version": "2026-11",
   "doc_type": "지침",

@@ -235,7 +235,8 @@ def _article_keys(policies: list[dict]) -> list[tuple[str, str]]:
 
 def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | None, policy_ctx: list[dict]) -> int:
     """체인 노드의 근거 조문(attributes.policy_refs)을 근거 목록에 더하고, 노드마다 어느 근거인지 붙인다.
-    규정 검색 결과가 이미 있으면 새로 더하는 조문은 진입 노드·체인 루트·예외 사례가 가리키는 것만 — 질문과 먼 조문이 섞이지 않게.
+    규정 검색 결과가 이미 있으면 새로 더하는 조문은 진입 노드·체인 루트·예외 사례·진입 노드와 같은 줄기의 해결 노드가 가리키는 것만 — 질문과 먼 조문이
+    섞이지 않게. 자리(MAX_LINKED)는 진입 노드, 같은 줄기, 예외, 해결 순으로 준다.
     검색 결과가 없으면(사례만 찾은 질의) 체인의 조문을 진입 노드·예외·해결 노드 순으로 MAX_LINKED 개까지 싣는다.
     그 밖의 노드는 이미 실린 근거와 일치할 때만 표시한다. policy_ctx·chain_ctx·chain_event 를 고쳐 쓴다. 더한 근거 수를 돌려준다."""
     entry = chain_event.entry_id if chain_event else None
@@ -248,7 +249,8 @@ def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | Non
     by_chunk = {p["chunk_id"]: p for p in policy_ctx}
     wide = not policy_ctx
     added = 0
-    for n, r in sorted(pairs, key=lambda x: (x[0]["id"] != entry, x[1].get("relation") != "exception", x[0]["type"] != "success", x[0]["depth"])):
+    for n, r in sorted(pairs, key=lambda x: (x[0]["id"] != entry, not x[0].get("near"), x[1].get("relation") != "exception",
+                                             x[0]["type"] != "success", x[0]["depth"])):
         if r.get("relation") == "gap":
             n.setdefault("policy", []).append({"relation": "gap", "topic": r.get("topic"), "note": r.get("note")})
             continue
@@ -257,7 +259,8 @@ def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | Non
             continue
         p = by_chunk.get(row["id"])
         if p is None:
-            key_node = wide or n["id"] == entry or n["depth"] == 0 or r["relation"] == "exception"
+            key_node = (wide or n["id"] == entry or n["depth"] == 0 or r["relation"] == "exception"
+                        or (n.get("near") and n["type"] == "success"))   # 답변이 인용할 해결 줄의 근거 — 지시(_must_include)와 맞춘다
             if not key_node or added >= MAX_LINKED:
                 continue
             p = _policy_entry(len(policy_ctx) + 1, row, "case")

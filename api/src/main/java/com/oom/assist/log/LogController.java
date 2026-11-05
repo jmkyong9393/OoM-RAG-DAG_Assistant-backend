@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -87,6 +88,7 @@ public class LogController {
   }
 
   @PostMapping("/logs")
+  @Transactional   // 로그와 근거 조문을 함께 — 근거 저장이 실패하면 로그도 남기지 않는다
   public ResponseEntity<LogNodeDto> create(@RequestBody LogService.CreateRequest body, TenantContext ctx) {
     var refs = policyRefs.normalize(ctx.workspaceId(), body.policyRefs());   // 로그를 만들기 전에 검증한다
     LogNodeDto node = service.create(ctx, body);

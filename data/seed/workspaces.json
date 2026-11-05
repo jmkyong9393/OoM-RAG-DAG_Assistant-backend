@@ -18,7 +18,12 @@
     "name": "SW 개발",
     "policy_enabled": true,
     "settings": {
-      "language": "ko"
+      "language": "ko",
+      "suggestions": [
+        "JVM 힙 비율은 얼마로 잡았어?",
+        "사후분석은 장애 복구하고 며칠 안에 써야 돼?",
+        "DB 커넥션 풀이 꽉 찼을 때 어떻게 해결했어?"
+      ]
     }
   },
   {
@@ -29,7 +34,12 @@
     "name": "인사·총무",
     "policy_enabled": true,
     "settings": {
-      "language": "ko"
+      "language": "ko",
+      "suggestions": [
+        "외근 중 VPN 접속하면 E-403이 떠요. 왜 그런가요?",
+        "원격접속 신청 기간은 최대 며칠인가요?",
+        "비밀번호를 여러 번 틀려 계정이 잠겼어요. 어떻게 풀어요?"
+      ]
     }
   },
   {
@@ -40,7 +50,12 @@
     "name": "고객지원(CS)",
     "policy_enabled": true,
     "settings": {
-      "language": "ko"
+      "language": "ko",
+      "suggestions": [
+        "단순 변심 반품은 받고 나서 며칠 안에 해야 돼?",
+        "영수증 잃어버렸는데 환불 되나요",
+        "폭언하는 고객 전화 먼저 끊어도 되나요"
+      ]
     }
   },
   {
@@ -62,7 +77,12 @@
     "name": "SW 개발",
     "policy_enabled": true,
     "settings": {
-      "language": "ko"
+      "language": "ko",
+      "suggestions": [
+        "SEV-2 장애 사후분석 회의는 며칠 안에 열어야 해?",
+        "연휴 배포 동결 기간에 배포한 적 있어?",
+        "캐시가 한꺼번에 만료돼서 DB 터진 사례"
+      ]
     }
   },
   {
@@ -73,7 +93,12 @@
     "name": "인사·총무",
     "policy_enabled": true,
     "settings": {
-      "language": "ko"
+      "language": "ko",
+      "suggestions": [
+        "서류 결과는 며칠 안에 지원자한테 알려줘야 해?",
+        "거래처 추석선물 얼마까지 받아도 돼?",
+        "레퍼런스 체크 동의 안 받고 진행했을 때 어떻게 했어?"
+      ]
     }
   },
   {
@@ -84,7 +109,12 @@
     "name": "고객지원(CS)",
     "policy_enabled": true,
     "settings": {
-      "language": "ko"
+      "language": "ko",
+      "suggestions": [
+        "환불 며칠 안에 해줘야 해?",
+        "카드사 이의제기 들어왔을 때 어떻게 대응했어?",
+        "상담원이 2단계 인증 대신 풀어줘도 돼?"
+      ]
     }
   }
 ]

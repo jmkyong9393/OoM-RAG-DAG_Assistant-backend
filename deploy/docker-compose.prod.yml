@@ -55,6 +55,9 @@ services:
       SESSION_SAME_SITE: Lax
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
       SEED_PASSWORD: ${SEED_PASSWORD:-Oom!demo-2026}
+      PRIVACY_POLICY_PATH: /data/legal/privacy_policy.md   # 이미지에는 data/ 가 없다 — 동의 화면 문안(GET /auth/privacy-policy)을 마운트로 준다
+    volumes:
+      - ../data/legal:/data/legal:ro
     depends_on:
       postgres:
         condition: service_healthy
