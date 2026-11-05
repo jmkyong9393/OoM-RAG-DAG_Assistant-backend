@@ -15,6 +15,7 @@
 - **사례 체인(트러블슈팅 DAG)** — 실무자가 등록한 문제 → 원인 → 해결 기록을 부모–자식으로 엮는다. 질문과 같은 문제를 다룬 체인을 찾아 답에 싣는다.
 - **규정과 사례의 연결** — 사례마다 "어느 조문을 따랐는지 / 규정과 달리 처리했는지 / 규정에 기준이 없는지"를 적어 두고, 답변이 그 관계를 함께 말한다. 예: "당시에는 힙을 75% 로 잡았으나 현재 기준은 70% 다."
 - **인용 검증** — 답변의 근거 마커(`[P1]`, `[N3]`)가 실제로 검색된 근거인지 확인해 SSE 로 스트리밍한다.
+- **규정 개정 대응** — 규정이 개정되면 그 규정을 따른 사례를 조문 단위로 대조해(그대로 · 조문 개정 · 대응 조문 없음), 답변이 "개정 전 기준"임을 밝히고 영향받는 사례 목록을 낸다(`GET /policy-revisions/impact`).
 
 조직은 **회사(테넌트) > 부서(워크스페이스)** 다. 규정은 회사에 속하고, 부서는 자기 문서와 전사 공통 문서를 함께 검색한다. 부서마다 관리자가 **규정 사용·사례 사용**을 켜고 끈다(규정 참조형 · 규정 + 사례형 · 사례 단일형). 사번 로그인 + 서버 세션 쿠키.
 
@@ -32,7 +33,7 @@
 
 | 폴더 | 내용 | 담당 |
 |---|---|---|
-| `api/` | Spring Boot 게이트웨이 (도메인 API · 사번 로그인·세션 · SSE 릴레이 · Flyway `db/migration` V1~V8 + R__functions/views) · `Dockerfile` | 장문경 · 신동준 |
+| `api/` | Spring Boot 게이트웨이 (도메인 API · 사번 로그인·세션 · SSE 릴레이 · Flyway `db/migration` V1~V9 + R__functions/views) · `Dockerfile` | 장문경 · 신동준 |
 | `ai/` | Python AI 서비스 (파이프라인, kiwipiepy, OpenAI 호환 LLM, 정제 워커) · `Dockerfile` | 장문경 · 배종현(그래프·프롬프트) |
 | `data/` | 규정(`policies/`, 원문 `policies/src/<slug>/`, 개정판 `policies/revisions/`) · 합성 사례 로그(`logs/`) · 규정↔사례 대조표(`alignment/`) · 평가셋(`evalset/`) · 답변 점검표(`answer_checks/`) · 시드 · SSE 계약 스키마(`contracts/`) | 신동준(적재·평가셋) · 프론트팀(규정 집필) |
 | `scripts/` | 원문 → 청크 JSON(`hwpx_to_md.py`, `build_policy_json.py`, `pdf_locate.py`), 적재(`index_policy.py`, `load_logs.py`, `load_alignment.py`), 검사기(`validate_policy_pack.py`, `validate_logs.py`, `check_alignment.py`), 평가셋 생성, 시드, LLM 스모크 | 신동준 · 장문경 |
@@ -65,9 +66,9 @@
 
 **답변** — 점검표 4종(유통 13 · IT 11 · 부서별 추천 질문 18 · 어려운 질문 6)을 실제 답변으로 돌려 통과. 점검은 인용한 조문·사례, 들어 있어야 할 말, 들어 있으면 안 되는 말을 본다.
 
-**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 문서 상태, 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
+**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 문서 상태, 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 108, Python 149(DB 통합 포함).
+**테스트** — Spring 110, Python 150(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과. Lightsail 기동은 아직.
 
@@ -109,7 +110,7 @@ Git Bash 에서 한글 본문은 `--data-binary @file.json` 으로 보낸다(`-d
 python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문 참조 · 숫자 · 같은 부서의 제목 충돌
 ```
 
-- **개정은 새 slug + `supersedes`** (적재된 문서를 고치면 청크 id 가 밀려 평가셋이 깨진다). 시행 전 개정판은 `data/policies/revisions/` 에 두고 `make index-revision SLUG=…` 로만 적재한다.
+- **개정은 새 slug + `supersedes`** (적재된 문서를 고치면 청크 id 가 밀려 평가셋이 깨진다). 시행 전 개정판은 `data/policies/revisions/` 에 두고 `make index-revision SLUG=…` 로만 적재한다. 적재하면 영향받는 사례 수가 출력되고(조문 그대로 · 조문 개정 · 대응 조문 확인 필요), 사례의 근거 조문은 개정 사슬을 따라 지금 조문으로 이어진다.
 - 모든 직원에게 적용되는 규정(급여, 원격접속)은 전사 공통 부서에 둔다. `meta.json` 의 `workspace_id` 를 바꾸고 `make index` 하면 문서가 옮겨진다.
 - HWPX 원문은 `scripts/hwpx_to_md.py` 로 먼저 Markdown 화.
 
