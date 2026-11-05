@@ -38,6 +38,7 @@ data/policies/src/<slug>/            ← 집필자(프론트팀 §A-1). slug 는
 `terms` → `workspace_terms(source='manual')`) ④ `app.worker --once --reindex` 로 토큰·임베딩 백필 — **`--reindex` 인 이유**: kiwi 사용자 사전은 전 워크스페이스
 합집합 하나라 새 `terms` 가 들어오면 기존 청크·노드도 다시 토크나이즈해야 한다(임베딩은 재사용).
 
+- `uv run scripts/questions_to_evalset.py --meta data/policies/src/<slug>/meta.json`: `<slug>.questions.md` 의 '정답 조문'(제N조 ①②·별표 K <행> 행)을 청크 id 로 매핑해 `data/evalset/<slug>_v1.json` 생성(D-4 ④). 측정은 `cd ai && uv run python ../eval/hit_at_k.py ../data/evalset/<slug>_v1.json`.
 - `make pdf SLUG=<slug>`: 쪽 번호만 다시 채우고 PDF 를 서빙 위치 `data/files/policies/<slug>.pdf` 로 복사(`file_path: policies/<slug>.pdf`). 서빙 API 는 게이트 이후.
 - 못 찾은 조문은 `page: null` 로 남고 목록이 출력된다 — PDF 의 조문 제목 줄이 Markdown 과 글자 단위로 같아야 한다(§A-4).
 - 변환기만 돌려 보기(집필 자가 점검): `uv run scripts/build_policy_json.py --meta data/policies/src/<slug>/meta.json --out build/check`
