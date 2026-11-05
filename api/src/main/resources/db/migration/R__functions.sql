@@ -102,6 +102,50 @@ RETURNS TABLE(node_id bigint, score double precision) LANGUAGE sql STABLE AS $$
   SELECT id, SUM(s)::double precision AS score FROM u GROUP BY id ORDER BY score DESC, id LIMIT p_k
 $$;
 
+-- 어시스턴트의 사례 진입점 검색: error_code 정확 일치(+1.0) + 어휘(IDF 가중) 상위 20 + 벡터 상위 20(가중 1.5) RRF. active 노드, 자기 워크스페이스만.
+-- 관련성 판단용 근거(exact · 일치한 질의 단어 수 · 벡터 거리)를 함께 돌려준다. 등록 화면의 상위 로그 추천은 hybrid_search_nodes(키워드 가산)를 쓴다.
+CREATE OR REPLACE FUNCTION search_case_entry(p_ws bigint, p_tokens text, p_vec vector(1536), p_error_code text, p_k int DEFAULT 3)
+RETURNS TABLE(node_id bigint, score double precision, exact boolean, lex_terms int, distance double precision) LANGUAGE sql STABLE AS $$
+  WITH cand AS (
+    SELECT id, tsv, embedding, error_code, length(coalesce(tokens, '')) AS len
+    FROM log_nodes WHERE workspace_id = p_ws AND status = 'active'
+  ),
+  terms AS (
+    SELECT DISTINCT t, plainto_tsquery('simple', t) AS tq
+    FROM regexp_split_to_table(coalesce(p_tokens, ''), '\s+') AS t
+    WHERE t <> '' AND numnode(plainto_tsquery('simple', t)) > 0
+  ),
+  -- 질의 단어별 IDF: '오류·문제'처럼 대부분의 로그에 있는 단어가 '서킷브레이커'와 같은 무게가 되지 않게 한다
+  tf AS (
+    SELECT t.t, t.tq, ln(((SELECT count(*) FROM cand) + 1)::float / (count(c.id) + 1)) AS idf
+    FROM terms t LEFT JOIN cand c ON c.tsv @@ t.tq GROUP BY t.t, t.tq
+  ),
+  ls AS (
+    SELECT c.id, c.len, SUM(tf.idf) AS s, count(*)::int AS m FROM cand c JOIN tf ON c.tsv @@ tf.tq GROUP BY c.id, c.len
+  ),
+  lex AS (
+    SELECT id, r FROM (SELECT id, row_number() OVER (ORDER BY s DESC, len, id) AS r FROM ls) t WHERE r <= 20
+  ),
+  vec AS (
+    SELECT id, r FROM (
+      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec) AS r
+      FROM cand WHERE p_vec IS NOT NULL AND embedding IS NOT NULL
+    ) t WHERE r <= 20
+  ),
+  u AS (
+    SELECT id, 1.0 / (60 + r) AS s FROM lex
+    UNION ALL SELECT id, 1.5 / (60 + r) FROM vec
+    UNION ALL SELECT id, 1.0 FROM cand WHERE coalesce(p_error_code, '') <> '' AND error_code = p_error_code
+  ),
+  top AS (
+    SELECT id, SUM(s)::double precision AS score FROM u GROUP BY id ORDER BY score DESC, id LIMIT p_k
+  )
+  SELECT t.id, t.score, (coalesce(p_error_code, '') <> '' AND c.error_code = p_error_code) IS TRUE, coalesce(ls.m, 0),
+         CASE WHEN p_vec IS NOT NULL AND c.embedding IS NOT NULL THEN (c.embedding <=> p_vec)::double precision END
+  FROM top t JOIN cand c ON c.id = t.id LEFT JOIN ls ON ls.id = t.id
+  ORDER BY t.score DESC, t.id
+$$;
+
 -- 진입 노드 기준 상향(음수 depth)·하향(양수 depth) 체인. 고정 깊이 버전.
 CREATE OR REPLACE FUNCTION chain_at_depth(p_entry bigint, p_depth int)
 RETURNS TABLE(node_id bigint, depth int) LANGUAGE sql STABLE AS $$
