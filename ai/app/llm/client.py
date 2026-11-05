@@ -119,7 +119,8 @@ async def judge_case(profile: LlmProfile, query: str, case: dict, usage: Usage) 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.
 규칙: (1) 인용은 제공된 마커([P1], [N2] 등)만 쓴다. (2) 사실을 담은 모든 문장과 표의 모든 행 끝에 근거 마커를 붙인다. 컨텍스트에 없는 내용은 "근거 없음"이라고 말하고 일반 상식으로 채우지 않는다.
 (3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. 단, 해당 컨텍스트가 없는 절("규정"·"해결 사례")은 만들지 않는다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다.
-(6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내, 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다."""
+(6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내, 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다.
+(7) 사례 줄 끝의 "(규정 관계: …)"는 그 조치와 규정의 관계를 알려 주는 자료다. 괄호를 그대로 옮겨 적지 않는다. 사례로 답할 때는 사례 문장마다 [N…] 마커를 붙이고, 이어서 규정 관계를 한 문장으로 쓴다 — 따른 조치면 "이 조치는 ○○ 제○조 기준에 따른 것이다 [P…]", 예외면 "당시에는 규정과 달리 …했다 [N…][P…]", 기준이 없으면 "이 부분은 규정에 기준이 없다 [N…]"."""
 
 
 async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage) -> AsyncIterator[str]:
@@ -156,6 +157,15 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     return [w + " " for w in text.split(" ") if w]
 
 
+def _policy_note(p: dict) -> str:
+    """사례 줄 끝에 붙는 근거 표시(모델에게 주는 자료). 답변에 그대로 옮기지 않게 지시문 (7)이 문장 형태를 정한다."""
+    if p["relation"] == "gap":
+        return f" (규정 관계: 이 부분은 규정에 기준이 없다 — {p.get('topic') or p.get('note') or ''})"
+    kind = "규정과 달리 처리한 예외" if p["relation"] == "exception" else "규정을 따른 조치"
+    tail = f". {p['note']}" if p.get("note") else ""
+    return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail})"
+
+
 def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
     lines = []
     if policy_ctx:
@@ -167,7 +177,8 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
         for n in chain_ctx:
             dep = "[폐기됨] " if n["status"] != "active" else ""
             indent = "  " * max(0, n["depth"])
-            lines.append(f"{indent}[{n['ref']}] ({n['type']}) {dep}{n['title']}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else ""))
+            lines.append(f"{indent}[{n['ref']}] ({n['type']}) {dep}{n['title']}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
+                         + "".join(_policy_note(p) for p in n.get("policy") or []))
     return "\n".join(lines)
 
 

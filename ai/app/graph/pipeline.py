@@ -11,7 +11,7 @@ from typing import AsyncIterator, NamedTuple
 
 from app.config import ai_mode, profile as load_profile
 from app.llm import client as llm
-from app.llm.schemas import (ChainEdge, ChainEvent, ChainNode, CitationsEvent, DoneEvent, ErrorEvent, IntentEvent, Latency,
+from app.llm.schemas import (ChainEdge, ChainEvent, ChainNode, NodePolicy, CitationsEvent, DoneEvent, ErrorEvent, IntentEvent, Latency,
                              PolicyRef, StageEvent, TokenEvent)
 from app.retrieval import db, embed
 from app.retrieval.tokenize import Tokenizer, extract_error_code, synonym_groups
@@ -62,24 +62,50 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             yield sse("stage", StageEvent(node="policy_rag", status="start").model_dump())
         if do_graph:
             yield sse("stage", StageEvent(node="graph_search", status="start").model_dump())
-        results = await asyncio.gather(
-            asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec) if do_policy else _noop(),
-            _graph_search(workspace_id, q_tokens, q_vec, error_code, CASE_FLOOR.get(prof.embedding_model), prof, query, usage) if do_graph else _noop(),
-            return_exceptions=True)
-        pol, gra = results
-        if do_policy:
-            if isinstance(pol, Exception):
-                yield sse("stage", StageEvent(node="policy_rag", status="error", detail=str(pol)[:200]).model_dump())
-            else:
-                policy_ctx = pol
-                yield sse("policy", [PolicyRef(**p).model_dump() for p in policy_ctx])
-                yield sse("stage", StageEvent(node="policy_rag", status="done").model_dump())
-                retrieved += [f"c:{p['chunk_id']}" for p in policy_ctx]
+        floor = CASE_FLOOR.get(prof.embedding_model)
+        if do_policy and do_graph:
+            # 규정을 먼저 찾아, 그 조문을 근거로 적어 둔 사례를 사례 후보에 더한다 (규정 검색은 수십 ms, 사례 쪽은 판정이 더 길다)
+            try:
+                pol = await asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec)
+            except Exception as e:  # noqa: BLE001
+                pol = e
+            linked_to = [] if isinstance(pol, Exception) else _article_keys(pol[:LINK_TOP])
+            try:
+                gra = await _graph_search(workspace_id, q_tokens, q_vec, error_code, floor, prof, query, usage, linked_to)
+            except Exception as e:  # noqa: BLE001
+                gra = e
+        else:
+            pol, gra = await asyncio.gather(
+                asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec) if do_policy else _noop(),
+                _graph_search(workspace_id, q_tokens, q_vec, error_code, floor, prof, query, usage) if do_graph else _noop(),
+                return_exceptions=True)
+        chain_event = None
+        if do_policy and not isinstance(pol, Exception):
+            policy_ctx = pol
+        if do_graph and not isinstance(gra, Exception):
+            chain_ctx, chain_event = gra
+        # 체인의 사례가 따른(또는 벗어난) 규정 조문을 근거에 더한다. 실패해도 답변은 계속한다
+        linked = 0
+        if chain_ctx and policy_enabled:
+            try:
+                linked = await asyncio.to_thread(_link_policies, workspace_id, chain_ctx, chain_event, policy_ctx)
+            except Exception:  # noqa: BLE001
+                linked = 0
+        if do_policy and isinstance(pol, Exception):
+            yield sse("stage", StageEvent(node="policy_rag", status="error", detail=str(pol)[:200]).model_dump())
+        if policy_ctx:
+            if not do_policy:
+                yield sse("stage", StageEvent(node="policy_rag", status="start", detail="linked").model_dump())
+            yield sse("policy", [PolicyRef(**p).model_dump() for p in policy_ctx])
+            yield sse("stage", StageEvent(node="policy_rag", status="done").model_dump())
+            retrieved += [f"c:{p['chunk_id']}" for p in policy_ctx]
+        elif do_policy and not isinstance(pol, Exception):
+            yield sse("policy", [])
+            yield sse("stage", StageEvent(node="policy_rag", status="done").model_dump())
         if do_graph:
             if isinstance(gra, Exception):
                 yield sse("stage", StageEvent(node="graph_search", status="error", detail=str(gra)[:200]).model_dump())
             else:
-                chain_ctx, chain_event = gra
                 if chain_event:
                     yield sse("chain", chain_event.model_dump())
                 yield sse("stage", StageEvent(node="graph_search", status="done", detail=None if chain_ctx else "no_relevant_case").model_dump())
@@ -160,8 +186,67 @@ def _with_company_rules(rows: list[dict], k: int = 5, slots: int = COMPANY_SLOTS
 def _policy_rag(ws: int, q_tokens: str, q_vec: list[float] | None) -> list[dict]:
     with db.connect() as conn:
         rows = _with_company_rules(db.search_chunks(conn, ws, q_tokens, q_vec, 20))
-    return [{"ref": f"P{i + 1}", "chunk_id": r["id"], "doc_id": r["doc_id"], "doc_title": r["doc_title"], "version": r["version"],
-             "article_label": r["article_label"], "page": r["page"], "text": r["text"]} for i, r in enumerate(rows)]
+    return [_policy_entry(i + 1, r, "search") for i, r in enumerate(rows)]
+
+
+def _policy_entry(n: int, r: dict, source: str) -> dict:
+    return {"ref": f"P{n}", "chunk_id": r["id"], "doc_id": r["doc_id"], "doc_title": r["doc_title"], "version": r["version"],
+            "article_label": r["article_label"], "page": r["page"], "text": r["text"], "slug": r["slug"], "source": source}
+
+
+LINK_TOP = 2      # 규정 → 사례: 상위 몇 개 조문에 연결된 사례를 후보로 볼 것인가
+MAX_LINKED = 3    # 사례 → 규정: 체인이 가리키는 조문 중 근거에 더할 최대 수
+ARTICLE_RE = re.compile(r"\[?(제\d+조(?:의\d+)?|별표 ?\d+)")
+
+
+def _article_keys(policies: list[dict]) -> list[tuple[str, str]]:
+    """검색된 규정 청크 → (문서 slug, 조문). 대조표가 쓰는 표기와 같다."""
+    out = []
+    for p in policies:
+        m = ARTICLE_RE.match(p["article_label"] or "")
+        if m and (p["slug"], m.group(1)) not in out:
+            out.append((p["slug"], m.group(1)))
+    return out
+
+
+def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | None, policy_ctx: list[dict]) -> int:
+    """체인 노드의 근거 조문(attributes.policy_refs)을 근거 목록에 더하고, 노드마다 어느 근거인지 붙인다.
+    규정 검색 결과가 이미 있으면 새로 더하는 조문은 진입 노드·체인 루트·예외 사례가 가리키는 것만 — 질문과 먼 조문이 섞이지 않게.
+    검색 결과가 없으면(사례만 찾은 질의) 체인의 조문을 진입 노드·예외·해결 노드 순으로 MAX_LINKED 개까지 싣는다.
+    그 밖의 노드는 이미 실린 근거와 일치할 때만 표시한다. policy_ctx·chain_ctx·chain_event 를 고쳐 쓴다. 더한 근거 수를 돌려준다."""
+    entry = chain_event.entry_id if chain_event else None
+    pairs = [(n, r) for n in chain_ctx if n["status"] == "active" for r in (n.get("policy_refs") or []) if isinstance(r, dict)]
+    if not pairs:
+        return 0
+    keys = list(dict.fromkeys((r["policy"], r["article"]) for _, r in pairs if r.get("policy") and r.get("article")))
+    with db.connect() as conn:
+        chunks = db.policy_ref_chunks(conn, ws, keys)
+    by_chunk = {p["chunk_id"]: p for p in policy_ctx}
+    wide = not policy_ctx
+    added = 0
+    for n, r in sorted(pairs, key=lambda x: (x[0]["id"] != entry, x[1].get("relation") != "exception", x[0]["type"] != "success", x[0]["depth"])):
+        if r.get("relation") == "gap":
+            n.setdefault("policy", []).append({"relation": "gap", "topic": r.get("topic"), "note": r.get("note")})
+            continue
+        row = chunks.get((r.get("policy"), r.get("article")))
+        if not row or r.get("relation") not in ("follows", "exception"):
+            continue
+        p = by_chunk.get(row["id"])
+        if p is None:
+            key_node = wide or n["id"] == entry or n["depth"] == 0 or r["relation"] == "exception"
+            if not key_node or added >= MAX_LINKED:
+                continue
+            p = _policy_entry(len(policy_ctx) + 1, row, "case")
+            policy_ctx.append(p)
+            by_chunk[row["id"]] = p
+            added += 1
+        n.setdefault("policy", []).append({"relation": r["relation"], "ref": p["ref"], "label": f"{p['doc_title']} {r['article']}", "note": r.get("note")})
+    if chain_event:
+        marks = {n["id"]: n["policy"] for n in chain_ctx if n.get("policy")}
+        for ev in chain_event.nodes:
+            if ev.id in marks:
+                ev.policy = [NodePolicy(**m) for m in marks[ev.id]]
+    return added
 
 
 class CaseFloor(NamedTuple):
@@ -185,13 +270,21 @@ def _relevant(hit: dict, floor: CaseFloor | None) -> bool:
 
 
 def _sure(hit: dict, floor: CaseFloor | None) -> bool:
-    """판정 없이 채택하는 후보: 에러 코드 일치이거나 아주 가깝다."""
+    """판정 없이 채택하는 후보: 에러 코드 일치이거나 아주 가깝다. 규정을 거쳐 온 후보(linked)는 항상 판정한다."""
+    if hit.get("linked"):
+        return False
     return floor is None or hit["exact"] or hit["distance"] is None or hit["distance"] <= floor.sure
 
 
-def _case_candidates(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None, floor: CaseFloor | None) -> list[dict]:
+def _case_candidates(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None, floor: CaseFloor | None,
+                     linked_to: list[tuple[str, str]] | None = None) -> list[dict]:
     with db.connect() as conn:
         hits = [h for h in db.search_case_entry(conn, ws, q_tokens, q_vec, error_code, 3) if _relevant(h, floor)]
+        # 검색된 조문을 근거로 적어 둔 사례를 뒤에 더한다. 판정할 수 있을 때만(보정된 모델 + 벡터) — 판정 없이 채택하지 않는다
+        if linked_to and floor is not None and q_vec is not None and not (hits and _sure(hits[0], floor)):
+            have = {h["node_id"] for h in hits}
+            hits += [{"node_id": i, "score": 0.0, "exact": False, "lex_terms": 0, "distance": None, "linked": True}
+                     for i in db.cases_linked_to(conn, ws, linked_to) if i not in have]
         if hits and not _sure(hits[0], floor):   # 판정에 보여 줄 제목·요약
             briefs = db.case_briefs(conn, ws, [h["node_id"] for h in hits])
             hits = [{**h, **briefs[h["node_id"]]} for h in hits if h["node_id"] in briefs]
@@ -219,8 +312,9 @@ async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | N
 
 
 async def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,
-                        floor: CaseFloor | None = None, prof=None, query: str = "", usage=None) -> tuple[list[dict], ChainEvent | None]:
-    hits = await asyncio.to_thread(_case_candidates, ws, q_tokens, q_vec, error_code, floor)
+                        floor: CaseFloor | None = None, prof=None, query: str = "", usage=None,
+                        linked_to: list[tuple[str, str]] | None = None) -> tuple[list[dict], ChainEvent | None]:
+    hits = await asyncio.to_thread(_case_candidates, ws, q_tokens, q_vec, error_code, floor, linked_to)
     entry = await _choose_entry(prof, query, hits, floor, usage)
     if entry is None:
         return [], None
@@ -237,7 +331,7 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     for i, n in enumerate(nodes):
         ref = f"N{i + 1}"
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
-                    "resolution_summary": n.get("resolution_summary"), "depth": n["depth"]})
+                    "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs")})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
                                   last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None))

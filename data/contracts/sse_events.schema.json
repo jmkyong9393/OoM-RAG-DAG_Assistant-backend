@@ -191,6 +191,21 @@
           ],
           "default": null,
           "title": "Last Confirmed At"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/NodePolicy"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy"
         }
       },
       "required": [
@@ -202,6 +217,73 @@
         "depth"
       ],
       "title": "ChainNode",
+      "type": "object"
+    },
+    "NodePolicy": {
+      "description": "사례 노드의 근거 조문. follows = 규정을 따른 조치, exception = 규정과 달리 한 조치, gap = 규정에 기준이 없음.",
+      "properties": {
+        "relation": {
+          "enum": [
+            "follows",
+            "exception",
+            "gap"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ref"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "topic": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topic"
+        }
+      },
+      "required": [
+        "relation"
+      ],
+      "title": "NodePolicy",
       "type": "object"
     },
     "ChainEvent": {
@@ -432,6 +514,15 @@
         },
         "text": {
           "title": "Text",
+          "type": "string"
+        },
+        "source": {
+          "default": "search",
+          "enum": [
+            "search",
+            "case"
+          ],
+          "title": "Source",
           "type": "string"
         }
       },
