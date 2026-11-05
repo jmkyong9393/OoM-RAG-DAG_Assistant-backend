@@ -95,6 +95,18 @@ def test_table_sections_split_on_row_boundaries(tmp_path):
     assert sum(c["text"].count("\n") + 1 for c in doc["chunks"]) == 13, "행 수 보존(머리행 1 + 12)"
 
 
+def test_header_row_joins_following_oversized_row(tmp_path):
+    """700자를 넘는 행 앞에 머리글 행만 쌓여 있으면 머리글을 그 행의 첫 조각 앞에 붙인다 — '| 분쟁유형 | 해결기준 | 비고 |' 한 줄짜리 청크가 생기지 않게."""
+    long_row = "| 1) 성수기 주중 " + "ㆍ 사용예정일 전까지 취소함. " * 30 + "| o 환급 | 비고 |"
+    src = tmp_path / "tbl.md"
+    src.write_text("## 별표 Ⅱ 서비스업 › 숙박업\n\n| 분쟁유형 | 해결기준 | 비고 |\n" + long_row + "\n| 2) 비수기 | o 환급 | |\n", encoding="utf-8")
+    doc = b.build(src, args(max_chars=300))
+    texts = [c["text"] for c in doc["chunks"]]
+    assert all(len(t) <= 300 for t in texts)
+    assert not any(t.strip() == "| 분쟁유형 | 해결기준 | 비고 |" for t in texts), "머리글만 있는 청크 없음"
+    assert texts[0].startswith("| 분쟁유형 | 해결기준 | 비고 |\n1) 성수기 주중"), "머리글이 긴 행의 첫 조각 앞에 붙는다"
+
+
 def test_sub_headings_extend_parent_label(tmp_path):
     src = tmp_path / "sub.md"
     src.write_text("# 별표 Ⅰ 대상품목\n| 번호 | 업종 |\n\n## 별표 Ⅱ 상품 › 5. 공산품\n공통 규정.\n\n#### ⑤자동차\n| 1) 하자 | o 교환 |\n\n"

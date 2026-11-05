@@ -118,9 +118,15 @@ def _split_rows(text: str, max_chars: int) -> list[str]:
     buf = ""
     for u in units:
         if len(u) > max_chars:
-            if buf:
-                chunks.append(buf); buf = ""
-            chunks.extend(split_long(u.strip("| ").replace(" | ", " / "), max_chars))
+            # 앞에 쌓인 짧은 행(보통 '| 분쟁유형 | 해결기준 | 비고 |' 머리글)은 긴 행의 첫 조각 앞에 붙인다 — 머리글만 있는 청크를 만들지 않고, 조각에 열 이름을 남긴다
+            head = buf if buf and len(buf) < max_chars // 4 else ""
+            if buf and not head:
+                chunks.append(buf)
+            buf = ""
+            pieces = split_long(u.strip("| ").replace(" | ", " / "), max_chars - len(head) - 1 if head else max_chars)
+            if head:
+                pieces[0] = head + "\n" + pieces[0]
+            chunks.extend(pieces)
             continue
         if len(buf) + len(u) + 1 > max_chars and buf:
             chunks.append(buf); buf = ""
