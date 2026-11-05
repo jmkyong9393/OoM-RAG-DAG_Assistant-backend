@@ -3,7 +3,8 @@
 questions.md 표의 '정답 조문' 열을 변환 결과(<slug>.chunks.json)의 청크 id 로 매핑한다.
   제11조 ①②④            → {slug}-a11-* 중 해당 항(①②④)이 본문에 있는 청크
   제18조의2 ①②           → {slug}-a18-2-*
-  별표 2 설치 후 대형 가전·가구 행 → [별표 2] 청크 중 그 글자가 들어 있는 행(청크)
+  Q18                     → {slug}-q18-* (FAQ)
+  별표 2 설치 후 대형 가전·가구 행 → [별표 2] 청크 중 그 글자가 들어 있는 행(청크). 공백은 무시하고 비교
   (+ 제20조 ②)            → 같은 문서면 expect 에 추가, 다른 문서면 note 에만 남김
 항을 안 쓴 조문은 그 조문의 청크 전부. 매핑이 0건이면 오류로 멈춘다(평가셋에 빈 정답이 들어가지 않게).
 
@@ -21,6 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
 ART = re.compile(r"제(\d+)조(?:의(\d+))?\s*([" + CIRC + r"]*)")
+FAQ = re.compile(r"\bQ(\d+)\b")
 TBL = re.compile(r"별표\s*(\d+)\s*(.*?)\s*행\s*$")
 
 
@@ -51,12 +53,14 @@ def map_article(chunks: list[dict], slug: str, n: str, sub: str | None, hang: st
 
 
 def map_table(chunks: list[dict], k: str, key: str) -> list[str]:
-    cand = [c for c in chunks if c["article_label"].startswith(f"[별표 {k}]")]
-    key = key.strip()
-    hit = [c["id"] for c in cand if key and key in c["text"]]
-    if not hit and key:                      # '안내 문구·음성안내' → 조각 중 하나라도
-        parts = [p for p in re.split(r"[·,/ ]", key) if len(p) >= 2]
-        hit = [c["id"] for c in cand if parts and all(p in c["text"] for p in parts)]
+    cand = [(c["id"], re.sub(r"\s", "", c["text"])) for c in chunks if c["article_label"].startswith(f"[별표 {k}]")]
+    key = re.sub(r"\s", "", key)             # '경조금 행' ↔ 표의 '경조 금품' — 공백은 무시
+    hit = [i for i, t in cand if key and key in t]
+    if not hit and key:                      # '안내 문구·음성안내' → 조각 전부
+        parts = [p for p in re.split(r"[·,/]", key) if len(p) >= 2]
+        hit = [i for i, t in cand if parts and all(p in t for p in parts)]
+    if not hit and len(cand) == 1:           # 별표가 한 청크면 행을 못 찾아도 정답은 그 청크 하나
+        hit = [cand[0][0]]
     return hit
 
 
@@ -72,6 +76,8 @@ def map_refs(text: str, chunks: list[dict], slug: str) -> list[str]:
             continue
         for m in ART.finditer(part):
             ids += map_article(chunks, slug, m.group(1), m.group(2), m.group(3))
+        for m in FAQ.finditer(part):
+            ids += [c["id"] for c in chunks if c["id"].startswith(f"{slug}-q{m.group(1)}-")]
     return list(dict.fromkeys(ids))
 
 
