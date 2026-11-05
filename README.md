@@ -37,7 +37,7 @@
 | `ai/` | Python AI 서비스 (파이프라인, kiwipiepy, OpenAI 호환 LLM, 정제 워커) · `Dockerfile` | 장문경 · 배종현(그래프·프롬프트) |
 | `data/` | 규정(`policies/`, 원문 `policies/src/<slug>/`, 개정판 `policies/revisions/`) · 합성 사례 로그(`logs/`) · 규정↔사례 대조표(`alignment/`) · 평가셋(`evalset/`) · 답변 점검표(`answer_checks/`) · 시드 · SSE 계약 스키마(`contracts/`) | 신동준(적재·평가셋) · 프론트팀(규정 집필) |
 | `scripts/` | 원문 → 청크 JSON(`hwpx_to_md.py`, `build_policy_json.py`, `pdf_locate.py`), 적재(`index_policy.py`, `load_logs.py`, `load_alignment.py`), 검사기(`validate_policy_pack.py`, `validate_logs.py`, `check_alignment.py`), 평가셋 생성, 시드, LLM 스모크 | 신동준 · 장문경 |
-| `eval/` | `hit_at_k.py`(검색 hit@k·MRR, 대시보드 기록) · `answer_checks.py`(실제 답변 점검) | 신동준 · 장문경 |
+| `eval/` | `hit_at_k.py`(검색 hit@k·MRR, 대시보드 기록) · `answer_checks.py`(실제 답변 점검) · `answer_quality.py`(충실도·관련성 채점, 대시보드 기록) | 신동준 · 장문경 |
 | `deploy/` | `docker-compose.yml`(로컬: postgres만) · `docker-compose.prod.yml`(단일 호스트 운영) · `Caddyfile` · `docker-compose.smoke.yml` + `smoke.sh`(운영 compose 로컬 검증) · `.env.example` | 장문경 |
 | `.github/workflows/` | `ci.yml`(가드·Python·Spring·규정 변환 점검) · `deploy.yml`(2단계 자리표시) | 장문경 |
 
@@ -58,17 +58,20 @@
 
 | 지표 (평가셋 452건) | 값 |
 |---|---|
-| 규정 질의 hit@5 | 297 / 317 |
+| 규정 질의 hit@5 | 302 / 317 |
 | 사례 질의 hit@5 | 134 / 135 |
-| MRR@5 · DB 검색 시간 p50 | 0.81 · 49 ms |
+| MRR@5 · DB 검색 시간 p50 | 0.82 · 49 ms |
 | 사례 질의에서 정답 체인을 진입점으로 고름 | 126 / 135 |
 | 주제만 비슷한 질문에 사례가 붙음 | 2 / 24 |
+| 답변 충실도 (점검 질문 48건, 채점 모델 `gpt-4.1`) | 0.94 — 문장 173 / 185 |
+| 답변 관련성 (같은 48건, `text-embedding-3-large`) | 0.66 — 무관한 질문끼리는 0.26 |
+| 인용 검증 통과 · 첫 글자까지 (같은 48건) | 인용 110건 모두 검증 · p50 1.9초 |
 
 **답변** — 점검표 4종(유통 13 · IT 11 · 부서별 추천 질문 18 · 어려운 질문 6)을 실제 답변으로 돌려 통과. 점검은 인용한 조문·사례, 들어 있어야 할 말, 들어 있으면 안 되는 말을 본다.
 
 **API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 문서 상태, 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 110, Python 150(DB 통합 포함).
+**테스트** — Spring 111, Python 155(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과. Lightsail 기동은 아직.
 
@@ -126,6 +129,7 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 - PR 마다 `ci.yml`: `guard`(API 키 패턴·공개 레포 금지 단어) · `python` · `spring` · `policy-data`(규정 원문 PR 에서 변환기를 돌려 청크 수·형식 위반을 Job Summary 로).
 - 검색 품질: `cd ai && uv run python ../eval/hit_at_k.py` (평가셋 `data/evalset/*.json`, 어휘/벡터/하이브리드 hit@k·MRR, 두 문서에 걸친 질의의 동시 적중). `--record` 를 붙이면 결과를 `eval_runs` 에 남겨 대시보드(`GET /dashboard/summary` 의 `retrieval`)에 실측값이 나온다.
 - 답변 점검: `cd ai && uv run python ../eval/answer_checks.py --runs 2` (점검표 `data/answer_checks/*.json`, 실제 답변 생성 — LLM 호출 있음). 지시문이나 모델을 바꾼 뒤에는 이것을 돌린다.
+- 답변 품질: `cd ai && uv run python ../eval/answer_quality.py --judge-model <채점 모델>` — 같은 점검표의 질문으로 답변을 만들고, 채점 모델이 충실도(답변 문장 중 컨텍스트로 뒷받침되는 비율)와 관련성(답변에서 되짚어 만든 질문과 원래 질문의 임베딩 유사도)을 낸다. 정의는 RAGAS 를 따른다. `--record` 를 붙이면 `eval_runs` 에 남아 대시보드(`eval`)에 나온다. 관련성은 임베딩 모델마다 척도가 달라, 무관한 질문끼리의 유사도(기준선)를 함께 출력한다.
 
 ## 운영 배포 (단일 호스트)
 
