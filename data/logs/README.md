@@ -90,6 +90,7 @@
 | retail | `sw-dev_v1` · `hr-ga_v1` | 유통 · SW 개발(1) · 인사·총무(2) | 60 + 40 | `data/alignment/retail.json` |
 | retail-cs | `cs_v1` | 유통 · 고객지원(3) — 민원 처리 사례(환불·반품·악성 민원·계정 도용) | 31 | `data/alignment/retail.json` (`log: cs_v1`) |
 | it | `it-dev_v1` · `it-cs_v1` | IT 서비스 · SW 개발(21) · 고객지원(23) | 60 + 40 | `data/alignment/it.json` |
+| it-hr | `it-hr_v1` | IT 서비스 · 인사·총무(22) — 채용·윤리 사례(레퍼런스 체크 동의·결과 통보·처우 제안·겸직·협력사 선물·채용서류 반환·입사 서류) | 40 | `data/alignment/it.json` (`log: it-hr_v1`) |
 
 - 완료 기준은 세트별로 센다(`scripts/validate_logs.py` 의 `SETS`). retail·it 는 위 D-1 기준 그대로, retail-cs 는 구조 기준만.
 - 적재 순서는 `scripts/load_logs.py` 의 `ORDER`(먼저 만든 세트부터)로 고정한다. IT 회사 파일은 IT 회사 계정(`OIT0001`)으로 적재된다.

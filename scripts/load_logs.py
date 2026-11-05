@@ -65,7 +65,7 @@ def load_file(api: Api, path: pathlib.Path) -> dict:
     return res
 
 
-ORDER = ["hr-ga_v1", "sw-dev_v1", "cs_v1", "it-cs_v1", "it-dev_v1"]   # 먼저 만든 세트부터 — 새 세트가 끼어들어 기존 id 가 밀리지 않게
+ORDER = ["hr-ga_v1", "sw-dev_v1", "cs_v1", "it-cs_v1", "it-dev_v1", "it-hr_v1"]   # 먼저 만든 세트부터 — 새 세트가 끼어들어 기존 id 가 밀리지 않게
 IT_USER = "OIT0001"   # IT 회사(부서 20번대)의 시드 계정
 
 
@@ -80,7 +80,7 @@ def main():
     ap.add_argument("--base", default=f"http://localhost:{os.environ.get('PORT', '8080')}/api/v1")
     ap.add_argument("--user", default="OOM0002")
     a = ap.parse_args()
-    files = [pathlib.Path(f) for f in a.files] or default_files()
+    files = [pathlib.Path(f).resolve() for f in a.files] or default_files()
     if not files:
         sys.exit(f"적재할 파일이 없습니다: {ROOT / 'data' / 'logs'}/*_v1.json — 브랜치가 data/synthetic-logs 인지 확인")
     sessions = {}

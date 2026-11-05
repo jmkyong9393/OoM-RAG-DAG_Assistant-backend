@@ -108,15 +108,27 @@ def test_must_include_lists_cases_exceptions_and_entry_relation():
     assert llm._must_include([]) == [] and llm._must_include([node(1, status="deprecated")]) == []
     must = llm._must_include([
         node(1, [{"relation": "follows", "ref": "P2", "label": "운영지침 제9조"}], entry=True),
-        node(2, [{"relation": "exception", "ref": "P1", "label": "운영지침 제10조", "note": "당시 75%"}]),
+        {**node(2, [{"relation": "exception", "ref": "P1", "label": "운영지침 제10조", "note": "당시 75%"}]), "near": True},
         node(3, [{"relation": "gap", "topic": "합산 상한"}]),
-        node(4, [{"relation": "exception", "ref": "P1", "label": "x"}], status="deprecated")])
+        node(4, [{"relation": "exception", "ref": "P1", "label": "x"}], status="deprecated"),
+        node(5, [{"relation": "exception", "ref": "P3", "label": "운영지침 제17조"}]),
+        node(6, [{"relation": "exception", "ref": "P4", "label": "운영지침 제23조"}])], searched={"P4"})
     assert must[0].startswith("해결 사례를 한 문장 이상")
-    assert any("[N2]" in m and "[P1]" in m and "당시 75%" in m for m in must), "예외 사례는 체인 어디에 있든"
+    assert any("[N2]" in m and "[P1]" in m and "당시 75%" in m for m in must), "진입 사례와 같은 줄기의 예외"
+    assert any("[N6]" in m and "[P4]" in m for m in must), "질문으로 검색된 조문을 벗어난 예외"
+    assert not any("N5" in m for m in must), "다른 가지의 예외는 강제하지 않는다"
     assert any("[N1]" in m and "[P2]" in m and "따른 규정" in m for m in must), "진입 사례가 따른 규정"
     assert not any("N3" in m or "N4" in m for m in must), "진입 노드가 아닌 '기준 없음'과 폐기 노드는 넣지 않는다"
     gap = llm._must_include([node(1, [{"relation": "gap", "topic": "합산 상한"}], entry=True)])
     assert any("규정에 기준이 없다" in m and "합산 상한" in m for m in gap)
+
+
+def test_same_line_is_entry_with_ancestors_and_descendants():
+    from app.graph import pipeline
+    edges = [{"parent_id": 1, "child_id": 2}, {"parent_id": 2, "child_id": 3}, {"parent_id": 1, "child_id": 4}, {"parent_id": 4, "child_id": 5},
+             {"parent_id": 3, "child_id": 6}, {"parent_id": 5, "child_id": 6}]
+    assert pipeline._same_line(2, edges) == {1, 2, 3, 6}, "다른 가지(4·5)는 빠진다. 다중 부모 자손(6)은 든다"
+    assert pipeline._same_line(1, edges) == {1, 2, 3, 4, 5, 6}
 
 
 def test_case_is_optional_for_policy_questions():

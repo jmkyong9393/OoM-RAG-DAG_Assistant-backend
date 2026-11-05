@@ -1,6 +1,6 @@
 {
  "tenant": "it",
- "description": "OoM 테크 — 합성 로그(it-dev_v1 · it-cs_v1)와 규정 조문의 대조표. 값의 원천은 규정이고 로그 본문이 그 값을 따른다.",
+ "description": "OoM 테크 — 합성 로그(it-dev_v1 · it-cs_v1 · it-hr_v1)와 규정 조문의 대조표. 값의 원천은 규정이고 로그 본문이 그 값을 따른다.",
  "links": [
   {
    "log": "it-dev_v1",
@@ -1011,6 +1011,471 @@
     "소비자 불만·분쟁처리 기록은 3년"
    ],
    "note": "'분쟁' 표시는 현장이 정한 분류"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-root",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제13조",
+   "values": [
+    "지원자의 동의를 받아"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-consent",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제13조",
+   "values": [
+    "지원자의 동의를 받아"
+   ],
+   "note": "동의 확인 단계가 절차에 없어 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-timing",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제13조",
+   "values": [
+    "모든 면접 합격자를 대상으로 면접 합격 뒤에"
+   ],
+   "note": "조회 시기를 지키지 않아 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-gate",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제13조",
+   "values": [
+    "지원자의 동의를 받아",
+    "면접 합격 뒤에"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-delete",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제24조",
+   "values": [
+    "보유기간이 끝나기 전이라도"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-scope",
+   "relation": "gap",
+   "topic": "레퍼런스 체크 대상자의 수와 현 직장 포함 여부",
+   "note": "제13조는 동의와 시기만 정하고 세부 절차는 진행할 때 따로 알린다고만 한다. 대상자 수·범위 기준은 없다"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r1-form",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제13조",
+   "values": [
+    "개인별 처우 협의",
+    "서류 합격 뒤 그 추천인에게 추천서를 요청한다"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-root",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제15조",
+   "values": [
+    "영업일 3일 안에",
+    "합격 여부와 관계없이 모든 지원자에게"
+   ],
+   "note": "통보 목표를 넘긴 사례"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-eval",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제15조",
+   "values": [
+    "영업일 7일 이내",
+    "영업일 3일 안"
+   ],
+   "note": "통보 목표에 맞춘 내부 기한이 없어 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-eval-fix",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제15조",
+   "values": [
+    "영업일 3일 안에"
+   ],
+   "note": "평가 입력 기한(다음 영업일 18시)은 현장이 정한 값"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-reason",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제16조",
+   "values": [
+    "불합격 사유는 따로 알려 주지 않는"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-mail-old",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제16조",
+   "policy_values": [
+    "불합격 사유는 따로 알려 주지 않는다"
+   ],
+   "note": "사유를 적어 보내던 예전 문구라 폐기"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-mail",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제16조",
+   "values": [
+    "포지션과 팀 상황을 함께 고려해 정하므로",
+    "인터뷰 참석 확인서"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r2-mail",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제6조",
+   "values": [
+    "결과를 받은 때부터 6개월"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r3-root",
+   "relation": "gap",
+   "topic": "입사 제안(처우 제안)의 유효기간과 제안 뒤 변경·철회 기준",
+   "note": "제14조는 처우와 입사일을 메일로 협의하고 증빙자료를 받는다는 것만 정한다. 제안을 보낸 뒤의 변경·철회와 유효기간은 없다"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r3-proof",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제14조",
+   "values": [
+    "처우를 산정할 때는 증빙자료를 필수 항목으로"
+   ],
+   "note": "증빙자료 없이 산정해 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r3-proof-fix",
+   "relation": "gap",
+   "topic": "입사 제안(처우 제안)의 유효기간과 제안 뒤 변경·철회 기준",
+   "note": "회신 기한 5영업일, 변경 시 인사팀장 승인, 처음 금액 유지는 모두 현장 판단이다"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r3-date",
+   "relation": "gap",
+   "topic": "처우 합의 뒤 입사일 연기 요청의 허용 기간",
+   "note": "제14조는 입사일을 메일로 협의한다고만 한다. 연기 한도는 없고 6주는 조직장 판단이다"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r4-root",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제9조",
+   "values": [
+    "회사 허가 없이 다른 직업을 갖거나 영리 활동을 하지 않는다"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r4-unaware",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제9조",
+   "values": [
+    "유상 자문·강의",
+    "심야나 주당 12시간 이상 걸리는 외부 활동",
+    "대표이사 승인"
+   ],
+   "note": "사전 협의·승인 절차를 안내하지 않아 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r4-interviewer",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제8조",
+   "values": [
+    "지인을 추천했거나 지인의 면접관으로 지정되면 그 면접에서 빠"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r4-register",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제9조",
+   "values": [
+    "윤리 담당부서",
+    "대표이사 승인"
+   ],
+   "note": "자진신고 기간과 주당 8시간 조건은 현장이 정한 것. 자진 신고의 정상 참작은 제28조 ④"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r4-panel",
+   "relation": "exception",
+   "policy": "it-ethics-2026-11",
+   "article": "제8조",
+   "values": [
+    "제3자를 함께 넣어"
+   ],
+   "policy_values": [
+    "그 면접에서 빠진다"
+   ],
+   "note": "제8조 ③은 지인의 면접관으로 지정되면 그 면접에서 빠지라고 한다. 대체할 기술 면접관이 없어 알면서 참여시키되, 같은 항의 '불가피하게 참여하면 제3자를 함께 넣어'를 따라 평가에서 빼고 제3자에게 평가를 맡겼다"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r5-root",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제6조",
+   "values": [
+    "설날·추석에는 30만 원 이하"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r5-unreported",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제6조",
+   "values": [
+    "책임 보고서로 회사에 알"
+   ],
+   "note": "받은 금품을 알리지 않던 관행"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r5-share",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제7조",
+   "policy_values": [
+    "반송할 수 있으면 즉시 반송"
+   ],
+   "note": "반송하지 않고 나눠 쓰려던 처리라 폐기한 해결책"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r5-return",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제7조",
+   "values": [
+    "즉시 반송",
+    "윤리 담당부서 안내에 따라"
+   ],
+   "note": "같은 금액 기부는 윤리 담당부서가 안내한 방식"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r5-strict",
+   "relation": "exception",
+   "policy": "it-ethics-2026-11",
+   "article": "제6조",
+   "policy_values": [
+    "30만 원 이하까지 허용한다"
+   ],
+   "log_values": [
+    "12만 원",
+    "30만 원 이하"
+   ],
+   "note": "제6조 ②는 추석에 30만 원 이하 농수산물을 허용한다. 받은 직원이 재계약 입찰의 평가 위원이라 알면서 한도 안의 선물도 반송했다(제20조 ② 선정 기간의 제안사 접촉 제한 취지)"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r5-limit",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "별표 2",
+   "values": [
+    "1인당 5만 원 이하",
+    "평소 15만 원 이하",
+    "1회 5만 원 이하",
+    "10만 원 이하"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r6-root",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제21조",
+   "values": [
+    "결과 발표 뒤 90일 이내"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r6-notice",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제19조",
+   "values": [
+    "채용 여부가 정해지기 전에 지원자에게 알"
+   ],
+   "note": "사전 고지를 빠뜨려 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r6-late",
+   "relation": "exception",
+   "policy": "it-recruit-2026-11",
+   "article": "제21조",
+   "policy_values": [
+    "90일 이내",
+    "반환 배송비는 지원자가 낸다"
+   ],
+   "log_values": [
+    "93일째",
+    "배송비도 회사가 부담"
+   ],
+   "note": "제21조는 청구기간을 결과 발표 뒤 90일 이내, 배송비를 지원자 부담으로 정한다. 반환 안내(제19조 ③)를 회사가 빠뜨린 건이라 알면서 93일째 청구를 받고 배송비도 회사가 냈다"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r6-notice-fix",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제21조",
+   "values": [
+    "90일 이내",
+    "채용서류 반환 청구 메뉴",
+    "요청일부터 14일 안에"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r6-guide",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제21조",
+   "values": [
+    "채용 홈페이지에 올린 파일과 스스로 낸 자료는 돌려주지 않는다",
+    "이름, 이메일, 생년월일, 받을 주소, 서류 종류"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-root",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제22조",
+   "values": [
+    "최종 합격자에게서만"
+   ],
+   "note": "최종 합격 전에 수집해 생긴 문제"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-early",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제2조",
+   "values": [
+    "직무와 무관한 개인정보"
+   ],
+   "note": "전형 중인 지원자에게 직무와 무관한 정보를 요구하게 된 원인"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-early-fix",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제22조",
+   "values": [
+    "주민등록번호(외국인은 외국인등록번호), 국적, 주소",
+    "보훈번호는 선택으로"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-purge",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제23조",
+   "values": [
+    "채용 결과 발표일부터 1년 동안"
+   ],
+   "note": "보유기간을 넘겨 보관한 사례"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-purge-fix",
+   "relation": "follows",
+   "policy": "it-privacy-2026-11",
+   "article": "제14조",
+   "values": [
+    "보유기간이 끝난 날부터 5일 이내에 파기"
+   ],
+   "note": "월 1회 점검은 현장이 정한 방식"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-purge-fix",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제23조",
+   "values": [
+    "제출일부터 5년"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "r7-checklist",
+   "relation": "follows",
+   "policy": "it-recruit-2026-11",
+   "article": "제22조",
+   "policy_values": [
+    "최종 합격자에게서만"
+   ],
+   "note": "전형 중 수집을 전제로 한 예전 목록이라 폐기"
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "o1-retire",
+   "relation": "follows",
+   "policy": "it-ethics-2026-11",
+   "article": "제12조",
+   "values": [
+    "개인정보 면담",
+    "비밀유지계약서"
+   ]
+  },
+  {
+   "log": "it-hr_v1",
+   "ref": "o1-retire",
+   "relation": "gap",
+   "topic": "퇴사한 임직원 인사기록의 보유기간과 파기 기준",
+   "note": "채용 규정과 개인정보 처리 규정은 지원자·이용자 정보만 다룬다. 임직원 인사기록의 보유기간은 없다"
   }
  ]
 }
