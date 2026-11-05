@@ -57,12 +57,15 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
 
         # workers (병렬. 한쪽 실패는 stage error 로 보고하고 계속)
         do_policy = policy_enabled and intent in ("policy", "both")
-        do_graph = case_enabled and (intent in ("troubleshoot", "both") or not policy_enabled)
+        floor = CASE_FLOOR.get(prof.embedding_model)
+        # 규정 질의에도 사례를 찾는다: 사례가 있는 부서(규정+사례형)에서는 "영수증 없이 환불 되나요" 같은 규정 모양의 질문에 처리 사례가 답의 절반이다.
+        # 관련성을 판정할 수 있을 때만(보정된 임베딩 + 벡터) — 판정 없이 붙이면 규정 답변마다 엉뚱한 체인이 따라온다
+        with_cases = cctx["has_cases"] and floor is not None and q_vec is not None
+        do_graph = case_enabled and (intent in ("troubleshoot", "both") or not policy_enabled or with_cases)
         if do_policy:
             yield sse("stage", StageEvent(node="policy_rag", status="start").model_dump())
         if do_graph:
             yield sse("stage", StageEvent(node="graph_search", status="start").model_dump())
-        floor = CASE_FLOOR.get(prof.embedding_model)
         if do_policy and do_graph:
             # 규정을 먼저 찾아, 그 조문을 근거로 적어 둔 사례를 사례 후보에 더한다 (규정 검색은 수십 ms, 사례 쪽은 판정이 더 길다)
             try:
@@ -136,7 +139,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         yield sse("stage", StageEvent(node="generate", status="start").model_dump())
         answer: list[str] = []
         first_token_ms: int | None = None
-        async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage):
+        async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage, case_required=intent != "policy"):
             if first_token_ms is None:
                 first_token_ms = int((time.perf_counter() - t0) * 1000)
             answer.append(piece)

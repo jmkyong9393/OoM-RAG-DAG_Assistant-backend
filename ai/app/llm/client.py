@@ -34,7 +34,8 @@ OBLIGATION_RE = re.compile(r"[가-힣]야\s?(?:해|하|돼|되|합|됩)|[가-힣
 EXPERIENCE_RE = re.compile(r"어떻게\s?(?:했|풀었|고쳤|해결했|처리했|막았)|어케|[가-힣]\s적\s?(?:있|없)|(?:만든|바꾼|고친|적용한|도입한)\s?(?:거|것|사례)"
                            r"|(?:했|잡았|풀었|고쳤|바꿨|막았|넣었|뺐|정했)(?:어|지|나|는지)(?:요)?\s*\??$")
 # 증상을 호소하는 표현: "자꾸 로그아웃돼요", "이미지를 못 받아와요", "상신이 안 돼요" — 조치를 정한 규정과 사례를 함께 본다(both)
-SYMPTOM_RE = re.compile(r"(?:자꾸|계속|갑자기|반복해서)\s?[^?]{0,20}(?:돼요|되요|돼|됨|겨요|져요|떠요|뜸|나요|남)|못\s?[가-힣]{1,6}(?:와요|해요|가요|옴|함)|안\s?(?:돼요|됩니다|되네)")
+SYMPTOM_RE = re.compile(r"(?:자꾸|계속|갑자기|반복해서)\s?[^?]{0,20}(?:돼요|되요|돼|됨|겨요|져요|떠요|뜸|나요|남)|못\s?[가-힣]{1,6}(?:와요|해요|가요|옴|함)|안\s?(?:돼요|됩니다|되네|잡혀|들어와|들어온|와요|나와요|떠요|열려|보여요)")
+CODE_NAME_RE = re.compile(r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b")   # 'CANCEL_PERIOD_EXPIRED' — 대문자 상수 모양의 오류 이름
 HTTP_STATUS_RE = re.compile(r"(?<!\d)[45]\d\d(?!\d)")   # '504', '429로', '403 떨어지는데' — 접두어 없는 HTTP 상태 코드
 
 
@@ -42,7 +43,8 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
     """힌트만으로 결정되면 IntentResult, 애매하면 None. 에러 코드는 troubleshoot 의 강한 신호."""
     q = query.lower()
     has_policy = any(h in q for h in POLICY_HINTS)
-    has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q)) or bool(EXPERIENCE_RE.search(q))
+    has_trouble = (bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q)) or bool(EXPERIENCE_RE.search(q))
+                   or bool(CODE_NAME_RE.search(query)))
     symptom = bool(SYMPTOM_RE.search(q))
     weak_trouble = any(h in q for h in TROUBLE_WEAK_HINTS)
     weak_policy = any(h in q for h in POLICY_WEAK_HINTS) or bool(OBLIGATION_RE.search(q))
@@ -50,6 +52,8 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
         return IntentResult(intent="both", reason="rule: policy+trouble hints")
     if has_trouble and weak_policy:
         return IntentResult(intent="both", reason="rule: trouble + obligation/threshold hints")
+    if symptom and (has_policy or weak_policy) and not has_trouble:   # 증상을 호소하면서 기준을 묻는다 → 둘 다
+        return IntentResult(intent="both", reason="rule: symptom + policy hints")
     if has_policy:
         return IntentResult(intent="policy", reason="rule: policy hints")
     if weak_policy and not has_trouble and not weak_trouble:   # 장애 낌새 없이 의무·허용·기준값만 묻는다 → 규정이 답을 가진 질문
@@ -124,11 +128,12 @@ GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 �
 (8) 질문 뒤에 [답변에 꼭 담을 것]이 있으면 그 항목을 빠짐없이 답변에 담는다. 항목의 문장을 그대로 베끼지 말고 답변의 흐름에 맞게 쓴다."""
 
 
-async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage) -> AsyncIterator[str]:
+async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage,
+                   case_required: bool = True) -> AsyncIterator[str]:
     """policy_ctx: {ref, article_label, doc_title, text}, chain_ctx: {ref, type, status, title, resolution_summary, depth}"""
     if ai_mode() == "openai" and profile.has_key:
         context = _render_context(policy_ctx, chain_ctx)
-        must = _must_include(chain_ctx)
+        must = _must_include(chain_ctx, case_required)
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -160,13 +165,15 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     return [w + " " for w in text.split(" ") if w]
 
 
-def _must_include(chain_ctx: list[dict]) -> list[str]:
+def _must_include(chain_ctx: list[dict], case_required: bool = True) -> list[str]:
     """사례가 있을 때 답변이 빠뜨리기 쉬운 것을 컨텍스트에서 뽑는다 — 규칙만 주면 규정 문장만 쓰고 사례·예외를 건너뛰는 일이 잦았다.
     사례 인용, 규정과 달리 처리한 예외(체인 어디에 있든), 진입 사례의 '기준 없음', 진입 사례가 따른 규정."""
     live = [n for n in chain_ctx if n["status"] == "active"]
     if not live:
         return []
-    out = ["해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다."]
+    # 규정을 물은 질문에 딸려 온 사례는 참고다 — 질문과 닿을 때만 쓰게 한다 (억지로 인용시키면 주제만 비슷한 사례가 답에 섞인다)
+    out = ["해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다." if case_required else
+           "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않는다."]
     for n in live:
         for p in n.get("policy") or []:
             if p["relation"] == "exception":

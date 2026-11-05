@@ -117,3 +117,10 @@ def test_must_include_lists_cases_exceptions_and_entry_relation():
     assert not any("N3" in m or "N4" in m for m in must), "진입 노드가 아닌 '기준 없음'과 폐기 노드는 넣지 않는다"
     gap = llm._must_include([node(1, [{"relation": "gap", "topic": "합산 상한"}], entry=True)])
     assert any("규정에 기준이 없다" in m and "합산 상한" in m for m in gap)
+
+
+def test_case_is_optional_for_policy_questions():
+    node = {"ref": "N1", "id": 1, "type": "fail", "status": "active", "title": "t", "resolution_summary": None, "depth": 0, "policy": None, "entry": True}
+    assert "한 문장 이상" in llm._must_include([node])[0]
+    soft = llm._must_include([node], case_required=False)[0]
+    assert "먼저 규정으로 답한다" in soft and "상황이 다르면" in soft
