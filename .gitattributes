@@ -3,3 +3,5 @@ data/policies/src/**/*.md text eol=lf
 data/policies/src/**/meta.json text eol=lf
 data/alignment/*.json text eol=lf
 *.pdf binary
+data/policies/revisions/**/*.md text eol=lf
+data/policies/revisions/**/meta.json text eol=lf
