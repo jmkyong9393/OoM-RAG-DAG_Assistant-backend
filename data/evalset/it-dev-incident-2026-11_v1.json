@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 21, "kind": "policy", "query": "경보 뜨고 몇 분 안에 확인 안 하면 다음 사람한테 넘어가?", "expect": ["c:it-dev-incident-2026-11-a5-1"], "note": "기본 | 제5조 ③ | 15분 안에 확인하지 않으면 장애 관리 책임자에게 자동으로 넘어감"},
+  {"workspace_id": 21, "kind": "policy", "query": "사후분석을 꼭 써야 하는 장애 등급이 뭐야?", "expect": ["c:it-dev-incident-2026-11-a16-1"], "note": "기본 | 제16조 ① | SEV-1·SEV-2 장애는 반드시 쓰고, 그 밖의 장애는 선택"},
+  {"workspace_id": 21, "kind": "policy", "query": "외부 공지 필요한 C1 다운타임은 얼마나 미리 알려야 해요?", "expect": ["c:it-dev-incident-2026-11-a10-1"], "note": "기본 | 제10조 ② | 약 5~6주 전에 알리고 2주·1주·3일·1일 전에 다시 알림"},
+  {"workspace_id": 21, "kind": "policy", "query": "Hard 동결 중에 장애 대응용 긴급 패치는 내보내도 돼?", "expect": ["c:it-dev-incident-2026-11-a23-1"], "note": "기본 | 제23조 ④ | 진행 중인 SEV-1·SEV-2 대응은 온콜 엔지니어와 장애 관리 책임자가 모두 승인하면 허용"},
+  {"workspace_id": 21, "kind": "policy", "query": "API 키 유출되면 기존 키는 언제 지워야 돼?", "expect": ["c:it-dev-incident-2026-11-a29-1"], "note": "기본 | 제29조 ① | 새 키를 발급해 서비스에 적용한 뒤 기존 키 삭제, 삭제한 키는 복구 불가"},
+  {"workspace_id": 21, "kind": "policy", "query": "호출 한도 넘겼을 때 재시도 간격은 어떻게 둬야 해?", "expect": ["c:it-dev-incident-2026-11-a30-1"], "note": "기본 | 제30조 ③ | 1·2·4·8·16초 간격의 지수 백오프로 재시도"},
+  {"workspace_id": 21, "kind": "policy", "query": "외부 취약점 제보 받으면 며칠 안에 답해줘야 해?", "expect": ["c:it-dev-incident-2026-11-a27-1"], "note": "기본 | 제27조 ① | 3영업일 안에 평가 결과와 예상 해결 일정을 답함"},
+  {"workspace_id": 21, "kind": "policy", "query": "원인 못 찾고 한 시간째 헤매는 중인데 인시던트 열어야 해?", "expect": ["c:it-dev-incident-2026-11-a4-1"], "note": "의역 | 제4조 ① | 1시간 동안 집중 분석해도 해결되지 않으면 장애를 선언"},
+  {"workspace_id": 21, "kind": "policy", "query": "회고 문서에 실수한 사람 실명 그대로 적어도 되나요?", "expect": ["c:it-dev-incident-2026-11-a18-1"], "note": "의역 | 제18조 ①② | 개인이나 팀을 탓하지 않고, 사람은 이름 대신 역할로 부름"},
+  {"workspace_id": 21, "kind": "policy", "query": "장애 원인 자체를 뜯어고치는 일은 몇 주 안에 끝내야 돼?", "expect": ["c:it-dev-incident-2026-11-a19-1"], "note": "의역 | 제19조 ② | 근본원인을 고치는 우선 조치의 이행 목표는 서비스에 따라 4주 또는 8주"},
+  {"workspace_id": 21, "kind": "policy", "query": "서비스 죽어서 고객이 요금 보상 받으려면 몇일까지 신청해야 돼?", "expect": ["c:it-dev-incident-2026-11-a15-1"], "note": "의역(오타) | 제15조 ① | 장애가 난 달의 다음 달 말일까지 고객센터에 청구"},
+  {"workspace_id": 21, "kind": "policy", "query": "HA 쓰는 DB 고객 월 가용률이 97% 나오면 크레딧 몇 %야?", "expect": ["c:it-dev-incident-2026-11-s17-1"], "note": "표 | 별표 2 크레딧 비율 행 | 95% 이상 99.0% 미만 구간이라 25%"},
+  {"workspace_id": 21, "kind": "policy", "query": "파트너 앱 API는 10분에 몇 번까지 호출할 수 있어?", "expect": ["c:it-dev-incident-2026-11-s33-1"], "note": "표 | 별표 3 대표 수치 행 | 10분 3,000회·처리 600초, 버킷 40·초당 2회"},
+  {"workspace_id": 21, "kind": "policy", "query": "SEV-1이랑 SEV-2는 사후분석 회의 잡는 기한이 달라?", "expect": ["c:it-dev-incident-2026-11-a17-1"], "note": "비교 | 제17조 ② | SEV-1은 3일(달력일), SEV-2는 5영업일 안"},
+  {"workspace_id": 21, "kind": "policy", "query": "Soft 동결이랑 Hard 동결은 막는 범위가 어떻게 달라?", "expect": ["c:it-dev-incident-2026-11-a23-1"], "note": "비교 | 제23조 ①② | Soft는 C2 이상 인프라 변경·배포 후 마이그레이션, Hard는 모든 배포·변경·피처 플래그 전환"}
+]

@@ -1,0 +1,765 @@
+{
+ "tenant": "retail",
+ "description": "OoM 리테일 — 합성 로그(sw-dev_v1 · hr-ga_v1)와 규정 조문의 대조표. 값의 원천은 로그이고 규정이 그 값을 따른다.",
+ "links": [
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-root",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제4조",
+   "note": "배포 전 pull 시크릿 점검 대상"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-token",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제12조",
+   "values": [
+    "90일"
+   ],
+   "note": "만료 알림이 개인(퇴사자) 계정으로 가던 것이 원인 — 알림은 공용 채널로"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-cron",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제12조",
+   "values": [
+    "7일"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-manual",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제18조",
+   "note": "자동 갱신으로 대체되어 폐기한 해결책"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-perm",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제12조",
+   "note": "표준 권한 템플릿 없이 만든 계정"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-iac",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제12조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-std",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제12조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-over",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제12조",
+   "note": "레지스트리 권한은 읽기 전용이 기본"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c1-check",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "별표 2",
+   "values": [
+    "30일"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-root",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-tx",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조",
+   "note": "트랜잭션 안 외부 HTTP 호출 금지"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-tx-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-size",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조",
+   "policy_values": [
+    "20"
+   ],
+   "note": "당시 풀 최대 10 — 현재 기준은 20"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-size-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조",
+   "values": [
+    "20",
+    "3초"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-leak",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-leak-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제9조",
+   "values": [
+    "60초"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c2-max",
+   "relation": "gap",
+   "topic": "인스턴스 수 × 풀 크기의 합이 DB 최대 연결 수를 넘지 않게 하는 기준",
+   "note": "제9조는 인스턴스별 풀 크기만 정한다. 합산 상한이 없어 풀을 20 으로 늘린 뒤 연결 거부가 났다"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-rotate",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-grace",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조",
+   "values": [
+    "30초"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-jwks",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조",
+   "policy_values": [
+    "1시간"
+   ],
+   "note": "당시 캐시 유효 시간 24시간 — 현재 기준은 1시간"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-jwks-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조",
+   "values": [
+    "1시간"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-clock",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-skew",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조",
+   "values": [
+    "5분"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-decode",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제13조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-cdn",
+   "relation": "gap",
+   "topic": "CDN 캐시 키에 인증 헤더를 포함하는 기준",
+   "note": "인증 응답의 캐싱 기준이 지침에 없다"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c3-lb",
+   "relation": "gap",
+   "topic": "키 교체 시 노드별 공개키 캐시를 맞추는 절차",
+   "note": "제13조는 캐시 유효 시간만 정하고 노드 간 불일치 점검은 정하지 않는다"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-key",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제11조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-key-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제11조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-disk",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제11조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-disk-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제11조",
+   "values": [
+    "2GB",
+    "7일"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-std",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제11조",
+   "values": [
+    "매주 일요일"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-inval",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제11조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-wrong",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제17조",
+   "note": "무관으로 판명된 가설은 사유를 적어 폐기"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c4-slow",
+   "relation": "gap",
+   "topic": "캐시 상한을 넘는 대형 모듈의 캐시 기준",
+   "note": "상한 2GB 를 넘는 모듈은 캐시를 못 써 빌드 시간이 3배가 됐다. 모듈별 분할 캐시 기준이 없다"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-root",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조",
+   "note": "같은 컨테이너가 메모리 부족으로 2회 이상 재시작되면 장애로 기록"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-heap",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-heap-fix",
+   "relation": "exception",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조",
+   "policy_values": [
+    "70%"
+   ],
+   "log_values": [
+    "75%"
+   ],
+   "note": "당시 힙을 75% 로 정했다. 메타스페이스 부족이 드러나 70% 로 낮춘 것이 현재 기준(c5-meta-fix)"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-load",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-page",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조",
+   "values": [
+    "1,000건"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-limit",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조",
+   "note": "배치와 웹 서비스의 값을 같이 쓰지 않는다"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-limit-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조",
+   "values": [
+    "1.5배",
+    "1.2배"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-meta",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c5-meta-fix",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제10조",
+   "values": [
+    "70%",
+    "256m"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-root",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제7조",
+   "values": [
+    "10초"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-notice",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제8조",
+   "note": "연동사 공지는 개인 메일이 아니라 팀 공용 채널로"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-cb",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제7조",
+   "values": [
+    "50%",
+    "10초"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-retry",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제7조",
+   "note": "간격 없는 즉시 재시도 금지"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-backoff",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제7조",
+   "values": [
+    "2회",
+    "1초",
+    "2초",
+    "4초"
+   ]
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-runbook",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제8조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-deploy",
+   "relation": "exception",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제5조",
+   "values": [
+    "5분",
+    "1%"
+   ],
+   "note": "에러율 0.6% 로 롤백 기준(1%)에 미달했지만 결제 경로라 담당자 판단으로 롤백. 제5조 ③에 따라 사유를 기록한 사례"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-rollback",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제6조"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-again",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제6조",
+   "note": "환경별 설정의 운영 값을 등록하지 않아 재발"
+  },
+  {
+   "log": "sw-dev_v1",
+   "ref": "c6-gate",
+   "relation": "follows",
+   "policy": "retail-deploy-incident-2026-11",
+   "article": "제4조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-root",
+   "relation": "follows",
+   "policy": "retail-vpn-2026-11",
+   "article": "제17조",
+   "values": [
+    "E-403"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-edu",
+   "relation": "follows",
+   "policy": "retail-vpn-2026-11",
+   "article": "제16조",
+   "values": [
+    "다음 달 1일"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-edu-fix",
+   "relation": "follows",
+   "policy": "retail-vpn-2026-11",
+   "article": "제16조",
+   "values": [
+    "2주"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-cert",
+   "relation": "follows",
+   "policy": "retail-vpn-2026-11",
+   "article": "제8조",
+   "values": [
+    "1년"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-cert-fix",
+   "relation": "follows",
+   "policy": "retail-vpn-2026-11",
+   "article": "제8조",
+   "values": [
+    "1시간"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-status",
+   "relation": "follows",
+   "policy": "retail-vpn-2026-11",
+   "article": "제18조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h1-wifi",
+   "relation": "gap",
+   "topic": "공용 무선망에서 VPN 포트가 막힐 때의 안내",
+   "note": "제11조는 접속 장소의 보안만 정한다. 포트 차단 시 대체 수단 안내가 없다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h2-root",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제10조",
+   "values": [
+    "5회",
+    "15분"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h2-saved",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제9조",
+   "note": "옛 비밀번호가 저장된 기기의 비밀번호도 함께 바꾼다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h2-saved-fix",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제10조",
+   "values": [
+    "3회"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h2-forget",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제11조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h2-self",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제11조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h2-guide",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제9조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h3-root",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제13조",
+   "values": [
+    "10GB"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h3-attach",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제13조",
+   "values": [
+    "10MB"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h3-attach-fix",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제13조",
+   "values": [
+    "10MB",
+    "1년"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h3-trash",
+   "relation": "exception",
+   "policy": "retail-infosec-2026-11",
+   "article": "제13조",
+   "policy_values": [
+    "30일"
+   ],
+   "log_values": [
+    "90일"
+   ],
+   "note": "당시 휴지통 보관 기간이 90일이었다. 30일 자동 비움이 현재 기준(h3-trash-fix)"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h3-trash-fix",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제13조",
+   "values": [
+    "30일",
+    "90%"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h4-root",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제15조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h4-date",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제15조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h4-date-fix",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제15조",
+   "values": [
+    "전날"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h4-mag",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제15조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h4-reissue",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제15조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h4-night",
+   "relation": "gap",
+   "topic": "당직자의 야간·통제 구역 출입 권한 기준",
+   "note": "제15조 ④는 통제 구역 권한을 따로 부여한다고만 정한다. 당직자에게 무엇을 기본으로 줄지 기준이 없다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h5-root",
+   "relation": "gap",
+   "topic": "전자결재 운영 기준",
+   "note": "전자결재의 장애 대응·대결·독촉 기준을 정한 규정이 없다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h5-deputy",
+   "relation": "gap",
+   "topic": "휴가 중 대결자 지정",
+   "note": "대결자 지정 의무를 정한 규정이 없다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h5-deputy-fix",
+   "relation": "gap",
+   "topic": "휴가 중 대결자 지정",
+   "note": "화면에서 필수 입력으로 막았지만 규정에는 없다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h5-track",
+   "relation": "gap",
+   "topic": "결재 지연 독촉·에스컬레이션 기한",
+   "note": "3일 독촉·7일 에스컬레이션은 현장이 정한 값이다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h6-root",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제16조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h6-list",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제16조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h6-list-fix",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제16조",
+   "note": "퇴직 정산은 반납이 확인된 뒤에 마친다"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h6-broken",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제16조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h6-pack",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제16조"
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "h6-guide",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제16조",
+   "values": [
+    "5영업일"
+   ]
+  },
+  {
+   "log": "hr-ga_v1",
+   "ref": "o1-wifi",
+   "relation": "follows",
+   "policy": "retail-infosec-2026-11",
+   "article": "제14조",
+   "values": [
+    "분기 1회",
+    "월 1회"
+   ]
+  }
+ ]
+}

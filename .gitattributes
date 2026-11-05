@@ -1,0 +1,5 @@
+# 규정 원문은 줄바꿈이 LF 여야 한다(변환기·검사기가 바이트로 본다). Windows 체크아웃에서도 LF 로 유지
+data/policies/src/**/*.md text eol=lf
+data/policies/src/**/meta.json text eol=lf
+data/alignment/*.json text eol=lf
+*.pdf binary

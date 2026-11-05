@@ -14,16 +14,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import index_policy  # noqa: E402
 
 SLUG = "test-refund-v9"
+OLD = "test-refund-v8"     # 개정 대상(구판). 시드나 적재된 실제 문서의 상태에 기대지 않게 테스트가 직접 만든다
 
 
 def _doc(text_suffix: str = "", supersedes: str | None = None, title: str = "[test] 환불규정") -> dict:
     d = {"slug": SLUG, "workspace_id": 3, "title": title, "version": "v9.0", "doc_type": "규정", "source_type": "json",
          "effective_from": "2026-11-01", "tags": ["test"], "terms": ["테스트단순변심", "테스트교환환급"],
          "chunks": [{"article_label": "제1조 (목적)", "text": "이 규정은 테스트 환불 절차를 정한다." + text_suffix},
-                    {"id": f"{SLUG}-a7-1", "article_label": "제7조 (개봉 상품)", "page": 3, "text": "개봉한 신선식품은 단순 변심 환불이 불가하다."}]}
+                    {"id": f"{SLUG}-a7-1", "article_label": "제7조 (개봉 상품)", "page": 3, "text": "개봉한 신선식품은 단순 변심 환불이 불가하다. 테스트마커구판신판"}]}
     if supersedes:
         d["supersedes"] = supersedes
     return d
+
+
+def _old() -> dict:
+    return {"slug": OLD, "workspace_id": 3, "title": "[test] 환불규정 구판", "version": "v8.0", "doc_type": "규정", "source_type": "json",
+            "chunks": [{"id": f"{OLD}-a7-1", "article_label": "제7조 (개봉 상품)", "text": "개봉한 신선식품도 7일 이내 환불된다. 테스트마커구판신판"}]}
 
 
 @pytest.fixture
@@ -36,10 +42,9 @@ def ai_conn():
 @pytest.fixture
 def cleanup(admin_conn):
     yield
-    admin_conn.execute("DELETE FROM audit_log WHERE table_name = 'policy_documents' AND (label LIKE '[test]%%' OR label LIKE '환불규정 v3%%')")
+    admin_conn.execute("DELETE FROM audit_log WHERE table_name = 'policy_documents' AND label LIKE '[test]%%'")
     admin_conn.execute("DELETE FROM policy_documents WHERE slug LIKE 'test-%%'")   # 청크는 CASCADE
     admin_conn.execute("DELETE FROM workspace_terms WHERE term LIKE '테스트%%'")
-    admin_conn.execute("UPDATE policy_documents SET status = 'active', retired_at = NULL, retire_reason = NULL, retired_by = NULL WHERE slug = 'refund-policy-v3'")
 
 
 def test_validate_rejects_missing_fields(tmp_path):
@@ -78,23 +83,25 @@ def test_index_then_skip_then_reindex_and_r8(ai_conn, admin_conn, cleanup):
     assert admin_conn.execute("SELECT text FROM policy_chunks WHERE id = %s", (f"{SLUG}-001",)).fetchone()["text"].endswith("(개정)")
     assert admin_conn.execute("SELECT count(*) AS c FROM policy_chunks WHERE doc_id = %s", (doc["id"],)).fetchone()["c"] == 2
 
-    # 4) R8 — supersedes 로 시드 환불규정 v3 를 지목하면 그 문서가 retired 되고 검색에서 빠진다
-    r = index_policy.index_document(ai_conn, _doc(text_suffix=" (v9.1)", supersedes="refund-policy-v3"))
-    assert r["retired"] == ["refund-policy-v3"]
-    old = admin_conn.execute("SELECT status, retire_reason, retired_by FROM policy_documents WHERE slug = 'refund-policy-v3'").fetchone()
+    # 4) R8 — supersedes 로 구판을 지목하면 그 문서가 retired 되고 검색에서 빠진다
+    assert index_policy.index_document(ai_conn, _old())["retired"] == []          # 제목이 달라 서로를 폐기하지 않는다
+    r = index_policy.index_document(ai_conn, _doc(text_suffix=" (v9.1)", supersedes=OLD))
+    assert r["retired"] == [OLD]
+    old = admin_conn.execute("SELECT status, retire_reason, retired_by FROM policy_documents WHERE slug = %s", (OLD,)).fetchone()
     assert old == {"status": "retired", "retire_reason": "v9.0 개정", "retired_by": "script"}
     assert admin_conn.execute("SELECT count(*) AS c FROM audit_log WHERE table_name='policy_documents' AND action='superseded' AND reason='v9.0 개정'").fetchone()["c"] == 1
 
 
 
 async def test_backfill_makes_new_policy_searchable_and_old_hidden(ai_conn, admin_conn, cleanup, fake_mode):
-    index_policy.index_document(ai_conn, _doc(supersedes="refund-policy-v3"))
+    index_policy.index_document(ai_conn, _old())
+    index_policy.index_document(ai_conn, _doc(supersedes=OLD))
     from app import worker
     from app.retrieval import db
     from app.retrieval.tokenize import Tokenizer
     stats = await worker.run_once()
     assert stats["chunks"] >= 2
     with db.connect() as conn:
-        hits = [h["id"] for h in db.search_chunks(conn, 3, Tokenizer().tokens("개봉 신선식품 환불"), None, 5)]
+        hits = [h["id"] for h in db.search_chunks(conn, 3, Tokenizer().tokens("테스트마커구판신판 개봉 신선식품 환불"), None, 5)]
     assert f"{SLUG}-a7-1" in hits
-    assert not any(h.startswith("refund-policy-v3") for h in hits), "retired 된 구버전은 검색에서 빠진다"
+    assert not any(h.startswith(OLD) for h in hits), "retired 된 구버전은 검색에서 빠진다"

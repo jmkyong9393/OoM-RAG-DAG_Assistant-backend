@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 20, "kind": "policy", "query": "광고 문자 수신 동의는 몇 년마다 다시 확인해야 해요?", "expect": ["c:it-privacy-2026-11-a8-1"], "note": "기본 | 제8조 ③ | 수신 동의 후 2년마다 동의 여부를 다시 확인해 안내"},
+  {"workspace_id": 20, "kind": "policy", "query": "보유기간 끝난 개인정보는 늦어도 며칠 안에 파기해야 돼?", "expect": ["c:it-privacy-2026-11-a14-1"], "note": "기본 | 제14조 ① | 지체 없이, 늦어도 보유기간이 끝난 날부터 5일 이내 파기"},
+  {"workspace_id": 20, "kind": "policy", "query": "생성형 AI 모니터링용 데이터는 최대 며칠까지 보관 가능해?", "expect": ["c:it-privacy-2026-11-a18-1"], "note": "기본 | 제18조 ④ | 모니터링이 필요한 데이터는 최대 90일 보관한 뒤 파기"},
+  {"workspace_id": 20, "kind": "policy", "query": "인재풀에 등록한 지원자 정보는 몇 년 보관하나요?", "expect": ["c:it-privacy-2026-11-a12-1"], "note": "기본 | 제12조 ④ | 인재풀 등록 정보는 제출일부터 5년 보관"},
+  {"workspace_id": 20, "kind": "policy", "query": "고객 권리 요구를 거절할 땐 며칠 안에 사유를 알려야 해요?", "expect": ["c:it-privacy-2026-11-a27-1"], "note": "기본 | 제27조 ③ | 권리 요구 거절 사유 통지는 요구일부터 3일 이내"},
+  {"workspace_id": 20, "kind": "policy", "query": "회원이 얼마 동안 안 쓰면 장기 미이용자로 분류돼요?", "expect": ["c:it-privacy-2026-11-a13-1"], "note": "기본 | 제13조 ① | 최근 1년 동안 이용 기록이 없으면 장기 미이용자로 분류해 분리 보관"},
+  {"workspace_id": 20, "kind": "policy", "query": "위치정보 이용·제공사실 확인자료는 얼마나 보관해야 돼?", "expect": ["c:it-privacy-2026-11-a4-1"], "note": "기본 | 제4조 ② | 위치정보 이용·제공사실 확인자료는 1년 보관"},
+  {"workspace_id": 20, "kind": "policy", "query": "폰에서 관심사 따라 뜨는 광고 안 나오게 하려면 뭐라고 안내해?", "expect": ["c:it-privacy-2026-11-a7-1"], "note": "의역 | 제7조 ② | 운영체제 설정에서 앱 추적 허용을 끄거나 광고 ID 삭제, 개인 맞춤 광고 사용 중지"},
+  {"workspace_id": 20, "kind": "policy", "query": "어플 삭제만 해도 가입 정보까지 같이 없어지는 거야?", "expect": ["c:it-privacy-2026-11-a26-1"], "note": "의역 | 제26조 ⑤ | 앱을 지우는 것만으로는 정보가 남을 수 있어 설정 메뉴에서 탈퇴를 따로 요청해야 함"},
+  {"workspace_id": 20, "kind": "policy", "query": "일 맡긴 외주 업체가 다른 업체한테 또 넘겨도 되나요?", "expect": ["c:it-privacy-2026-11-a17-1"], "note": "의역 | 제17조 ③ | 수탁사는 회사의 사전 승인 없이 재위탁하지 못함"},
+  {"workspace_id": 20, "kind": "policy", "query": "초등학생 가입 받을 때 부모님 확인은 어떻게 하면 되요?", "expect": ["c:it-privacy-2026-11-a28-1"], "note": "의역(오타) | 제28조 ③ | 법정대리인은 휴대전화 본인인증이나 신용카드 인증으로 확인"},
+  {"workspace_id": 20, "kind": "policy", "query": "간편결제 쓰던 회원이 탈퇴하면 이용 정보 몇 개월 보관해요?", "expect": ["c:it-privacy-2026-11-s29-1"], "note": "표 | 별표 1 간편결제·송금 이용 정보 행 | 탈퇴 후 3개월 보관"},
+  {"workspace_id": 20, "kind": "policy", "query": "국외 이전을 거부한 지원자는 채용 전형에서 뭐가 제한돼요?", "expect": ["c:it-privacy-2026-11-s30-1"], "note": "표 | 별표 2 국외 이전 거부 효과 행 | 지원자는 코딩테스트 전형 제한"},
+  {"workspace_id": 20, "kind": "policy", "query": "이용자 로그인 기록이랑 개인정보처리시스템 접속기록 보관 기간이 달라?", "expect": ["c:it-privacy-2026-11-a10-1", "c:it-privacy-2026-11-a23-1"], "note": "비교 | 제10조 ②, 제23조 ① | 로그인 기록은 3개월 보존, 개인정보처리시스템 접속기록은 최소 2년 보관"},
+  {"workspace_id": 20, "kind": "policy", "query": "탈퇴 회원 서비스 이용 정보랑 전화번호는 보관 기간이 다른가요?", "expect": ["c:it-privacy-2026-11-a11-1"], "note": "비교 | 제11조 ② | 서비스 이용 정보는 탈퇴일부터 30일, 전화번호와 DI는 탈퇴 후 6개월 보관"}
+]

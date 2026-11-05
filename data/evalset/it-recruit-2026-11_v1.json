@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 22, "kind": "policy", "query": "신입 공채 공고는 1년에 몇 번, 언제쯤 나가?", "expect": ["c:it-recruit-2026-11-a12-1"], "note": "기본 | 제12조 ① | 연 2회, 주로 3월과 9월에 공고"},
+  {"workspace_id": 22, "kind": "policy", "query": "수습 기간은 몇 개월이야? 그동안 급여는 달라져?", "expect": ["c:it-recruit-2026-11-a17-1"], "note": "기본 | 제17조 ① | 5개월이며 수습 중에도 고용형태와 급여는 바뀌지 않음"},
+  {"workspace_id": 22, "kind": "policy", "query": "서류 결과는 며칠 안에 지원자한테 알려줘야 해?", "expect": ["c:it-recruit-2026-11-a15-1"], "note": "기본 | 제15조 ② | 접수 순서대로 검토해 영업일 7일 이내에 알리는 것이 목표"},
+  {"workspace_id": 22, "kind": "policy", "query": "사전 과제 주면 작성 기간은 며칠 줘야 해?", "expect": ["c:it-recruit-2026-11-a10-1"], "note": "기본 | 제10조 ③ | 공고에 따라 5일 또는 7일 이내"},
+  {"workspace_id": 22, "kind": "policy", "query": "인재풀에 올린 지원자 정보는 몇 년 보유해?", "expect": ["c:it-recruit-2026-11-a23-1"], "note": "기본 | 제23조 ② | 동의를 받아 제출일부터 5년"},
+  {"workspace_id": 22, "kind": "policy", "query": "면접은 보통 몇 번 봐? 임원은 언제 들어와?", "expect": ["c:it-recruit-2026-11-a11-1"], "note": "기본 | 제11조 ① | 보통 2회, 임원은 2차 문화적합성 인터뷰에 참여"},
+  {"workspace_id": 22, "kind": "policy", "query": "주민등록번호는 어느 단계 지원자한테 받는 거야?", "expect": ["c:it-recruit-2026-11-a22-1"], "note": "기본 | 제22조 ④ | 최종 합격자에게서만 필수로 받음(외국인은 외국인등록번호)"},
+  {"workspace_id": 22, "kind": "policy", "query": "전 직장 평판 조회는 본인 허락 받고 하는 거 맞지?", "expect": ["c:it-recruit-2026-11-a13-1"], "note": "의역 | 제13조 ① | 지원자의 동의를 받아 하며 세부 절차는 진행할 때 따로 알림"},
+  {"workspace_id": 22, "kind": "policy", "query": "면접에서 떨어진 사람이 이유 물어보면 알려줘도 돼?", "expect": ["c:it-recruit-2026-11-a16-1"], "note": "의역 | 제16조 ① | 불합격 사유는 따로 알려 주지 않음"},
+  {"workspace_id": 22, "kind": "policy", "query": "군대 아직 안 다녀온 사람도 지원 받아줘?", "expect": ["c:it-recruit-2026-11-a8-1"], "note": "의역 | 제8조 ③④ | 병역 미필자는 지원 제한, 엔지니어 직군은 산업기능요원 대상자를 뽑음"},
+  {"workspace_id": 22, "kind": "policy", "query": "이력서 이미 낸 사람이 내용 바꾸고 싶다는데 되요?", "expect": ["c:it-recruit-2026-11-a4-1"], "note": "의역(오타) | 제4조 ①② | 제출 뒤에는 고칠 수 없고, 공고 마감일 전에 삭제를 요청한 다음 새로 제출"},
+  {"workspace_id": 22, "kind": "policy", "query": "지원자 입사지원 정보는 몇 년 갖고 있는 거야?", "expect": ["c:it-recruit-2026-11-s26-1"], "note": "표 | 별표 2 입사지원 정보 행 | 1년, 채용 결과 발표일부터"},
+  {"workspace_id": 22, "kind": "policy", "query": "신입 개발자 공채는 개발 경력 몇 년까지 지원돼?", "expect": ["c:it-recruit-2026-11-s15-1"], "note": "표 | 별표 1 경력 기준 행 | 개발자 공채는 총 개발 경력 3년 이하"},
+  {"workspace_id": 22, "kind": "policy", "query": "법에서 정한 서류 반환 청구기간이랑 우리 회사 기간은 어떻게 달라?", "expect": ["c:it-recruit-2026-11-a20-1", "c:it-recruit-2026-11-a21-1"], "note": "비교 | 제20조 ①, 제21조 ② | 법령은 14일부터 180일까지의 범위, 회사는 결과 발표 뒤 90일 이내"},
+  {"workspace_id": 22, "kind": "policy", "query": "같은 포지션 재지원이랑 컬처핏 탈락 뒤 재지원은 제한 기간이 달라?", "expect": ["c:it-recruit-2026-11-a6-1"], "note": "비교 | 제6조 ①② | 같은 포지션은 6개월, 컬처핏 인터뷰 탈락은 모든 공고에 대해 1년"}
+]

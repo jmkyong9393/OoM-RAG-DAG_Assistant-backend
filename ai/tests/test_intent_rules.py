@@ -45,6 +45,17 @@ def test_rules_never_contradict_evalset_kind(capsys):
     ("컨테이너가 OOM으로 계속 재시작되는데 장애로 등록해야 해?", None, "both"),
     ("외부 API 타임아웃 몇 초로 잡고 재시도는 몇 번까지 해?", None, "both"),
     ("502 급증 났던 거 예전에 어떻게 해결했어?", None, "troubleshoot"),  # 순수 사례 질의는 그대로
+    # 규정+사례형 부서의 규정 질문은 "장애"·"배치" 를 품는다 — 의무·허용·수량 어미가 있으면 both (규정 검색이 빠지지 않게)
+    ("사후분석을 꼭 써야 하는 장애 등급이 뭐야?", None, "both"),
+    ("Hard 동결 중에 장애 대응용 긴급 패치는 내보내도 돼?", None, "both"),
+    ("장애 원인 자체를 뜯어고치는 일은 몇 주 안에 끝내야 돼?", None, "both"),
+    ("1급 장애랑 3급 장애는 보고 시한이 어떻게 달라?", None, "both"),
+    # 장애 낌새 없이 의무·수량만 묻는다 → policy (분류 LLM 호출 없이)
+    ("비밀번호는 몇 자 이상으로 만들어야 해?", None, "policy"),
+    ("운영 배포는 무슨 요일 몇 시에 할 수 있어?", None, "policy"),
+    # '복구' 는 계정 복구에도 쓰이는 약한 힌트 — 단독으로는 LLM 에
+    ("보안 키 잃어버린 고객 계정 복구는 어떤 절차로 해?", None, "both"),     # '절차' 규정 힌트 + 약한 힌트
+    ("조직 계정 보조 이메일 복구는 어떤 규모 조직에서 못 써요?", None, None),
 ])
 def test_rule_examples(query, code, expected):
     r = rule_classify(query, code)

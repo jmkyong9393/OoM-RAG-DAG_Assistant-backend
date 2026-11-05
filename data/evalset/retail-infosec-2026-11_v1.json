@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 10, "kind": "policy", "query": "비밀번호는 몇 자 이상으로 만들어야 해?", "expect": ["c:retail-infosec-2026-11-a8-1"], "note": "기본 | 제8조 ① | 2종 이상 조합이면 10자 이상, 3종 이상 조합이면 8자 이상"},
+  {"workspace_id": 10, "kind": "policy", "query": "비밀번호 몇 번 틀리면 계정이 잠겨?", "expect": ["c:retail-infosec-2026-11-a10-1"], "note": "기본 | 제10조 ① | 연속으로 5회 틀리면 15분 동안 잠금"},
+  {"workspace_id": 10, "kind": "policy", "query": "비밀번호는 얼마마다 바꿔야 돼?", "expect": ["c:retail-infosec-2026-11-a9-1"], "note": "기본 | 제9조 ① | 유효기간 180일, 끝나면 다음 로그인 때 변경"},
+  {"workspace_id": 10, "kind": "policy", "query": "메일함 용량이 얼마까지야?", "expect": ["c:retail-infosec-2026-11-a13-1"], "note": "기본 | 제13조 ① | 한 사람당 10GB"},
+  {"workspace_id": 10, "kind": "policy", "query": "보안교육은 얼마나 자주 들어야 해?", "expect": ["c:retail-infosec-2026-11-a17-1"], "note": "기본 | 제17조 ① | 분기 1회"},
+  {"workspace_id": 10, "kind": "policy", "query": "개인정보가 새 나간 것 같으면 얼마 안에 신고해야 돼?", "expect": ["c:retail-infosec-2026-11-a18-1"], "note": "기본 | 제18조 ② | 알게 된 때부터 1시간 안에 신고"},
+  {"workspace_id": 10, "kind": "policy", "query": "퇴사할 때 노트북 반납은 며칠 걸려?", "expect": ["c:retail-infosec-2026-11-a16-1"], "note": "기본 | 제16조 ③ | 반납 신청부터 완료까지 5영업일"},
+  {"workspace_id": 10, "kind": "policy", "query": "월요일 아침에 계정 막혔는데 기다리지 않고 바로 풀 방법 없어요?", "expect": ["c:retail-infosec-2026-11-a11-1"], "note": "의역 | 제11조 ① | 보안 포털에서 사번과 휴대폰 인증으로 스스로 즉시 해제"},
+  {"workspace_id": 10, "kind": "policy", "query": "지운 메일은 언제 완전히 없어져?", "expect": ["c:retail-infosec-2026-11-a13-1"], "note": "의역 | 제13조 ⑤ | 휴지통에 30일 동안 두었다가 자동으로 비움"},
+  {"workspace_id": 10, "kind": "policy", "query": "신규 입사자가 첫날부터 사원증 찍고 들어올 수 있어?", "expect": ["c:retail-infosec-2026-11-a15-1"], "note": "의역 | 제15조 ① | 발령일 전날 저녁에 활성화해 입사 첫날부터 사용"},
+  {"workspace_id": 10, "kind": "policy", "query": "고객 연락처 든 파일 외부 업체에 보내도 되요?", "expect": ["c:retail-infosec-2026-11-a4-1", "c:retail-infosec-2026-11-a5-1"], "note": "의역(오타) | 제4조 ③, 제5조 ② | 고객 개인정보는 2급 이상이라 부서장 승인을 받고 암호화해서 보냄"},
+  {"workspace_id": 10, "kind": "policy", "query": "회의록은 정보 등급이 몇 급이야?", "expect": ["c:retail-infosec-2026-11-s26-1"], "note": "표 | 별표 1 3급 행 | 3급, 임직원 열람 가능하고 사외 공개 금지"},
+  {"workspace_id": 10, "kind": "policy", "query": "노트북 잃어버리면 몇 시간 안에 신고해야 해?", "expect": ["c:retail-infosec-2026-11-s27-1"], "note": "표 | 별표 2 단말·저장매체 분실 행 | 4시간 안에 신고하고 원격 잠금 요청"},
+  {"workspace_id": 10, "kind": "policy", "query": "사내 와이파이랑 방문자용 와이파이는 비밀번호 바꾸는 주기가 달라?", "expect": ["c:retail-infosec-2026-11-a14-1"], "note": "비교 | 제14조 ①② | 사내 무선망은 분기 1회, 방문자용은 월 1회"},
+  {"workspace_id": 10, "kind": "policy", "query": "부서 지침이랑 이 규정 내용이 다르면 뭘 따라? 더 엄격하면?", "expect": ["c:retail-infosec-2026-11-a22-1"], "note": "비교 | 제22조 ②③ | 다르면 이 규정을 따르고, 하위 지침이 더 엄격하면 하위 지침을 따름"}
+]

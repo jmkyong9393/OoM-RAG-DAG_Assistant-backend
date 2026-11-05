@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 2, "kind": "policy", "query": "원격접속은 최대 며칠까지 신청할 수 있어?", "expect": ["c:retail-vpn-2026-11-a12-1"], "note": "기본 | 제12조 ② | 최대 60일, 부서장 승인 필요"},
+  {"workspace_id": 2, "kind": "policy", "query": "단말 인증서 유효기간이 얼마야?", "expect": ["c:retail-vpn-2026-11-a8-1"], "note": "기본 | 제8조 ① | 1년"},
+  {"workspace_id": 2, "kind": "policy", "query": "보안교육 안 들으면 VPN 권한은 언제 막혀?", "expect": ["c:retail-vpn-2026-11-a16-1"], "note": "기본 | 제16조 ② | 분기 보안교육 미이수자는 다음 달 1일에 자동 정지"},
+  {"workspace_id": 2, "kind": "policy", "query": "협력사 직원은 원격접속 며칠까지 돼?", "expect": ["c:retail-vpn-2026-11-a5-1"], "note": "기본 | 제5조 ② | 최대 30일, 계약 기간을 넘을 수 없음"},
+  {"workspace_id": 2, "kind": "policy", "query": "VPN 세션은 몇 분 안 쓰면 끊겨?", "expect": ["c:retail-vpn-2026-11-a10-1"], "note": "기본 | 제10조 ① | 30분 동안 사용하지 않으면 자동으로 끊음"},
+  {"workspace_id": 2, "kind": "policy", "query": "접속 기간 연장은 언제까지 신청하고 몇 번 돼?", "expect": ["c:retail-vpn-2026-11-a12-1"], "note": "기본 | 제12조 ③ | 만료 7일 전까지 신청, 보안담당자 확인 후 1회"},
+  {"workspace_id": 2, "kind": "policy", "query": "원격접속 기록은 얼마나 보관해?", "expect": ["c:retail-vpn-2026-11-a19-1"], "note": "기본 | 제19조 ① | 접속 시각·단말·주소를 1년 동안 보관"},
+  {"workspace_id": 2, "kind": "policy", "query": "재택 첫날인데 접속 권한이 없다고만 나와요 왜 그런 거예요?", "expect": ["c:retail-vpn-2026-11-a17-1"], "note": "의역 | 제17조 ① | 접속 권한 없음. 승인 기간 만료, 교육 미이수 권한 정지, 인증서 만료, 단말 점검 미통과 중 하나"},
+  {"workspace_id": 2, "kind": "policy", "query": "노트북 백신 업데이트 오래 안 했는데 회사망 들어가져?", "expect": ["c:retail-vpn-2026-11-a14-1", "c:retail-vpn-2026-11-s25-1"], "note": "의역 | 제14조 ②, 별표 2 백신 행 | 백신 패턴이 7일 이상 갱신되지 않은 단말은 점검을 통과하지 못함"},
+  {"workspace_id": 2, "kind": "policy", "query": "교육 듣고 나면 막힌 권한 바로 풀려요?", "expect": ["c:retail-vpn-2026-11-a16-1"], "note": "의역 | 제16조 ④ | 보안 포털에서 권한 재부여를 신청하고 신청한 다음 날 반영"},
+  {"workspace_id": 2, "kind": "policy", "query": "내 VPN 권한 상태는 어디서 확인하면 되요?", "expect": ["c:retail-vpn-2026-11-a18-1"], "note": "의역(오타) | 제18조 ①② | 보안 포털 내 계정 메뉴의 접근 권한 화면, 정상·정지·만료 예정으로 표시"},
+  {"workspace_id": 2, "kind": "policy", "query": "관리자 등급 권한은 누가 승인하고 며칠 줘?", "expect": ["c:retail-vpn-2026-11-s24-1"], "note": "표 | 별표 1 관리자 행 | 정보보안책임자 승인, 7일 이내"},
+  {"workspace_id": 2, "kind": "policy", "query": "원격접속 노트북 화면 잠금은 몇 분으로 맞춰야 해?", "expect": ["c:retail-vpn-2026-11-s25-1"], "note": "표 | 별표 2 화면 잠금 행 | 10분 미사용 시 자동 잠금"},
+  {"workspace_id": 2, "kind": "policy", "query": "임직원이랑 협력사는 접속 기간 한도가 어떻게 달라?", "expect": ["c:retail-vpn-2026-11-a12-1", "c:retail-vpn-2026-11-a5-1"], "note": "비교 | 제12조 ②, 제5조 ② | 임직원은 최대 60일, 협력사는 최대 30일"},
+  {"workspace_id": 2, "kind": "policy", "query": "승인 나면 보통 언제부터 접속되고 급할 땐 어떻게 돼?", "expect": ["c:retail-vpn-2026-11-a13-1"], "note": "비교 | 제13조 ②③ | 보통은 승인한 다음 날 반영, 급하면 보안담당자 확인으로 당일 반영하되 3일 이내"}
+]

@@ -43,5 +43,50 @@
     "employee_no": "OOM0005",
     "email": "kim@oom.local",
     "home_workspace_id": 3
+  },
+  {
+    "id": 11,
+    "tenant_id": 2,
+    "name": "한서윤",
+    "title": "팀장",
+    "employee_no": "OIT0001",
+    "email": "han@oit.local",
+    "home_workspace_id": 21
+  },
+  {
+    "id": 12,
+    "tenant_id": 2,
+    "name": "오지호",
+    "title": "엔지니어",
+    "employee_no": "OIT0002",
+    "email": "oh@oit.local",
+    "home_workspace_id": 21
+  },
+  {
+    "id": 13,
+    "tenant_id": 2,
+    "name": "문채원",
+    "title": "매니저",
+    "employee_no": "OIT0003",
+    "email": "moon@oit.local",
+    "home_workspace_id": 22
+  },
+  {
+    "id": 14,
+    "tenant_id": 2,
+    "name": "권도현",
+    "title": "매니저",
+    "employee_no": "OIT0004",
+    "email": "kwon@oit.local",
+    "home_workspace_id": 23
+  },
+  {
+    "id": 15,
+    "tenant_id": 2,
+    "name": "유나연",
+    "title": "상담사",
+    "employee_no": "OIT0005",
+    "email": "yoo@oit.local",
+    "home_workspace_id": 23
   }
 ]

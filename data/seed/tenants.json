@@ -1,11 +1,24 @@
 [
   {
     "id": 1,
-    "slug": "oom-demo",
-    "name": "OoM 시연 회사",
+    "slug": "retail",
+    "name": "OoM 리테일",
     "settings": {
       "llm_profile": "default",
-      "employee_prefix": "OOM"
+      "employee_prefix": "OOM",
+      "industry": "유통",
+      "profile": "온라인몰(직매입·입점 판매자·해외직구)과 직영 매장을 운영하는 유통 회사"
+    }
+  },
+  {
+    "id": 2,
+    "slug": "it",
+    "name": "OoM 테크",
+    "settings": {
+      "llm_profile": "default",
+      "employee_prefix": "OIT",
+      "industry": "IT 서비스",
+      "profile": "포털·메신저, 구독형 콘텐츠(동영상·음원)와 게임, 간편결제, 기업용 클라우드와 개발자 API 플랫폼을 운영하는 종합 인터넷 서비스 회사"
     }
   }
 ]
