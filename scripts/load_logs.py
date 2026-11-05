@@ -4,7 +4,7 @@
 → `_deprecate_reason` 이 있는 노드는 PATCH /logs/{id} {status: deprecated}. 재실행하면 bulk 는 source_ref 로 `existing`,
 폐기는 이미 deprecated 면 건너뛴다. 평가용 필드(expected_queries, _refine, _deprecate_reason)는 보내지 않는다.
 
-사용: python scripts/load_logs.py [파일...] [--base URL] [--user 사번]   (파일 생략 시 data/logs/*_v1.json 전부)
+사용: python scripts/load_logs.py [파일...] [--base URL] [--user 사번]   (파일 생략 시 data/logs/*_v1.json 전부, ORDER 순서. IT 회사 파일은 IT 계정으로)
 환경: PORT(기본 8080) · SEED_PASSWORD(기본 Oom!demo-2026) — make load-logs 는 deploy/.env 를 읽는다
 """
 import argparse, json, os, sys, pathlib, urllib.request, urllib.error, http.cookiejar
@@ -65,22 +65,39 @@ def load_file(api: Api, path: pathlib.Path) -> dict:
     return res
 
 
+ORDER = ["hr-ga_v1", "sw-dev_v1", "cs_v1", "it-cs_v1", "it-dev_v1"]   # 먼저 만든 세트부터 — 새 세트가 끼어들어 기존 id 가 밀리지 않게
+IT_USER = "OIT0001"   # IT 회사(부서 20번대)의 시드 계정
+
+
+def default_files() -> list[pathlib.Path]:
+    found = {p.stem: p for p in (ROOT / "data" / "logs").glob("*_v1.json")}
+    return [found.pop(n) for n in ORDER if n in found] + [found[n] for n in sorted(found)]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="*")
     ap.add_argument("--base", default=f"http://localhost:{os.environ.get('PORT', '8080')}/api/v1")
     ap.add_argument("--user", default="OOM0002")
     a = ap.parse_args()
-    files = [pathlib.Path(f) for f in a.files] or sorted((ROOT / "data" / "logs").glob("*_v1.json"))
+    files = [pathlib.Path(f) for f in a.files] or default_files()
     if not files:
         sys.exit(f"적재할 파일이 없습니다: {ROOT / 'data' / 'logs'}/*_v1.json — 브랜치가 data/synthetic-logs 인지 확인")
-    api = Api(a.base)
-    s, r = api.call("POST", "/auth/login", {"employee_no": a.user, "password": os.environ.get("SEED_PASSWORD", "Oom!demo-2026")})
-    if s != 200:
-        sys.exit(f"로그인 실패 {s} {r}")
+    sessions = {}
+
+    def session(user: str) -> Api:   # 회사마다 계정이 다르다 — 파일의 부서가 속한 회사의 계정으로 로그인
+        if user not in sessions:
+            api = Api(a.base)
+            s, r = api.call("POST", "/auth/login", {"employee_no": user, "password": os.environ.get("SEED_PASSWORD", "Oom!demo-2026")})
+            if s != 200:
+                sys.exit(f"로그인 실패({user}) {s} {r}")
+            sessions[user] = api
+        return sessions[user]
+
     tot = {"created": 0, "existing": 0}
     for f in files:
-        res = load_file(api, f)
+        ws = json.loads(f.read_text(encoding="utf-8"))["workspace_id"]
+        res = load_file(session(IT_USER if ws >= 20 else a.user), f)
         tot["created"] += res["created"]; tot["existing"] += res["existing"]
     print(f"합계 created={tot['created']} existing={tot['existing']}  → 다음: make worker ARGS=--once")
 

@@ -1,6 +1,6 @@
 {
  "tenant": "retail",
- "description": "OoM 리테일 — 합성 로그(sw-dev_v1 · hr-ga_v1)와 규정 조문의 대조표. 값의 원천은 로그이고 규정이 그 값을 따른다.",
+ "description": "OoM 리테일 — 합성 로그(sw-dev_v1 · hr-ga_v1 · cs_v1)와 규정 조문의 대조표. 값의 원천은 로그이고 규정이 그 값을 따른다.",
  "links": [
   {
    "log": "sw-dev_v1",
@@ -760,6 +760,323 @@
     "분기 1회",
     "월 1회"
    ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s1-root",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제9조",
+   "note": "신선식품은 하자·오배송일 때만 반품 — 하자를 확인할 요건이 쟁점"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s1-wrong",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제3조",
+   "values": [
+    "7일"
+   ],
+   "note": "7일 기준은 신선·냉장·냉동식품에 적용하지 않는다(④)"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s1-rule",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제5조",
+   "values": [
+    "3일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s1-goodwill",
+   "relation": "exception",
+   "policy": "retail-refund-2026-11",
+   "article": "제5조",
+   "values": [
+    "3일"
+   ],
+   "note": "수령 후 3일 이내 사진 요건을 채우지 못했지만 냉장 상품의 배송 지연이 확인돼 팀장 승인으로 전액 환불. 예외 환불의 승인 기준은 규정에 없다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s1-script",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "별표 2",
+   "values": [
+    "3일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s2-root",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제3조",
+   "values": [
+    "7일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s2-fix",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제10조",
+   "note": "입점 판매자가 따로 정한 반품 조건보다 규정이 우선한다(⑤). 확인용 개봉은 제8조 ① 1호 단서"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s2-late",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제14조",
+   "values": [
+    "3영업일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s2-auto",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제15조",
+   "values": [
+    "3영업일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s2-interest",
+   "relation": "gap",
+   "topic": "환불 지연이자의 이율·산정 방법과 입점 판매자 귀책 시 부담 주체",
+   "note": "제14조 ②는 지연이자를 지급한다고만 정한다. 이율 수치, 일수 계산, 판매자 귀책 건의 선지급·구상 절차가 없다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s3-root",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제4조",
+   "values": [
+    "90일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s3-fee",
+   "relation": "gap",
+   "topic": "설치 상품 단순 변심 반품 시 철거·회수비 부담 기준",
+   "note": "별표 2는 택배 반품배송비와 도서·산간 대형가구만 정한다. 설치 기사 방문 철거비 항목이 없다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s3-fix",
+   "relation": "exception",
+   "policy": "retail-refund-2026-11",
+   "article": "제12조",
+   "values": [
+    "19,800원",
+    "2,500원"
+   ],
+   "note": "직매입 단순 변심이라 반품배송비 2,500원을 받아야 하지만 첫 상담의 잘못된 안내(반품 불가)에 대한 보상으로 팀장 승인을 받아 면제했다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s3-ext",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제10조",
+   "values": [
+    "소비자분쟁해결기준"
+   ],
+   "note": "설치 하자는 회사 규정에 없어 외부 기준(가전제품설치업: 재설치, 설치 품질보증기간 1년)을 따른다(⑤)"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s4-root",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제23조",
+   "values": [
+    "15일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s4-wrong",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제22조",
+   "values": [
+    "왕복 배송비"
+   ],
+   "note": "왕복 배송비 회원 부담은 단순 변심에만 적용한다(②). 파손은 제23조"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s4-fix",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "별표 1",
+   "values": [
+    "15일",
+    "3개월",
+    "30일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s4-tax",
+   "relation": "gap",
+   "topic": "해외직구 반품 시 관부가세 환급 절차와 회사 지원 범위",
+   "note": "제22조 ④는 관부가세가 포함되거나 따로 부과될 수 있다고만 정한다. 반품 뒤 환급을 누가 어떻게 신청하는지 없다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s5-root",
+   "relation": "follows",
+   "policy": "retail-refund-2026-11",
+   "article": "제24조",
+   "values": [
+    "7일",
+    "영수증"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s5-rule",
+   "relation": "gap",
+   "topic": "영수증 분실 시 구매 확인 대체 수단",
+   "note": "제24조 ①은 영수증 지참만 정한다. 카드 승인 내역·멤버십 구매 이력을 인정하는지 기준이 없다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s5-fix",
+   "relation": "exception",
+   "policy": "retail-refund-2026-11",
+   "article": "제24조",
+   "values": [
+    "7일",
+    "영수증"
+   ],
+   "note": "영수증 지참이 요건이지만 통합멤버십 구매 이력으로 구매를 확인하고 매장 관리자 승인으로 환불했다. 7일 기한과 매장 환불 원칙은 지켰다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s6-root",
+   "relation": "follows",
+   "policy": "retail-cs-protection-2026-11",
+   "article": "제11조",
+   "values": [
+    "1차 경고",
+    "2차 경고"
+   ],
+   "note": "지침 시행 전 사례 — 이때의 판단이 경고 횟수와 사전 승인 불요(④)로 정리됐다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s6-script-old",
+   "relation": "exception",
+   "policy": "retail-cs-protection-2026-11",
+   "article": "제11조",
+   "policy_values": [
+    "2차 경고"
+   ],
+   "log_values": [
+    "3회"
+   ],
+   "note": "구 스크립트는 3회 안내와 팀장 승인을 요구했다. 현재 기준은 2차 경고 후 종료, 사전 승인 불요(s6-script)"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s6-fix",
+   "relation": "follows",
+   "policy": "retail-cs-protection-2026-11",
+   "article": "별표 2",
+   "values": [
+    "30분",
+    "1영업일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s6-script",
+   "relation": "follows",
+   "policy": "retail-cs-protection-2026-11",
+   "article": "별표 1",
+   "values": [
+    "1차 경고",
+    "2차 경고",
+    "1회 경고"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s6-special",
+   "relation": "follows",
+   "policy": "retail-cs-protection-2026-11",
+   "article": "제19조",
+   "values": [
+    "3회",
+    "30일"
+   ]
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s7-root",
+   "relation": "follows",
+   "policy": "retail-security-faq-2026-11",
+   "article": "Q9",
+   "values": [
+    "환금성 상품",
+    "추가 인증"
+   ],
+   "note": "도용 신고 절차는 Q7, 잠금 기준(입력 실패 5회 초과)은 Q3"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s7-old",
+   "relation": "follows",
+   "policy": "retail-security-faq-2026-11",
+   "article": "Q3",
+   "values": [
+    "본인확인"
+   ],
+   "note": "잠긴 계정은 비밀번호 찾기에서 본인확인을 거쳐야 한다 — 상담원의 구두 확인으로 대신하던 폐기된 절차"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s7-check",
+   "relation": "gap",
+   "topic": "도용으로 등록 연락처가 변경됐을 때의 대체 본인확인 수단",
+   "note": "고객 계정·보안 FAQ Q6은 본인이 연락처를 바꾼 경우만 안내한다. 제3자가 변경한 경우의 확인 수단과 승인 절차가 없다"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s7-fix",
+   "relation": "follows",
+   "policy": "retail-privacy-2026-11",
+   "article": "제2조",
+   "values": [
+    "연계정보(CI)"
+   ],
+   "note": "본인인증으로 처리하는 연계정보(CI)를 본인 대조에 썼다(②)"
+  },
+  {
+   "log": "cs_v1",
+   "ref": "s7-guide",
+   "relation": "follows",
+   "policy": "retail-privacy-2026-11",
+   "article": "제6조",
+   "values": [
+    "3개월"
+   ],
+   "note": "접속기록·로그·IP 정보의 보존 기간(②)"
   }
  ]
 }

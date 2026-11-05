@@ -1,0 +1,318 @@
+[
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "냉장 식품이 상했다는데 사진이 없을 때 환불 어떻게 처리했어?",
+  "expect": [
+   "n:258",
+   "n:261"
+  ],
+  "note": "symptom · s1-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "신선식품 사진없이 환불해달라는 고객 어케 처리함",
+  "expect": [
+   "n:258",
+   "n:261"
+  ],
+  "note": "symptom · s1-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "판매자가 박스 뜯었다고 반품 거부해요",
+  "expect": [
+   "n:263",
+   "n:264",
+   "n:266"
+  ],
+  "note": "symptom · s2-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "설치한 가전을 반품해 달라는데 어떻게 처리했어?",
+  "expect": [
+   "n:268",
+   "n:270"
+  ],
+  "note": "symptom · s3-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "설치가전 반품비 누가냄",
+  "expect": [
+   "n:268",
+   "n:270"
+  ],
+  "note": "symptom · s3-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "직구 깨져서옴 환불 어케해",
+  "expect": [
+   "n:272",
+   "n:274"
+  ],
+  "note": "symptom · s4-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "영수증 잃어버렸는데 환불 되나요",
+  "expect": [
+   "n:276",
+   "n:278"
+  ],
+  "note": "symptom · s5-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "폭언하는 고객 전화 먼저 끊어도 되나요",
+  "expect": [
+   "n:279",
+   "n:281",
+   "n:283"
+  ],
+  "note": "symptom · s6-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "계정 도용 신고가 들어오면 뭘 확인하고 풀어 줬어?",
+  "expect": [
+   "n:284",
+   "n:287"
+  ],
+  "note": "symptom · s7-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "계정 도용됬다는데 잠금 풀어줘도 되나",
+  "expect": [
+   "n:284",
+   "n:287"
+  ],
+  "note": "symptom · s7-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "규정상 안 되는 환불을 예외로 해 준 사례 있어?",
+  "expect": [
+   "n:258",
+   "n:261"
+  ],
+  "note": "reverse · s1-goodwill"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "판매자가 환불 안 해 줄 때 회사가 대신 환불한 사례",
+  "expect": [
+   "n:263",
+   "n:264",
+   "n:266"
+  ],
+  "note": "reverse · s2-auto"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "해외직구 무료 반품 라벨은 며칠까지 받을 수 있어?",
+  "expect": [
+   "n:272",
+   "n:274"
+  ],
+  "note": "reverse · s4-fix"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "폭언 듣고 전화 끊은 상담원한테 어떤 조치를 해 줬어?",
+  "expect": [
+   "n:279",
+   "n:281",
+   "n:283"
+  ],
+  "note": "reverse · s6-fix"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "도용된 계정 복구할 때 본인확인을 뭘로 했어?",
+  "expect": [
+   "n:284",
+   "n:287"
+  ],
+  "note": "reverse · s7-fix"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "고기 상해서 버렸다는데 환불 되나요",
+  "expect": [
+   "n:258",
+   "n:261"
+  ],
+  "note": "symptom · s1-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "신선식품 하자 접수할 때 뭐라고 안내해?",
+  "expect": [
+   "n:258",
+   "n:261",
+   "n:262"
+  ],
+  "note": "other · s1-script"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "입점 판매자가 반품을 안 받아 준다는 민원 어떻게 처리했어?",
+  "expect": [
+   "n:263",
+   "n:264",
+   "n:266"
+  ],
+  "note": "symptom · s2-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "오픈마켓 판매자 반품거부 어케함",
+  "expect": [
+   "n:263",
+   "n:264",
+   "n:266"
+  ],
+  "note": "symptom · s2-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "환불 늦어지면 지연이자 얼마 줘야 해?",
+  "expect": [
+   "n:263",
+   "n:264",
+   "n:266",
+   "n:267"
+  ],
+  "note": "other · s2-interest"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "설치 가전 반품할 때 철거비는 누가 내?",
+  "expect": [
+   "n:268",
+   "n:269",
+   "n:270"
+  ],
+  "note": "other · s3-fee"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "반품배송비 안 받고 처리해 준 사례",
+  "expect": [
+   "n:268",
+   "n:270"
+  ],
+  "note": "reverse · s3-fix"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "해외직구 상품이 깨져서 왔을 때 어떻게 처리했어?",
+  "expect": [
+   "n:272",
+   "n:274"
+  ],
+  "note": "symptom · s4-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "해외직구 반품하면 관세도 돌려받아?",
+  "expect": [
+   "n:272",
+   "n:274",
+   "n:275"
+  ],
+  "note": "other · s4-tax"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "영수증 대신 멤버십 구매 내역으로 환불해 준 사례",
+  "expect": [
+   "n:276",
+   "n:278"
+  ],
+  "note": "reverse · s5-fix"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "욕하는 고객 전화 끊은 사례 어떻게 처리됐어?",
+  "expect": [
+   "n:279",
+   "n:281",
+   "n:283"
+  ],
+  "note": "symptom · s6-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "진상고객 욕해서 끊었는데 문제되나",
+  "expect": [
+   "n:279",
+   "n:281",
+   "n:283"
+  ],
+  "note": "symptom · s6-root"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "폭언 몇 번이면 특별관리 고객으로 지정해?",
+  "expect": [
+   "n:279",
+   "n:281",
+   "n:283"
+  ],
+  "note": "reverse · s6-special"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "도용범이 휴대폰 번호를 바꿔 놨으면 본인확인 어떻게 해?",
+  "expect": [
+   "n:284",
+   "n:286",
+   "n:287"
+  ],
+  "note": "other · s7-check"
+ },
+ {
+  "workspace_id": 3,
+  "kind": "troubleshoot",
+  "query": "계정 도용 신고 받으면 순서가 어떻게 돼?",
+  "expect": [
+   "n:284",
+   "n:287",
+   "n:288"
+  ],
+  "note": "other · s7-guide"
+ }
+]

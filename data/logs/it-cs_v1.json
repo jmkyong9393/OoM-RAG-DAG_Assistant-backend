@@ -1,0 +1,755 @@
+{
+  "workspace_id": 23,
+  "version": "v1",
+  "description": "OoM 테크 고객지원(CS) 워크스페이스 합성 로그 v1 — 중도해지 환불액·미성년자 결제·인증 기기 분실·중복 청구·환불 기한 초과·카드사 이의제기 6체인 + 고아 ref 1. 전부 가공 데이터.",
+  "items": [
+    {
+      "ref": "s1-root",
+      "type": "fail",
+      "title": "동영상 구독 중도해지 환불액이 안내받은 금액보다 적다는 항의",
+      "body": "첫 달 할인가 6,900원(정가 월정액 13,900원)으로 결제한 회원이 12일 쓰고 중도해지. 상담원은 4,140원을 안내했는데 실제 환불은 1,206원. 할인된 프로모션 상품도 정가 월정액 기준으로 이용대금을 계산한다는 설명을 듣지 못했다는 항의.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-001",
+      "error_code": null,
+      "keywords": [
+        "중도해지",
+        "환불액",
+        "프로모션"
+      ],
+      "resolution_summary": "할인가 기준 오안내와 이용 일수 계산 차이",
+      "created_at": "2026-07-14T10:20:00+09:00",
+      "expected_queries": [
+        "구독 중도해지 환불 금액 항의 들어왔을 때 어떻게 처리했어?",
+        "환불액이 안내받은 거랑 다르다는데요",
+        "중도해지 환불금 왜케 적냐는 문의"
+      ]
+    },
+    {
+      "ref": "s1-calc",
+      "type": "fail",
+      "title": "원인: 상담원이 할인가 기준 일할로 안내",
+      "body": "상담 화면에 환불 예상액이 나오지 않아 상담원이 결제 금액 6,900원을 30일로 나눠 남은 18일분 4,140원을 손으로 계산. 정산 시스템은 정가 월정액 기준 일할 공제에 회원 사정 차감까지 적용해 1,206원을 환불.",
+      "parent_ref": "s1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-002",
+      "error_code": null,
+      "keywords": [
+        "오안내",
+        "일할 계산",
+        "정가 기준"
+      ],
+      "resolution_summary": "예상액 표시가 없어 할인가 기준으로 수기 계산",
+      "created_at": "2026-07-14T14:00:00+09:00",
+      "expected_queries": [
+        "프로모션 가격으로 결제했는데 환불은 뭐 기준으로 계산해?"
+      ]
+    },
+    {
+      "ref": "s1-calc-fix",
+      "type": "success",
+      "title": "해결: 상담 화면에 중도해지 환불 예상액 계산기",
+      "body": "상담 화면에서 이용권을 고르면 정가 기준 이용대금, 공제 후 잔여 금액, 회원 사정이면 잔여 금액의 10% 차감, 회사 사정이면 10% 가산까지 단계별로 보여 줌. 수기 계산은 금지. 도입 뒤 환불액 관련 재문의 70% 감소.",
+      "parent_ref": "s1-calc",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-003",
+      "error_code": null,
+      "keywords": [
+        "환불 계산기",
+        "상담 화면"
+      ],
+      "resolution_summary": "단계별 환불 예상액 자동 표시",
+      "created_at": "2026-07-21T15:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s1-days",
+      "type": "fail",
+      "title": "원인: 이용 일수를 하루 많게 셈",
+      "body": "같은 건에서 다른 상담원은 결제일을 1일차로 세어 13일 이용으로 안내한 적도 있음. 이용 일수는 최초 결제일 다음 날을 1일차로 세므로 12일이 맞음.",
+      "parent_ref": "s1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-004",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-15T11:00:00+09:00",
+      "expected_queries": [
+        "구독 이용 일수 결제일부터 세?"
+      ]
+    },
+    {
+      "ref": "s1-goodwill",
+      "type": "success",
+      "title": "해결: 오안내 건은 안내한 4,140원으로 환불",
+      "body": "회원 사정 해지라 잔여 금액의 10%를 빼는 건이지만, 상담원이 금액을 잘못 안내한 책임을 인정해 팀장 승인으로 안내한 4,140원을 환불. 같은 날 같은 오안내를 받은 6건도 같은 방식으로 처리.",
+      "parent_ref": "s1-calc",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-005",
+      "error_code": null,
+      "keywords": [
+        "오안내 보상",
+        "팀장 승인"
+      ],
+      "resolution_summary": "오안내 금액대로 환불(팀장 승인)",
+      "created_at": "2026-07-16T16:30:00+09:00",
+      "expected_queries": [
+        "상담원이 잘못 안내한 환불 금액 그대로 준 사례"
+      ]
+    },
+    {
+      "ref": "s1-pause",
+      "type": "success",
+      "title": "해결: 해지 문의에 일시정지를 먼저 안내",
+      "body": "환불액 다툼의 상당수가 '잠깐 안 볼 건데'에서 시작됨. 해지 대신 다음 결제일부터 요금 없이 1개월씩, 모두 3개월까지 일시정지할 수 있다고 먼저 안내. 가장 낮은 등급의 요금제와 계좌 자동이체 결제는 일시정지가 안 된다는 점도 함께 안내.",
+      "parent_ref": "s1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-006",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-22T10:00:00+09:00",
+      "expected_queries": [
+        "구독 일시정지 몇 달까지 돼?"
+      ]
+    },
+    {
+      "ref": "s1-script",
+      "type": "ref",
+      "title": "중도해지 환불 안내 스크립트",
+      "body": "① 이용권 종류 확인(VOD 단건 상품은 전체 이용대금을 뺀다, 무제한 다운로드 음원 이용권과 무료 이용권은 중도해지가 안 된다) ② 이용 일수 ③ 계산기 금액 안내 ④ 환불은 신청 접수일부터 3영업일 이내.",
+      "parent_ref": "s1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-007",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-23T09:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s2-root",
+      "type": "fail",
+      "title": "미성년 자녀의 게임 아이템 결제 38만 원 환불 요청",
+      "body": "초등학생 자녀가 보호자 휴대전화로 게임 아이템 38만 원을 결제했다며 보호자가 전액 환불 요청. 법정대리인 동의 없는 미성년자 결제는 취소할 수 있지만, 결제는 보호자 명의 계정과 보호자 카드로 앱마켓에서 이뤄짐.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-008",
+      "error_code": null,
+      "keywords": [
+        "미성년자 결제",
+        "게임 아이템",
+        "법정대리인"
+      ],
+      "resolution_summary": "명의자 기록상 성인 결제 + 인앱결제 경로 오안내",
+      "created_at": "2026-07-28T11:00:00+09:00",
+      "expected_queries": [
+        "미성년자 게임 결제 환불 요청 어떻게 처리했어?",
+        "애가 엄마 폰으로 게임 결제했대요 환불 되나요",
+        "미성년자 결재 취소 어케 처리함"
+      ]
+    },
+    {
+      "ref": "s2-proof",
+      "type": "fail",
+      "title": "쟁점: 계정과 결제수단 명의가 모두 보호자",
+      "body": "미성년자 여부는 결제 플랫폼, 결제 실행자, 결제수단 명의자 기록으로 판단하는데 세 가지 모두 보호자로 나옴. 자녀가 눌렀다는 주장만으로는 미성년자 결제로 보기 어려워 증빙서류를 요청. 보호자는 '아이가 했다는 걸 어떻게 증명하냐'며 반발.",
+      "parent_ref": "s2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-009",
+      "error_code": null,
+      "keywords": [
+        "명의자",
+        "증빙서류",
+        "결제 실행자"
+      ],
+      "resolution_summary": "기록상 성인 결제라 증빙 요청",
+      "created_at": "2026-07-28T15:00:00+09:00",
+      "expected_queries": [
+        "부모 명의 계정인데 아이가 결제했다고 하면?"
+      ]
+    },
+    {
+      "ref": "s2-market",
+      "type": "fail",
+      "title": "원인: 인앱결제인데 회사에서 바로 환불된다고 안내",
+      "body": "첫 상담에서 '접수되면 회사가 환불해 드린다'고 안내. 앱마켓으로 결제한 게임 유료 콘텐츠는 앱마켓 고객센터에 먼저 환불을 신청해 승인받아야 해서, 보호자가 사흘을 기다린 뒤 다시 항의.",
+      "parent_ref": "s2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-010",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-31T10:00:00+09:00",
+      "expected_queries": [
+        "인앱결제 환불 우리가 직접 해줄 수 있어?"
+      ]
+    },
+    {
+      "ref": "s2-market-fix",
+      "type": "success",
+      "title": "해결: 앱마켓 승인 뒤 재화 회수 요청 순서로 안내",
+      "body": "앱마켓 고객센터 승인 → 구입 내역 화면 캡처 첨부 → 회사에 지급된 재화 회수 요청 순서를 문자로 안내. 회사는 콘텐츠 반환을 확인한 날부터 3영업일 이내에 처리. 첫 응대 스크립트에 결제 경로 확인 질문을 맨 앞에 둠.",
+      "parent_ref": "s2-market",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-011",
+      "error_code": null,
+      "keywords": [
+        "앱마켓 환불",
+        "재화 회수",
+        "구입 내역 캡처"
+      ],
+      "resolution_summary": "앱마켓 승인 → 캡처 첨부 → 재화 회수 요청",
+      "created_at": "2026-08-03T14:00:00+09:00",
+      "expected_queries": [
+        "앱마켓 결제 환불 순서 알려줘"
+      ]
+    },
+    {
+      "ref": "s2-partial",
+      "type": "success",
+      "title": "해결: 열지 않은 상자 6개만 청약철회로 환불",
+      "body": "증빙이 오지 않아 미성년자 결제 취소는 보류. 대신 구매일부터 7일 이내였으므로 일반 청약철회로 처리. 개봉해야 효용이 정해지는 상자 20개 중 14개는 이미 개봉해 제한되고, 열지 않은 6개 11만 4천 원만 환불.",
+      "parent_ref": "s2-proof",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-012",
+      "error_code": null,
+      "keywords": [
+        "청약철회",
+        "개봉",
+        "부분 환불"
+      ],
+      "resolution_summary": "미개봉분만 7일 이내 청약철회",
+      "created_at": "2026-08-04T16:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s2-doc",
+      "type": "ref",
+      "title": "미성년자 결제 취소 접수 때 받는 것",
+      "body": "만 19세 미만 여부, 법정대리인의 신분 증명, 가족관계를 보여 주는 서류. 취소 의사는 전화가 아니라 1:1 문의처럼 기록이 남는 방법으로 받는다. 다른 사람의 주민등록번호로 성년자인 것처럼 속인 결제는 취소 대상이 아니다.",
+      "parent_ref": "s2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-013",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-29T09:30:00+09:00",
+      "expected_queries": [
+        "미성년자 결제 취소 서류 뭐 받아야 해?"
+      ]
+    },
+    {
+      "ref": "s2-again",
+      "type": "fail",
+      "title": "같은 가정에서 석 달 사이 세 번째 취소 요청",
+      "body": "같은 보호자가 석 달 사이 세 번째로 '아이가 결제했다'며 취소 요청. 앞의 두 번은 환불됨. 반복 요청을 어떻게 볼지 기준이 없어 상담원마다 답이 다름. 결제 비밀번호 설정을 권하고 건은 팀장에게 올림.",
+      "parent_ref": "s2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-014",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-20T13:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s3-root",
+      "type": "fail",
+      "title": "2단계 인증 휴대폰 분실로 로그인 불가 — 구독 중인 계정",
+      "body": "인증 앱이 깔린 휴대폰을 잃어버린 회원이 로그인하지 못함. 백업 코드를 저장해 두지 않았고 등록된 다른 번호도 없으며 비밀번호도 기억하지 못함. 쓸 수 있는 두 번째 수단이 없어 복구에 3~5영업일이 걸릴 수 있다고 안내하자 '구독료는 나가는데 못 본다'며 항의.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-015",
+      "error_code": null,
+      "keywords": [
+        "2단계 인증",
+        "휴대폰 분실",
+        "계정 복구"
+      ],
+      "resolution_summary": "대체 수단 없음 + 복구 보류 + 상담원 임의 해제",
+      "created_at": "2026-08-11T09:50:00+09:00",
+      "expected_queries": [
+        "2단계 인증 폰 잃어버린 고객 어떻게 처리했어?",
+        "인증 앱 있던 휴대폰을 분실했대요 로그인이 안 된대요",
+        "otp 폰 분실 계정복구 얼마나 걸림"
+      ]
+    },
+    {
+      "ref": "s3-hold",
+      "type": "fail",
+      "title": "원인: 복구 신청에 보안 보류가 걸려 재촉 문의 반복",
+      "body": "복구 신청 뒤 보안 보류가 걸려 바로 처리되지 않음. 회원이 사흘 동안 다섯 번 재촉 전화. 2단계 인증을 켜 둔 계정이라 보류가 더 길어질 수 있다는 점을 처음에 안내하지 않았음.",
+      "parent_ref": "s3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-016",
+      "error_code": null,
+      "keywords": [
+        "보안 보류",
+        "복구 지연",
+        "재촉 문의"
+      ],
+      "resolution_summary": "보안 보류 안내 누락으로 재문의 반복",
+      "created_at": "2026-08-12T14:00:00+09:00",
+      "expected_queries": [
+        "계정 복구 신청했는데 왜 바로 안 돼?"
+      ]
+    },
+    {
+      "ref": "s3-hold-fix",
+      "type": "success",
+      "title": "해결: 복구 접수 문자에 보류 사유와 앞당기는 방법 안내",
+      "body": "접수 직후 문자로 ① 본인이 아닌 요청을 걸러 내려는 보류라는 점 ② 평소 쓰던 기기·브라우저·장소에서 다시 시도하면 빨라질 수 있다는 점 ③ 복구 질문은 모르는 항목도 건너뛰지 말고 추측해 답하라는 점을 보냄. 재촉 문의 건당 3.1회 → 1.2회.",
+      "parent_ref": "s3-hold",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-017",
+      "error_code": null,
+      "keywords": [
+        "복구 안내 문자",
+        "평소 쓰던 기기"
+      ],
+      "resolution_summary": "보류 사유·앞당기는 방법을 접수 문자로",
+      "created_at": "2026-08-18T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s3-bypass",
+      "type": "fail",
+      "title": "상담원이 전화 본인확인만으로 2단계 인증을 꺼 줌",
+      "body": "항의가 길어지자 한 상담원이 이름·생년월일·최근 결제 금액만 확인하고 관리 화면에서 2단계 인증을 해제. 다음 날 다른 사람이 같은 방식으로 남의 계정 해제를 시도한 것이 발견됨. 상담원이 대신 해제할 수 있는 본인 확인 기준이 문서로 없었음.",
+      "parent_ref": "s3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-018",
+      "error_code": null,
+      "keywords": [
+        "임의 해제",
+        "본인 확인",
+        "사칭"
+      ],
+      "resolution_summary": "기준 없이 상담원이 2단계 인증 해제",
+      "created_at": "2026-08-13T16:00:00+09:00",
+      "expected_queries": [
+        "상담원이 2단계 인증 대신 풀어줘도 돼?"
+      ]
+    },
+    {
+      "ref": "s3-bypass-fix",
+      "type": "success",
+      "title": "해결: 상담원의 2단계 인증 해제 권한 회수",
+      "body": "관리 화면의 해제 버튼을 상담원 권한에서 뺌. 쓸 수 있는 수단이 없는 회원은 복구 화면 절차로만 안내하고, 예외는 보안 담당 2인 승인으로만. 사칭 시도가 있었던 계정 2건은 본인에게 알림.",
+      "parent_ref": "s3-bypass",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-019",
+      "error_code": null,
+      "keywords": [
+        "권한 회수",
+        "2인 승인"
+      ],
+      "resolution_summary": "수동 해제 권한 회수, 복구 절차로만",
+      "created_at": "2026-08-17T15:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s3-phone",
+      "type": "ref",
+      "title": "전화 본인확인 후 2단계 인증 해제 절차(구)",
+      "body": "이름·생년월일·최근 결제 내역 3가지를 확인하면 상담원이 2단계 인증을 해제하던 예전 절차. 관리 화면 경로와 확인 질문 목록.",
+      "parent_ref": "s3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-020",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-11T13:00:00+09:00",
+      "expected_queries": [
+        "전화로 2단계 인증 풀어주는 절차 어디 있어?"
+      ],
+      "_deprecate_reason": "상담원 해제 권한 회수(s3-bypass-fix)로 절차 폐지"
+    },
+    {
+      "ref": "s3-prevent",
+      "type": "ref",
+      "title": "분실 대비 안내문: 백업 코드와 복구 연락처",
+      "body": "복구를 마친 회원에게 보내는 안내. 8자리 백업 코드를 받아 따로 보관하고, 본인만 쓰는 복구 전화번호와 로그인 주소와 다른 복구 이메일, 복구 연락처를 최소 1명 등록한다. 복구 연락처는 상대가 수락한 뒤에도 7일을 기다려야 쓸 수 있고, 잠긴 상태에서는 복구 정보를 추가할 수 없으니 미리 해 둔다.",
+      "parent_ref": "s3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-021",
+      "error_code": null,
+      "keywords": [
+        "백업 코드",
+        "복구 연락처",
+        "예방 안내"
+      ],
+      "resolution_summary": "백업 코드·복구 연락처 사전 등록 안내",
+      "created_at": "2026-08-19T10:00:00+09:00",
+      "expected_queries": [
+        "백업 코드 몇 자리야?"
+      ]
+    },
+    {
+      "ref": "s3-extend",
+      "type": "success",
+      "title": "해결: 복구를 기다린 6일만큼 구독 기간 연장",
+      "body": "복구까지 6일 동안 유료 구독을 쓰지 못한 회원에게 팀장 승인으로 이용 기간을 6일 연장. 회사가 건 임시 정지가 아니라 본인 분실로 잠긴 경우라 정해진 기준은 없었고, 비슷한 요청 4건을 같은 방식으로 처리.",
+      "parent_ref": "s3-hold",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-022",
+      "error_code": null,
+      "keywords": [
+        "이용 기간 연장",
+        "팀장 승인"
+      ],
+      "resolution_summary": "복구 대기 기간만큼 구독 연장(기준 없음)",
+      "created_at": "2026-08-19T16:00:00+09:00",
+      "expected_queries": [
+        "계정 잠겨서 못 쓴 기간 보상해 준 사례"
+      ]
+    },
+    {
+      "ref": "s4-root",
+      "type": "fail",
+      "title": "간편결제로 음원 이용권을 샀는데 두 번 청구됐다는 문의 급증",
+      "body": "9월 22일 저녁 간편결제로 음원 이용권을 결제한 회원들이 '두 번 빠져나갔다'고 문의. 23일 오전까지 140건. 결제 내역에 같은 주문으로 승인 2건이 찍혀 있음. 회원이 내지 않아도 될 요금을 낸 과오금.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-023",
+      "error_code": null,
+      "keywords": [
+        "중복 청구",
+        "간편결제",
+        "과오금"
+      ],
+      "resolution_summary": "결제 장애로 생긴 회사 책임 과오금",
+      "created_at": "2026-09-23T09:20:00+09:00",
+      "expected_queries": [
+        "간편결제 두 번 청구된 문의 어떻게 처리했어?",
+        "돈이 두 번 빠져나갔대요",
+        "이중결제 환불 언제됨"
+      ]
+    },
+    {
+      "ref": "s4-cause",
+      "type": "fail",
+      "title": "원인: 결제 시스템 장애로 같은 주문이 2회 승인",
+      "body": "개발 부서 확인 결과 전날 저녁 결제 시스템 장애로 같은 주문이 2회 승인된 건이 312건. 회원 잘못이 아닌 회사 책임 과오금이라 수수료와 관계없이 전액 환불 대상. 개발 부서가 중복 건 목록을 넘겨줌.",
+      "parent_ref": "s4-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-024",
+      "error_code": null,
+      "keywords": [
+        "결제 장애",
+        "회사 책임",
+        "전액 환불"
+      ],
+      "resolution_summary": "회사 책임 과오금 312건, 전액 환불 대상",
+      "created_at": "2026-09-23T11:00:00+09:00",
+      "expected_queries": [
+        "회사 잘못으로 중복 결제되면 수수료 떼?"
+      ]
+    },
+    {
+      "ref": "s4-cash",
+      "type": "success",
+      "title": "해결(구): 중복 청구분을 캐시로 일괄 지급",
+      "body": "빠르게 끝내려고 오전 접수 40건은 중복 금액만큼 캐시를 지급. 현금이 아니라는 항의가 이어짐. 캐시는 회원이 원하면 줄 수 있는 방법일 뿐이라 중단.",
+      "parent_ref": "s4-cause",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-025",
+      "error_code": null,
+      "keywords": [
+        "캐시 지급",
+        "일괄 처리"
+      ],
+      "resolution_summary": "캐시 일괄 지급(중단)",
+      "created_at": "2026-09-23T13:00:00+09:00",
+      "expected_queries": [],
+      "_deprecate_reason": "캐시 지급은 회원이 원할 때만 가능 — 원 결제수단 환불(s4-refund)로 대체"
+    },
+    {
+      "ref": "s4-refund",
+      "type": "success",
+      "title": "해결: 목록 대조 후 결제와 같은 방법으로 7일 이내 환불",
+      "body": "개발 부서 목록과 대조해 문의하지 않은 회원까지 312건 전부를 결제와 같은 방법으로 취소. 필요한 정보는 회사가 이미 갖고 있어 장애 다음 날부터 7일 이내에 모두 환불. 캐시로 받은 40건은 회원 의사를 물어 28건을 현금 환불로 바꿈.",
+      "parent_ref": "s4-cause",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-026",
+      "error_code": null,
+      "keywords": [
+        "원 결제수단 환불",
+        "7일 이내",
+        "선제 환불"
+      ],
+      "resolution_summary": "312건 전부 같은 방법으로 7일 이내 환불",
+      "created_at": "2026-09-29T17:00:00+09:00",
+      "expected_queries": [
+        "과오금 며칠 안에 돌려줘야 해?"
+      ]
+    },
+    {
+      "ref": "s4-unauth",
+      "type": "fail",
+      "title": "중복이 아니라 모르는 결제였던 9건",
+      "body": "중복 청구라며 접수된 건 중 9건은 목록에 없는 결제. 회원이 한 적 없는 결제라고 해 간편결제에 저장된 모르는 결제 수단을 지우게 하고 결제 서비스의 신고 화면에서 무단 결제로 신고하도록 안내. 은행에도 확인하도록 권함.",
+      "parent_ref": "s4-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-027",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-24T10:30:00+09:00",
+      "expected_queries": [
+        "내가 안 한 결제가 있다는 고객 안내"
+      ]
+    },
+    {
+      "ref": "s5-root",
+      "type": "fail",
+      "title": "청약철회 환불이 접수 8영업일 만에 처리돼 민원",
+      "body": "7월 말~8월 초에 접수된 청약철회 37건의 환불이 평균 8영업일 걸림. 회원 2명이 외부 기관에 민원 제기. 당시 팀 내부 처리 목표는 5영업일이었고 그마저 넘김.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-028",
+      "error_code": null,
+      "keywords": [
+        "환불 지연",
+        "청약철회",
+        "처리 기한"
+      ],
+      "resolution_summary": "휴대전화 결제 취소 기한 경과와 수납 확인 지연",
+      "created_at": "2026-08-25T10:00:00+09:00",
+      "expected_queries": [
+        "환불 처리 늦어서 민원 들어온 사례 어떻게 했어?",
+        "환불 신청한 지 일주일 넘었는데 안 들어온대요",
+        "환불 기한 몇일이야 넘기면 어케됨"
+      ]
+    },
+    {
+      "ref": "s5-queue",
+      "type": "fail",
+      "title": "원인: 휴대전화 결제 건이 월말을 넘겨 취소 불가",
+      "body": "휴대전화 결제는 결제한 달 말일의 하루 전까지만 결제취소가 됨. 7월 말에 접수된 건을 8월 초에 처리하려다 취소 요청이 CANCEL_PERIOD_EXPIRED로 거절돼 계좌 환불로 바꾸면서 회원에게 계좌를 다시 묻느라 며칠씩 더 걸림.",
+      "parent_ref": "s5-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-029",
+      "error_code": "CANCEL_PERIOD_EXPIRED",
+      "keywords": [
+        "휴대전화 결제",
+        "취소 가능 기간",
+        "월말"
+      ],
+      "resolution_summary": "월말 경과로 결제취소 불가, 계좌 환불 전환",
+      "created_at": "2026-08-25T14:00:00+09:00",
+      "expected_queries": [
+        "휴대폰 결제 취소 CANCEL_PERIOD_EXPIRED 뜨는 이유",
+        "폰결제 환불 월말 지나면 어떻게 돼"
+      ]
+    },
+    {
+      "ref": "s5-queue-fix",
+      "type": "success",
+      "title": "해결: 월말 3영업일 전부터 휴대전화 결제 환불을 먼저 처리",
+      "body": "매달 말일 3영업일 전부터 휴대전화 결제 환불 건을 대기열 맨 앞으로 올리고, 말일 하루 전 오후에는 남은 건을 팀장이 직접 확인. 9월 말 취소 기한 경과 0건.",
+      "parent_ref": "s5-queue",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-030",
+      "error_code": "CANCEL_PERIOD_EXPIRED",
+      "keywords": [
+        "우선 처리",
+        "월말 대기열"
+      ],
+      "resolution_summary": "월말 휴대전화 결제 환불 우선 처리",
+      "created_at": "2026-09-01T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s5-card",
+      "type": "fail",
+      "title": "원인: 카드 수납 확인을 기다리는 건도 접수일부터 기한을 셈",
+      "body": "신용카드 결제는 수납 확인일부터 기한을 세는데 대시보드는 전부 접수일 기준으로 지연을 표시. 실제로 급한 건과 수납 확인을 기다리는 건이 섞여 우선순위를 못 잡음. 회원이 환불에 필요한 정보를 주지 않은 건도 지연으로 잡힘.",
+      "parent_ref": "s5-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-031",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-26T11:00:00+09:00",
+      "expected_queries": [
+        "환불 기한은 언제부터 세는 거야?"
+      ]
+    },
+    {
+      "ref": "s5-sla",
+      "type": "success",
+      "title": "해결: 환불 처리 목표를 3영업일로, 기산일을 건별로 표시",
+      "body": "팀 처리 목표를 접수일(수납 확인이 필요하면 수납 확인일)부터 3영업일 이내로 낮춤. 대시보드에 건별 기산일과 남은 영업일을 표시하고 2영업일째 미처리 건은 팀장에게 알림. 같은 방법으로 환불할 수 없는 건은 회원에게 미리 알림.",
+      "parent_refs": [
+        "s5-queue",
+        "s5-card"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-itcs-032",
+      "error_code": null,
+      "keywords": [
+        "3영업일",
+        "기산일",
+        "환불 대시보드"
+      ],
+      "resolution_summary": "목표 3영업일 + 건별 기산일 표시",
+      "created_at": "2026-09-07T15:00:00+09:00",
+      "expected_queries": [
+        "환불 며칠 안에 해줘야 해?"
+      ]
+    },
+    {
+      "ref": "s5-comp",
+      "type": "fail",
+      "title": "환불이 늦은 만큼 이자를 달라는 요구",
+      "body": "8영업일 걸린 회원 3명이 늦어진 기간의 이자나 보상을 요구. 기한을 넘겼을 때 무엇을 얼마나 보상하는지 기준이 없어 건마다 캐시 1,000원~5,000원을 다르게 지급. 지급 근거를 묻는 재문의가 생김.",
+      "parent_ref": "s5-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-033",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-02T14:00:00+09:00",
+      "expected_queries": [
+        "환불 늦으면 지연 보상 줘야 해?"
+      ]
+    },
+    {
+      "ref": "s6-root",
+      "type": "fail",
+      "title": "회사에 환불 요청 없이 카드사에 이의제기한 캐시 충전 55만 원",
+      "body": "회원이 게임 캐시 55만 원 충전 건을 '모르는 결제'라며 카드사에 이의제기. 회사에는 환불 문의가 없었음. 카드사가 10영업일 안에 소명 자료를 요구했는데 누가 어떤 자료를 내는지 정해진 절차가 없어 접수 뒤 나흘이 지남.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-034",
+      "error_code": null,
+      "keywords": [
+        "카드사 이의제기",
+        "차지백",
+        "캐시 충전"
+      ],
+      "resolution_summary": "대응 절차 부재 + 이미 쓴 캐시 + 도용 의심",
+      "created_at": "2026-10-06T10:10:00+09:00",
+      "expected_queries": [
+        "카드사 이의제기 들어왔을 때 어떻게 대응했어?",
+        "고객이 카드사에 결제 취소를 걸었대요",
+        "차지백 들어옴 뭐부터 해야됨"
+      ]
+    },
+    {
+      "ref": "s6-used",
+      "type": "fail",
+      "title": "쟁점: 충전한 캐시 55만 원 중 51만 원을 이미 사용",
+      "body": "기록을 보니 충전 캐시 55만 원 중 51만 원이 같은 계정에서 게임 아이템 구매에 쓰였고 접속 기기도 평소와 같음. 유상 충전 캐시는 충전액에서 사용액을 뺀 잔액만 환불 대상이라 남은 4만 원만 해당.",
+      "parent_ref": "s6-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-035",
+      "error_code": null,
+      "keywords": [
+        "캐시 잔액",
+        "사용액",
+        "유상 충전"
+      ],
+      "resolution_summary": "충전액에서 사용액을 뺀 잔액 4만 원만 환불 대상",
+      "created_at": "2026-10-06T15:00:00+09:00",
+      "expected_queries": [
+        "캐시 쓰고 남은 것만 환불돼?"
+      ]
+    },
+    {
+      "ref": "s6-evid",
+      "type": "success",
+      "title": "해결: 사용 기록을 카드사에 내고 잔액 4만 원만 환불",
+      "body": "충전·사용 기록과 접속 기기 기록을 정리해 카드사에 제출. 카드사가 이의제기를 기각했고 회사는 남은 캐시 4만 원을 원래 결제수단으로 취소. 제출 자료에서 다른 회원 정보는 가림.",
+      "parent_ref": "s6-used",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-036",
+      "error_code": null,
+      "keywords": [
+        "소명 자료",
+        "이의제기 기각",
+        "잔액 환불"
+      ],
+      "resolution_summary": "사용 기록 소명 → 잔액만 환불",
+      "created_at": "2026-10-14T16:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "s6-fraud",
+      "type": "fail",
+      "title": "다른 건: 가족 카드를 몰래 등록해 충전한 계정",
+      "body": "비슷한 시기 다른 이의제기 건은 회원이 가족 카드를 허락 없이 등록해 캐시를 충전한 경우. 다른 사람의 결제수단을 도용한 회원에게는 환불하지 않으며, 카드 명의자의 이의제기는 카드사 절차로 처리됨. 계정에 남은 캐시와 아이템 처리가 문제로 남음.",
+      "parent_ref": "s6-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-037",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-08T11:00:00+09:00",
+      "expected_queries": [
+        "남의 카드로 충전한 계정 환불 요청"
+      ]
+    },
+    {
+      "ref": "s6-limit",
+      "type": "success",
+      "title": "해결: 조사 끝날 때까지 계정 임시 정지, 캐시 환불 제한",
+      "body": "도용 신고가 들어온 계정은 조사가 끝날 때까지 임시 정지하고 회원에게 사유를 알림. 이용제한으로 막힌 계정의 게임 아이템과 캐시는 환불을 제한. 조사 결과 본인 결제로 확인되면 정지 기간만큼 이용 기간을 늘려 줌.",
+      "parent_ref": "s6-fraud",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-038",
+      "error_code": null,
+      "keywords": [
+        "임시 정지",
+        "환불 제한",
+        "도용 조사"
+      ],
+      "resolution_summary": "조사 중 임시 정지 + 캐시 환불 제한",
+      "created_at": "2026-10-12T14:00:00+09:00",
+      "expected_queries": [
+        "도용 의심 계정 어떻게 조치했어?"
+      ]
+    },
+    {
+      "ref": "s6-flow",
+      "type": "ref",
+      "title": "카드사 이의제기 대응 순서(팀 메모)",
+      "body": "① 접수 당일 담당자 지정 ② 충전·사용·접속 기록 추출 ③ 회사에 낸 환불 문의가 있었는지 확인 ④ 카드사 기한 3영업일 전까지 자료 제출 ⑤ 결과에 따라 잔액 환불 또는 계정 조치. 회사 환불과 카드사 취소가 겹치지 않게 결과가 나올 때까지 회사 환불은 보류.",
+      "parent_ref": "s6-root",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-039",
+      "error_code": null,
+      "keywords": [
+        "대응 순서",
+        "소명 자료",
+        "이중 환불 방지"
+      ],
+      "resolution_summary": "이의제기 접수~결과 반영 5단계",
+      "created_at": "2026-10-15T10:00:00+09:00",
+      "expected_queries": [
+        "차지백 대응 절차 정리된 거 있어?"
+      ]
+    },
+    {
+      "ref": "o1-record",
+      "type": "ref",
+      "title": "상담 기록 보관 기간 메모",
+      "body": "계약·청약철회와 대금결제 기록은 5년, 소비자 불만·분쟁처리 기록은 3년 보존한다. 환불 다툼이 있었던 상담은 '분쟁' 표시를 해 3년 보관 대상에 넣는다. 통화 녹음 파일의 보관 위치.",
+      "source": "synthetic",
+      "source_ref": "syn-itcs-040",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-19T10:00:00+09:00",
+      "expected_queries": []
+    }
+  ]
+}

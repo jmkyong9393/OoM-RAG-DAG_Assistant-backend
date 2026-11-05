@@ -1,0 +1,1016 @@
+{
+ "tenant": "it",
+ "description": "OoM 테크 — 합성 로그(it-dev_v1 · it-cs_v1)와 규정 조문의 대조표. 값의 원천은 규정이고 로그 본문이 그 값을 따른다.",
+ "links": [
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제2조",
+   "values": [
+    "SEV-2",
+    "핵심 기능의 심각한 저하"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-page",
+   "relation": "exception",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제5조",
+   "policy_values": [
+    "15분"
+   ],
+   "log_values": [
+    "30분"
+   ],
+   "note": "당시 호출 도구의 미확인 경보 자동 이관 시간이 30분이었다. 15분이 현재 기준(d1-page-fix)"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-page-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제5조",
+   "values": [
+    "15분",
+    "장애 관리 책임자"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-fanout",
+   "relation": "gap",
+   "topic": "발송 큐 적체 임계값과 대형 방 팬아웃 분리 기준",
+   "note": "규정은 장애 등급과 대응만 정한다. 큐 설계와 적체 임계값은 정하지 않는다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-fanout-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제11조",
+   "values": [
+    "핵심 기능이 단독으로 실행되게"
+   ],
+   "note": "서비스 간 강한 연동을 줄인 조치. 1,000명·5,000건 기준은 현장이 정한 값"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-token",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제18조",
+   "note": "기각한 가설도 5 Whys 단계로 기록해 둔다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-notice",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제9조",
+   "values": [
+    "1~2문장 요약",
+    "현재 상태 2~4개 항목",
+    "다음 단계 2~4개 항목"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d1-pm",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제17조",
+   "values": [
+    "5영업일",
+    "24시간 전"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "별표 1",
+   "values": [
+    "SEV-1",
+    "다수·전체 고객 서비스 중단"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-origin",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제11조",
+   "values": [
+    "운영도구",
+    "이중화"
+   ],
+   "note": "운영도구를 한 데이터센터 안에서만 이중화하면 전면 장애로 이어진다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-origin-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제11조",
+   "values": [
+    "다른 데이터센터와 이중화",
+    "삼중화"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-cmd",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제6조",
+   "note": "장애 중 시스템 변경은 운영 담당만 한다는 기준을 지키지 않아 생긴 문제"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-cmd-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제6조",
+   "values": [
+    "4개 역할",
+    "운영 담당만"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-ext",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제9조",
+   "values": [
+    "대외 공지"
+   ],
+   "note": "SEV-1은 내부 통보와 대외 공지를 함께 하고, 원인을 모르면 모른다고 적는다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-pm",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제17조",
+   "values": [
+    "3일"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d2-report",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제20조",
+   "values": [
+    "분 단위 타임라인",
+    "영향 트래픽 비율"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d3-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제3조",
+   "values": [
+    "높은 등급"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d3-retry",
+   "relation": "gap",
+   "topic": "결제 요청의 멱등 키 적용 기준",
+   "note": "규정은 장애 대응과 배포 통제만 정한다. 결제 요청의 중복 방지 설계 기준은 없다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d3-flag",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제8조",
+   "values": [
+    "피처 플래그",
+    "이전 상태로 되돌"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d3-idem",
+   "relation": "gap",
+   "topic": "결제 요청의 멱등 키 적용 기준",
+   "note": "키 보관 24시간은 현장이 정한 값이다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d3-hard",
+   "relation": "exception",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제23조",
+   "values": [
+    "Hard 동결",
+    "연휴 직전 영업일 18:00"
+   ],
+   "note": "장애가 이미 멈춘 뒤의 배포라 제23조 ④에 따라 사유와 매출 영향을 적어 인프라 담당 임원의 승인을 받아야 했다. 팀은 알면서 SEV-2 대응의 연장으로 보고 온콜 엔지니어·장애 관리 책임자 승인만으로 배포했다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d3-pm-late",
+   "relation": "exception",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제17조",
+   "policy_values": [
+    "5영업일"
+   ],
+   "log_values": [
+    "9영업일"
+   ],
+   "note": "추석 연휴와 대응 인원 휴가로 기한을 넘길 것을 알고 일정을 잡았다. 사유를 사후분석 문서에 남김"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제3조",
+   "values": [
+    "SEV-3"
+   ],
+   "note": "경보 없는 외부 제보는 일단 SEV-3 또는 SEV-4로 선언한 뒤 조사"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-conf",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "별표 3",
+   "values": [
+    "2RPS"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-rollback",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제8조",
+   "values": [
+    "SEV-3",
+    "원인이 최근 배포"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-canary",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제24조",
+   "values": [
+    "점진 배포",
+    "헬스 검증",
+    "검증된 정상값으로 동작"
+   ],
+   "note": "1%·10% 단계는 현장이 정한 값"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-burst",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "별표 3",
+   "policy_values": [
+    "최대 2배"
+   ],
+   "note": "당시 게이트웨이는 순간 초과를 허용하지 않았다. 다음 1초 한도 당겨쓰기(최대 2배)가 현재 기준(d4-burst-fix)"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-burst-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "별표 3",
+   "values": [
+    "당겨쓰기(최대 2배)",
+    "응답 헤더"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d4-guide",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제30조",
+   "values": [
+    "1·2·4·8·16초",
+    "80%",
+    "1초 간격"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d5-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제4조",
+   "values": [
+    "1시간 동안 집중 분석해도"
+   ],
+   "note": "선언 기준을 지키지 않아 선언이 3시간 늦은 사례"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d5-region",
+   "relation": "gap",
+   "topic": "시즌 업데이트 전 매칭 대기열 부하 시험 기준",
+   "note": "변경 등급 승인(제22조)은 있지만 출시 전 부하 시험을 요구하는 조문은 없다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d5-db",
+   "relation": "gap",
+   "topic": "읽기 복제본 지연 허용 한도와 주 DB 읽기 전환 기준",
+   "note": "복제 지연이 얼마를 넘으면 경보·전환하는지 규정에 없다. 5초 경보(d5-db-fix)는 현장이 정한 값"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d5-db-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제22조",
+   "values": [
+    "DB 신뢰성 담당자 검토",
+    "C3"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d5-freeze",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제23조",
+   "values": [
+    "금요일 18:00~월요일 09:00",
+    "배포 후 마이그레이션"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d5-split",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제23조",
+   "values": [
+    "온콜 엔지니어와 협의",
+    "월요일 09:00"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제2조",
+   "values": [
+    "SEV-3",
+    "우회책이 있는 불편"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-ttl",
+   "relation": "gap",
+   "topic": "캐시 만료 분산과 재생성 잠금 기준",
+   "note": "캐시 TTL과 만료 분산을 정한 조문이 없다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-jitter",
+   "relation": "gap",
+   "topic": "캐시 만료 분산과 재생성 잠금 기준",
+   "note": "±10% 지터는 현장이 정한 값이다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-dep",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제11조",
+   "policy_values": [
+    "강한 연동"
+   ],
+   "note": "서비스 간 의존성과 강한 연동을 줄이지 않아 생긴 문제"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-fallback",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제11조",
+   "note": "핵심 기능이 추천 없이도 뜨게 한 조치. 0.8초 타임아웃은 현장이 정한 값"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-pm",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제16조",
+   "values": [
+    "수동 발견 같은 모니터링 실패"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d6-ticket",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제19조",
+   "values": [
+    "4주 또는 8주",
+    "등급 태그와 날짜 태그"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제27조",
+   "values": [
+    "3영업일"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-rotate",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제29조",
+   "values": [
+    "복구할 수 없"
+   ],
+   "note": "새 키 발급 → 적용 → 기존 키 삭제 순서를 지키지 않아 생긴 문제"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-rotate-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제29조",
+   "values": [
+    "원본 키가 자동으로 비활성화되지 않으므로"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-ip",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제29조",
+   "values": [
+    "호출 허용 IP"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-ip-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제29조",
+   "values": [
+    "최대 10개",
+    "-401"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-nat",
+   "relation": "gap",
+   "topic": "허용 IP 상한(10개)을 넘는 서버 구성의 처리 기준",
+   "note": "제29조 ④는 최대 10개만 정한다. 상한을 넘는 구성의 대안(대역 등록·출구 주소 통합)은 없다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d7-bounty",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제27조",
+   "values": [
+    "3영업일",
+    "1주 안에",
+    "최대 1억 원"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-root",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "별표 1",
+   "values": [
+    "SEV-2",
+    "일부 고객 서비스 중단"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-change",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제22조",
+   "values": [
+    "C1",
+    "인프라 조직장",
+    "온콜 엔지니어"
+   ],
+   "note": "C1 승인 요건을 건너뛰어 생긴 문제"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-change-fix",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제22조",
+   "values": [
+    "최소 2주 전",
+    "릴리스 매니저"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-rollback",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제24조",
+   "values": [
+    "안전한 중단 지점",
+    "업무일 이른 시간",
+    "검토된 롤백 계획"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-sla",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "별표 2",
+   "values": [
+    "99.95%",
+    "99.0% 이상 99.95% 미만"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-credit",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제15조",
+   "values": [
+    "다음 달 말일까지",
+    "100원 미만"
+   ]
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "d8-nonha",
+   "relation": "exception",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제14조",
+   "values": [
+    "고가용성(HA)"
+   ],
+   "note": "제14조 ②는 HA 선택 고객에게만 가용률 목표와 크레딧을 적용한다. 대상이 아닌 줄 알면서 영업 판단으로 3곳에 10%를 지급했다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "o1-oncall",
+   "relation": "gap",
+   "topic": "온콜 교대 주기와 인수인계 항목",
+   "note": "제7조는 장애 지휘권 인계만 정한다. 평시 온콜 교대의 주기·인수인계 항목은 없다"
+  },
+  {
+   "log": "it-dev_v1",
+   "ref": "o2-status",
+   "relation": "follows",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제2조",
+   "values": [
+    "정상·일부장애·심각장애"
+   ],
+   "note": "SEV-3 이하 표기 관행은 현장이 정한 것"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-root",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제9조",
+   "values": [
+    "정가 월정액"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-calc",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "별표 1",
+   "values": [
+    "정가 월정액 기준 일할 공제"
+   ],
+   "note": "할인가 기준으로 안내해 생긴 문제"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-calc-fix",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제10조",
+   "values": [
+    "잔여 금액의 10%"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-days",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제7조",
+   "values": [
+    "최초 결제일 다음 날을 1일차로"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-goodwill",
+   "relation": "exception",
+   "policy": "it-refund-2026-11",
+   "article": "제10조",
+   "values": [
+    "잔여 금액의 10%"
+   ],
+   "note": "회원 사정 해지는 정가 기준 공제 뒤 잔여 금액의 10%를 빼야 한다. 상담원 오안내를 회사 책임으로 보고 알면서 안내한 금액(4,140원)대로 환불했다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-pause",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제8조",
+   "values": [
+    "1개월씩",
+    "3개월까지"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s1-script",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제9조",
+   "values": [
+    "VOD 단건 상품은 전체 이용대금을 뺀다"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-root",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제18조",
+   "values": [
+    "법정대리인 동의 없"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-proof",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제19조",
+   "values": [
+    "결제 실행자",
+    "결제수단 명의자",
+    "증빙서류"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-market",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제17조",
+   "values": [
+    "앱마켓 고객센터에 먼저 환불을 신청해 승인받"
+   ],
+   "note": "인앱결제 환불 경로를 잘못 안내해 생긴 문제"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-market-fix",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제11조",
+   "values": [
+    "콘텐츠 반환을 확인한 날부터 3영업일 이내"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-partial",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제4조",
+   "values": [
+    "개봉해야 효용이 정해지는"
+   ],
+   "note": "미성년자 결제로 인정되지 않아 일반 청약철회(제3조 7일)로 처리"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-doc",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제18조",
+   "values": [
+    "만 19세 미만",
+    "기록이 남는 방법"
+   ],
+   "note": "가족관계 서류는 현장이 정한 증빙"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s2-again",
+   "relation": "gap",
+   "topic": "같은 계정에서 반복되는 미성년자 결제 취소 요청의 처리 기준",
+   "note": "제19조는 속임수와 허락된 재산 범위만 제한 사유로 든다. 반복 횟수 기준은 없다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-root",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q8",
+   "values": [
+    "3~5영업일"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-hold",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q4",
+   "values": [
+    "보안 보류",
+    "2단계 인증을 켜 둔 계정"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-hold-fix",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q4",
+   "values": [
+    "평소 쓰던 기기·브라우저·장소"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-bypass",
+   "relation": "gap",
+   "topic": "상담원이 회원의 2단계 인증을 대신 해제할 때의 본인 확인 기준",
+   "note": "FAQ는 회원이 쓸 수 있는 수단만 안내한다. 상담원 수동 해제의 허용 여부와 확인 기준은 없다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-bypass-fix",
+   "relation": "gap",
+   "topic": "상담원이 회원의 2단계 인증을 대신 해제할 때의 본인 확인 기준",
+   "note": "보안 담당 2인 승인은 현장이 정한 절차다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-prevent",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q5",
+   "values": [
+    "최소 1명",
+    "7일"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-prevent",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q7",
+   "values": [
+    "8자리 백업 코드"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s3-extend",
+   "relation": "gap",
+   "topic": "계정 복구 대기 중 쓰지 못한 유료 이용 기간의 처리 기준",
+   "note": "FAQ Q6은 회사가 임시 정지한 기간만 연장한다. 분실·복구 대기 기간은 정하지 않는다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s4-root",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제2조",
+   "values": [
+    "내지 않아도 될 요금"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s4-cause",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제14조",
+   "values": [
+    "수수료와 관계없이 전액 환불"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s4-cash",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제14조",
+   "values": [
+    "회원이 원하면"
+   ],
+   "note": "회원이 원하지 않은 캐시 지급이라 폐기한 해결책"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s4-refund",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제14조",
+   "values": [
+    "7일 이내",
+    "결제와 같은 방법으로"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s4-unauth",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q14",
+   "values": [
+    "모르는 결제 수단",
+    "신고 화면에서"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s5-root",
+   "relation": "exception",
+   "policy": "it-refund-2026-11",
+   "article": "제11조",
+   "policy_values": [
+    "3영업일"
+   ],
+   "log_values": [
+    "5영업일"
+   ],
+   "note": "당시 팀 내부 처리 목표가 5영업일이었다. 3영업일이 현재 기준(s5-sla)"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s5-queue",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제12조",
+   "values": [
+    "결제한 달 말일의 하루 전까지"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s5-queue-fix",
+   "relation": "gap",
+   "topic": "결제취소 가능기간이 임박한 환불 건의 우선 처리 기준",
+   "note": "제12조는 결제수단별 취소 가능 기간만 정한다. 기간이 임박한 건을 먼저 처리하라는 기준은 없다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s5-card",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제11조",
+   "values": [
+    "수납 확인일",
+    "환불에 필요한 정보를 주지 않은"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s5-sla",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제11조",
+   "values": [
+    "3영업일 이내",
+    "수납 확인일"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s5-comp",
+   "relation": "gap",
+   "topic": "환불 처리 기한을 넘겼을 때의 지연 보상 기준",
+   "note": "제11조는 기한만 정한다. 기한을 넘긴 경우의 보상은 정하지 않는다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-root",
+   "relation": "gap",
+   "topic": "카드사 이의제기(차지백) 접수 때의 대응 절차와 소명 기한",
+   "note": "환불 규정은 회원이 회사에 신청한 환불만 다룬다. 카드사를 통한 이의제기 대응은 없다"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-used",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제15조",
+   "values": [
+    "충전액에서 사용액을 뺀 잔액"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-evid",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제15조",
+   "values": [
+    "원래 결제수단으로 취소"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-fraud",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제10조",
+   "values": [
+    "결제수단을 도용"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-limit",
+   "relation": "follows",
+   "policy": "it-refund-2026-11",
+   "article": "제13조",
+   "values": [
+    "게임 아이템과 캐시"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-limit",
+   "relation": "follows",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q6",
+   "values": [
+    "조사가 끝날 때까지 임시 정지"
+   ]
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "s6-flow",
+   "relation": "gap",
+   "topic": "카드사 이의제기(차지백) 접수 때의 대응 절차와 소명 기한",
+   "note": "현장이 만든 절차다. 카드사 기한 3영업일 전 제출도 팀이 정한 값"
+  },
+  {
+   "log": "it-cs_v1",
+   "ref": "o1-record",
+   "relation": "follows",
+   "policy": "it-privacy-2026-11",
+   "article": "제10조",
+   "values": [
+    "5년",
+    "소비자 불만·분쟁처리 기록은 3년"
+   ],
+   "note": "'분쟁' 표시는 현장이 정한 분류"
+  }
+ ]
+}

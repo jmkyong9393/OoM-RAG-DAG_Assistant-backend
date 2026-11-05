@@ -1,6 +1,6 @@
 """data/logs/*.json 합성 로그 점검 — 작업 지시(2026-10-29) D-1 완료 기준을 센다.
 
-항목별 오류(규칙 위반)는 ERROR, 완료 기준 미달은 FAIL 로 보고하고 하나라도 있으면 exit 1.
+항목별 오류(규칙 위반)는 ERROR, 완료 기준 미달은 FAIL 로 보고하고 하나라도 있으면 exit 1. 완료 기준은 세트(SETS)별로 센다.
 사용: python scripts/validate_logs.py [data/logs/*.json]   (생략 시 data/logs/*_v1.json 전부)
 """
 import json, re, sys, pathlib, datetime as dt
@@ -9,7 +9,13 @@ from collections import Counter
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TYPES = {"fail", "success", "ref"}
 DATE_LO, DATE_HI = dt.date(2026, 7, 1), dt.date(2026, 10, 25)
-TARGET = {1: 60, 2: 40}
+# 세트(회사·차수)마다 완료 기준을 센다. full = 작업 지시 D-1 기준(100건 · 50/35/15 · 정제 비움 30 · 고아 ref 2~3 · 다중 부모 3+).
+# 고객지원 세트는 규모가 작아 구조 기준만 본다(폐기 2+ · 질의 수 ≥ 노드 수 · 정제 비움 20%+).
+SETS = {
+    "retail": {"files": ["sw-dev_v1", "hr-ga_v1"], "full": True, "target": {"sw-dev_v1": 60, "hr-ga_v1": 40}},
+    "it": {"files": ["it-dev_v1", "it-cs_v1"], "full": True, "target": {"it-dev_v1": 60, "it-cs_v1": 40}},
+    "retail-cs": {"files": ["cs_v1"], "full": False},
+}
 
 
 def check_file(path: pathlib.Path):
@@ -64,29 +70,46 @@ def check_file(path: pathlib.Path):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")   # Windows 콘솔(cp949)에서 '✓' 출력 오류 방지
     files = [pathlib.Path(a) for a in sys.argv[1:]] or sorted((ROOT / "data" / "logs").glob("*_v1.json"))
-    all_err, tot = [], Counter()
+    all_err, fails, stats = [], [], {}
     for f in files:
         err, st = check_file(f)
         all_err += err
+        stats[f.stem] = st
         print(f"{f.name}: ws{st['ws']} n={st['n']} fail/success/ref={st['fail']}/{st['success']}/{st['ref']} chains={st['chains']} "
               f"multi={st['multi']} orphan_ref={st['orphan_ref']} unrefined={st['unrefined']} deprecated={st['deprecated']}"
               f"(success {st['dep_success']}) eq={st['expected_queries']} depth≤{st['max_depth']}")
         print("   error_code:", st["codes"])
-        if TARGET.get(st["ws"]) and st["n"] != TARGET[st["ws"]]: all_err.append(f"FAIL {f.name}: ws{st['ws']} 는 {TARGET[st['ws']]}건이어야 함 ({st['n']})")
         if st["chains"] < 6: all_err.append(f"FAIL {f.name}: 체인 6+ ({st['chains']})")
-        for k in st:
-            if isinstance(st[k], int): tot[k] += st[k]
-    fails = []
-    if tot["n"] != 100: fails.append(f"총 100건 ({tot['n']})")
-    if (tot["fail"], tot["success"], tot["ref"]) != (50, 35, 15): fails.append(f"타입 비율 50/35/15 ({tot['fail']}/{tot['success']}/{tot['ref']})")
-    if tot["multi"] < 3: fails.append(f"다중 부모 3+ ({tot['multi']})")
-    if not 2 <= tot["orphan_ref"] <= 3: fails.append(f"고아 ref 2~3 ({tot['orphan_ref']})")
-    if tot["unrefined"] != 30: fails.append(f"정제 비움 30 ({tot['unrefined']})")
-    if tot["deprecated"] < 3 or tot["dep_success"] < 1: fails.append(f"폐기 3+ (success 1+) ({tot['deprecated']}, success {tot['dep_success']})")
-    if tot["expected_queries"] < 60: fails.append(f"expected_queries 60+ ({tot['expected_queries']})")
-    print(f"합계 n={tot['n']} fail/success/ref={tot['fail']}/{tot['success']}/{tot['ref']} multi={tot['multi']} orphan={tot['orphan_ref']} "
-          f"unrefined={tot['unrefined']} deprecated={tot['deprecated']} eq={tot['expected_queries']}")
+        if f.stem not in {m for spec in SETS.values() for m in spec["files"]}: fails.append(f"{f.name}: 어느 세트에도 속하지 않음 (SETS 에 추가)")
+    for name, spec in SETS.items():
+        got = [m for m in spec["files"] if m in stats]
+        if not got:
+            continue
+        if len(got) != len(spec["files"]):   # 세트 일부만 넘기면 합계 기준은 볼 수 없다
+            print(f"[{name}] 일부 파일만 점검 — 세트 기준 생략")
+            continue
+        tot = Counter()
+        for m in got:
+            for k, v in stats[m].items():
+                if isinstance(v, int): tot[k] += v
+            want = spec.get("target", {}).get(m)
+            if want and stats[m]["n"] != want: fails.append(f"[{name}] {m}: {want}건이어야 함 ({stats[m]['n']})")
+        print(f"[{name}] 합계 n={tot['n']} fail/success/ref={tot['fail']}/{tot['success']}/{tot['ref']} multi={tot['multi']} orphan={tot['orphan_ref']} "
+              f"unrefined={tot['unrefined']} deprecated={tot['deprecated']} eq={tot['expected_queries']}")
+        if spec["full"]:
+            if tot["n"] != 100: fails.append(f"[{name}] 총 100건 ({tot['n']})")
+            if (tot["fail"], tot["success"], tot["ref"]) != (50, 35, 15): fails.append(f"[{name}] 타입 비율 50/35/15 ({tot['fail']}/{tot['success']}/{tot['ref']})")
+            if tot["multi"] < 3: fails.append(f"[{name}] 다중 부모 3+ ({tot['multi']})")
+            if not 2 <= tot["orphan_ref"] <= 3: fails.append(f"[{name}] 고아 ref 2~3 ({tot['orphan_ref']})")
+            if tot["unrefined"] != 30: fails.append(f"[{name}] 정제 비움 30 ({tot['unrefined']})")
+            if tot["deprecated"] < 3 or tot["dep_success"] < 1: fails.append(f"[{name}] 폐기 3+ (success 1+) ({tot['deprecated']}, success {tot['dep_success']})")
+            if tot["expected_queries"] < 60: fails.append(f"[{name}] expected_queries 60+ ({tot['expected_queries']})")
+        else:
+            if tot["deprecated"] < 2: fails.append(f"[{name}] 폐기 2+ ({tot['deprecated']})")
+            if tot["expected_queries"] < tot["n"]: fails.append(f"[{name}] expected_queries 가 노드 수 이상 ({tot['expected_queries']} < {tot['n']})")
+            if tot["unrefined"] < tot["n"] // 5: fails.append(f"[{name}] 정제 비움 20%+ ({tot['unrefined']})")
     if all_err or fails:
         print(f"\n✗ NG — 실패 원인 {len(all_err) + len(fails)}건")
         for e in all_err: print(f"  [규칙 위반] {e}")

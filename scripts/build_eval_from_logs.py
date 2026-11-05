@@ -6,7 +6,8 @@ data/logs/*_v1.json + *.ids.json 에서 질의 30건을 뽑아 data/evalset/synt
   expect = 질의가 붙은 노드 + 같은 체인의 루트 + 같은 체인의 active success (지시서 D-3).
   폐기 노드 질의 2건은 expect_absent(폐기 노드) + expect(대체 노드) — hit_at_k.py 의 expect_absent 지원 필요.
 
-사용: python scripts/build_eval_from_logs.py        (먼저 make load-logs 로 *.ids.json 을 만든다)
+사용: python scripts/build_eval_from_logs.py        (먼저 make load-logs 로 *.ids.json 을 만든다. 1차 세트 → synthetic_logs_v1)
+      python scripts/build_eval_from_logs.py --out synthetic_logs_it_v1 data/logs/it-dev_v1.json data/logs/it-cs_v1.json
 """
 import json, re, pathlib, sys
 
@@ -33,9 +34,19 @@ def spread(cands: list, n: int) -> list:
     return [cands[round(i * (len(cands) - 1) / (n - 1))] for i in range(n)] if n > 1 else cands[:1]
 
 
+DEFAULT_FILES = ["hr-ga_v1", "sw-dev_v1"]   # 1차 세트. 다른 세트는 --out 이름과 파일을 준다
+
+
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("files", nargs="*", type=pathlib.Path)
+    ap.add_argument("--out", default=None, help="data/evalset/<이름>.json (기본 synthetic_logs_v1). 주면 할당을 채우지 못해도 있는 만큼 뽑는다")
+    a = ap.parse_args()
+    files = a.files or [ROOT / "data" / "logs" / f"{n}.json" for n in DEFAULT_FILES]
+    out_path = ROOT / "data" / "evalset" / f"{a.out}.json" if a.out else OUT
     items, absent_items = [], []
-    for f in sorted((ROOT / "data" / "logs").glob("*_v1.json")):
+    for f in files:
         ids_path = f.with_suffix(".ids.json")
         if not ids_path.exists():
             sys.exit(f"{ids_path.name} 없음 — 먼저 make load-logs")
@@ -60,6 +71,8 @@ def main():
                     absent_items.append({"workspace_id": ws, "kind": "troubleshoot", "query": q, "expect": [f"n:{ids[ABSENT[n['ref']][1]]}"],
                                          "expect_absent": [f"n:{ids[n['ref']]}"], "note": f"폐기 노드 {n['ref']} 제외, 대체 {ABSENT[n['ref']][1]}"})
                     continue
+                if n.get("_deprecate_reason"):   # 폐기 노드는 검색되지 않는다 — 대체 노드가 정해진 것(ABSENT)만 평가한다
+                    continue
                 code = n.get("error_code") or by[r].get("error_code")
                 if q in COLLOQUIAL: cat = "colloquial"
                 elif code and (norm(code) in norm(q) or re.search(r"\d{3}", code) and re.search(r"\d{3}", code).group() in q): cat = "code"
@@ -73,13 +86,16 @@ def main():
     picked = []
     for cat, n in QUOTA.items():
         cands = [i for i in items if i["cat"] == cat]
-        if len(cands) < n:
+        if len(cands) < n and not a.out:
             sys.exit(f"{cat} 후보 {len(cands)}개 < 할당 {n}")
-        picked += spread(cands, n)
+        picked += spread(cands, min(n, len(cands)))
+    if a.out and len(picked) < sum(QUOTA.values()):   # 구어 표본이 지정되지 않은 세트는 나머지 질의로 채운다
+        rest = [i for i in items if i not in picked]
+        picked += spread(rest, min(sum(QUOTA.values()) - len(picked), len(rest)))
     out = [{k: v for k, v in i.items() if k not in ("cat", "ref")} for i in picked] + absent_items
-    OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    out_path.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     counts = {c: sum(1 for i in picked if i["cat"] == c) for c in QUOTA}
-    print(f"{len(out)}건 → {OUT.relative_to(ROOT)}  {counts} + expect_absent {len(absent_items)}")
+    print(f"{len(out)}건 → {out_path.relative_to(ROOT)}  {counts} + expect_absent {len(absent_items)}")
     for i in picked + absent_items:
         print(f"  [{i.get('cat', 'absent'):10}] ws{i['workspace_id']} {i['query']}  → {i['expect']}{' ✗' + str(i['expect_absent']) if i.get('expect_absent') else ''}")
 

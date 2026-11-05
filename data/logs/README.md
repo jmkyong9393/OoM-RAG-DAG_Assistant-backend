@@ -82,3 +82,17 @@
 | 리프레시 토큰 유예 · JWKS TTL · 시각 오차 허용 | 30초 · 1시간 · 5분 | `c3-grace` `c3-jwks-fix` `c3-skew` |
 | 컨테이너 메모리 | 제한 1Gi · 요청 768Mi · 힙 75%→70% · 메타스페이스 256m | `c5-*` |
 | 배치 페이징 | 1,000건 | `c5-page` |
+
+## 세트 (2026-11-05 추가)
+
+| 세트 | 파일 | 회사·부서 | 규모 | 대조표 |
+|---|---|---|---|---|
+| retail | `sw-dev_v1` · `hr-ga_v1` | 유통 · SW 개발(1) · 인사·총무(2) | 60 + 40 | `data/alignment/retail.json` |
+| retail-cs | `cs_v1` | 유통 · 고객지원(3) — 민원 처리 사례(환불·반품·악성 민원·계정 도용) | 31 | `data/alignment/retail.json` (`log: cs_v1`) |
+| it | `it-dev_v1` · `it-cs_v1` | IT 서비스 · SW 개발(21) · 고객지원(23) | 60 + 40 | `data/alignment/it.json` |
+
+- 완료 기준은 세트별로 센다(`scripts/validate_logs.py` 의 `SETS`). retail·it 는 위 D-1 기준 그대로, retail-cs 는 구조 기준만.
+- 적재 순서는 `scripts/load_logs.py` 의 `ORDER`(먼저 만든 세트부터)로 고정한다. IT 회사 파일은 IT 회사 계정(`OIT0001`)으로 적재된다.
+- 평가셋: `python scripts/build_eval_from_logs.py`(retail → `synthetic_logs_v1`), `--out synthetic_logs_it_v1 data/logs/it-dev_v1.json data/logs/it-cs_v1.json`, `--out synthetic_logs_cs_v1 data/logs/cs_v1.json`.
+- `source_ref` 접두: `syn-itdev-` · `syn-itcs-` · `syn-cs-`.
+
