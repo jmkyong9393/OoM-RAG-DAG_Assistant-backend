@@ -34,6 +34,17 @@ def workspace_settings(conn, ws: int) -> dict[str, Any]:
     return {"policy_enabled": row["policy_enabled"], "settings": row["settings"] or {}}
 
 
+def classify_context(conn, ws: int, error_code: str | None) -> dict[str, bool]:
+    """의도 분류에 쓰는 부서 사정: 활성 사례가 하나라도 있는가(has_cases), 질의의 에러 코드를 검색 범위의 규정이 다루는가(code_in_policy)."""
+    has_cases = conn.execute("SELECT EXISTS (SELECT 1 FROM log_nodes WHERE workspace_id = %s AND status = 'active') AS x", (ws,)).fetchone()["x"]
+    code_in_policy = False
+    if error_code:
+        code_in_policy = conn.execute("""SELECT EXISTS (SELECT 1 FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
+                                         WHERE d.status = 'active' AND c.workspace_id IN (SELECT workspace_ancestors(%s)) AND c.text ILIKE %s) AS x""",
+                                      (ws, f"%{error_code}%")).fetchone()["x"]
+    return {"has_cases": bool(has_cases), "code_in_policy": bool(code_in_policy)}
+
+
 def user_terms(conn) -> list[str]:
     """kiwi 사용자 사전 = workspace_terms 전체의 합집합. kiwi 의 add_user_word 는 프로세스 전역이라 워크스페이스별로 나눠 봐도
     먼저 읽은 사전이 뒤에 영향을 준다 — 그래서 질의·청크·노드·평가가 전부 같은 합집합을 쓴다(용어는 분절 규칙일 뿐 검색 범위가 아니다)."""
