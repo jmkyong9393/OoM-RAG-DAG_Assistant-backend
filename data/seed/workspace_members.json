@@ -103,5 +103,15 @@
     "workspace_id": 23,
     "user_id": 15,
     "role": "member"
+  },
+  {
+    "workspace_id": 10,
+    "user_id": 1,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 20,
+    "user_id": 11,
+    "role": "admin"
   }
 ]

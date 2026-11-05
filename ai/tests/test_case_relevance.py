@@ -106,3 +106,19 @@ async def test_judge_is_skipped_without_key(fake_mode):
     from app.config import profile
     from app.llm import client as llm
     assert await llm.judge_case(profile(), "q", {"root_title": "r", "title": "t", "summary": "s"}, llm.Usage()) is True
+
+
+@requires_db
+async def test_case_switch_off_makes_department_policy_only(fake_mode, backfilled, admin_conn):
+    """부서 설정에서 사례 사용을 끄면(규정 참조형) 사례 질의에도 체인을 찾지 않고 규정으로 답한다."""
+    q = "VPN 접속할 때 E-403 오류가 반복되는데 예전에 어떻게 해결했어?"
+    blocks = await collect(pipeline.run(2, None, q))
+    assert "chain" in [b[0] for b in blocks]
+    admin_conn.execute("UPDATE workspaces SET case_enabled = false WHERE id = 2")
+    try:
+        blocks = await collect(pipeline.run(2, None, q))
+        d, names = dict(blocks), [b[0] for b in blocks]
+        assert d["intent"] == {"intent": "policy", "mode": "policy"} and "chain" not in names and "policy" in names
+        assert not any(b[0] == "stage" and b[1]["node"] == "graph_search" for b in blocks)
+    finally:
+        admin_conn.execute("UPDATE workspaces SET case_enabled = true WHERE id = 2")

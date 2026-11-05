@@ -78,8 +78,8 @@ def main():
             cur.execute("INSERT INTO tenants (id, slug, name, settings) VALUES (%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
                         (t["id"], t["slug"], t["name"], Jsonb(t.get("settings", {}))))
         for w in load("workspaces.json"):
-            cur.execute("INSERT INTO workspaces (id, tenant_id, parent_id, kind, name, policy_enabled, settings) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
-                        (w["id"], w["tenant_id"], w["parent_id"], w["kind"], w["name"], w["policy_enabled"], Jsonb(w.get("settings", {}))))
+            cur.execute("INSERT INTO workspaces (id, tenant_id, parent_id, kind, name, policy_enabled, case_enabled, settings) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
+                        (w["id"], w["tenant_id"], w["parent_id"], w["kind"], w["name"], w["policy_enabled"], w.get("case_enabled", True), Jsonb(w.get("settings", {}))))
         # 비밀번호: SEED_PASSWORD 하나를 전원에 BCrypt 로 넣는다(로컬 시연용). 이미 있는 사용자는 비밀번호를 건드리지 않는다.
         pw_hash = bcrypt.hashpw(SEED_PASSWORD.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("ascii")
         for u in load("users.json"):

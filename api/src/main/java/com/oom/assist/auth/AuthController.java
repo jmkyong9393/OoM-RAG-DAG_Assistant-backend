@@ -62,9 +62,10 @@ public class AuthController {
 
   public record LoginRequest(@NotBlank String employeeNo, @NotBlank String password) {}
   public record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {}
-  public record WorkspaceMembership(long id, String name, boolean policyEnabled, String role) {}
+  /** canConfigure: 이 부서의 설정(규정 사용·사례 사용)을 바꿀 수 있는가 — 부서 admin 이거나 상위(전사 공통)의 admin. */
+  public record WorkspaceMembership(long id, String name, boolean policyEnabled, boolean caseEnabled, String role, boolean canConfigure) {}
   public record Me(long id, String employeeNo, String name, String title, String email, Long workspaceId, List<WorkspaceMembership> workspaces,
-                   boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt) {}
+                   boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt, boolean companyAdmin) {}
 
   @PostMapping("/auth/login")
   public Me login(@Valid @RequestBody LoginRequest body, HttpServletRequest req, HttpServletResponse res) {
@@ -158,18 +159,24 @@ public class AuthController {
         .query().listOfRows().stream().findFirst()
         .map(u -> {
           List<WorkspaceMembership> ws = jdbc.sql("""
-                SELECT w.id, w.name, w.policy_enabled, m.role
+                SELECT w.id, w.name, w.policy_enabled, w.case_enabled, m.role,
+                       EXISTS (SELECT 1 FROM workspace_members a WHERE a.user_id = m.user_id AND a.role = 'admin'
+                               AND a.workspace_id IN (SELECT workspace_ancestors(w.id))) AS can_configure
                 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
-                WHERE m.user_id = ? ORDER BY (m.role = 'admin') DESC, w.id
+                WHERE m.user_id = ? AND w.kind = 'dept' ORDER BY (m.role = 'admin') DESC, w.id
                 """).param(userId).query((rs, i) -> new WorkspaceMembership(rs.getLong("id"), rs.getString("name"),
-                  rs.getBoolean("policy_enabled"), rs.getString("role"))).list();
+                  rs.getBoolean("policy_enabled"), rs.getBoolean("case_enabled"), rs.getString("role"), rs.getBoolean("can_configure"))).list();
+          // 회사 관리자: 부서가 아닌 상위 워크스페이스(전사 공통)의 admin. 소속 부서 목록에는 넣지 않는다
+          boolean companyAdmin = jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                               WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept')""").param(userId).query(Boolean.class).single();
           Long home = ws.isEmpty() ? null : ws.get(0).id(); // admin 멤버십이 있으면 그것이 홈
           Timestamp changed = (Timestamp) u.get("password_changed_at");
           Instant expiresAt = changed == null ? null : changed.toInstant().plus(Duration.ofDays(PasswordPolicy.MAX_AGE_DAYS));
           boolean expired = expiresAt == null || expiresAt.isBefore(Instant.now());   // 기준 시각이 없으면(구 계정) 만료로 본다
           return new Me(((Number) u.get("id")).longValue(), (String) u.get("employee_no"), (String) u.get("name"), (String) u.get("title"),
               (String) u.get("email"), home, ws, Boolean.TRUE.equals(u.get("must_change_password")) || expired,
-              u.get("consented_at") == null, expiresAt);
+              u.get("consented_at") == null, expiresAt, companyAdmin);
         });
   }
 }
