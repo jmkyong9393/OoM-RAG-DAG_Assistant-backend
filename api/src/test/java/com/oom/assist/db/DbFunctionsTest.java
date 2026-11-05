@@ -130,6 +130,45 @@ class DbFunctionsTest extends AbstractDbTest {
     assertThat(hits).containsExactly(active);
   }
 
+  // ── search_case_entry ──────────────────────────────────────────────────
+
+  @Test
+  void caseEntryRanksRareWordsAboveCommonOnesAndReturnsEvidence() {
+    long common1 = node("fail", "흔한1", null);
+    long common2 = node("fail", "흔한2", null);
+    long rare = node("fail", "드문", null);
+    long exact = node("fail", "코드", "E-9");
+    jdbc.sql("UPDATE log_nodes SET tokens = '오류 오류 오류 발생' WHERE id IN (?, ?)").params(common1, common2).update();
+    jdbc.sql("UPDATE log_nodes SET tokens = '서킷브레이커 오류' WHERE id = ?").param(rare).update();
+    jdbc.sql("UPDATE log_nodes SET tokens = '무관' WHERE id = ?").param(exact).update();
+    // '오류'는 셋 다 갖고 '서킷브레이커'는 하나만 — 빈도가 아니라 드문 단어가 순위를 정한다
+    var rows = jdbc.sql("SELECT node_id, exact, lex_terms, distance FROM search_case_entry(?, '서킷브레이커 오류', NULL, NULL, 5)").param(ws)
+        .query((rs, i) -> new Object[] {rs.getLong(1), rs.getBoolean(2), rs.getInt(3), rs.getObject(4)}).list();
+    assertThat(rows).hasSize(3);
+    assertThat(rows.get(0)[0]).isEqualTo(rare);
+    assertThat(rows.get(0)[2]).isEqualTo(2);
+    assertThat(rows.get(1)[2]).isEqualTo(1);
+    assertThat(rows.get(0)[1]).isEqualTo(false);
+    assertThat(rows.get(0)[3]).as("벡터 없이 부르면 거리는 null").isNull();
+    // 에러 코드 정확 일치는 어휘가 안 겹쳐도 맨 위, exact 로 표시
+    var withCode = jdbc.sql("SELECT node_id, exact FROM search_case_entry(?, '서킷브레이커 오류', NULL, 'E-9', 5)").param(ws)
+        .query((rs, i) -> new Object[] {rs.getLong(1), rs.getBoolean(2)}).list();
+    assertThat(withCode.get(0)[0]).isEqualTo(exact);
+    assertThat(withCode.get(0)[1]).isEqualTo(true);
+    assertThat(withCode.get(1)[1]).isEqualTo(false);
+  }
+
+  @Test
+  void caseEntryExcludesDeprecatedAndOtherWorkspaces() {
+    long active = node("fail", "A", "E-1");
+    long dep = node("fail", "B", "E-1");
+    jdbc.sql("UPDATE log_nodes SET status = 'deprecated' WHERE id = ?").param(dep).update();
+    long other = workspace(tenant, company, "HR", true);
+    node(other, "fail", "C", "E-1");
+    List<Long> hits = jdbc.sql("SELECT node_id FROM search_case_entry(?, NULL, NULL, 'E-1', 5)").param(ws).query(Long.class).list();
+    assertThat(hits).containsExactly(active);
+  }
+
   // ── get_chain / would_create_cycle / orphaned_descendants ──────────────
 
   @Test
