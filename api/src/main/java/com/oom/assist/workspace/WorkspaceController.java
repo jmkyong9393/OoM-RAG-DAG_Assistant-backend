@@ -6,6 +6,7 @@ import com.oom.assist.common.error.ApiException;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,9 +25,12 @@ public class WorkspaceController {
               AND m.workspace_id IN (SELECT workspace_ancestors(w.id)))""";
 
   private final JdbcClient jdbc;
+  /** 로그인 전 화면에 부서를 보여 줄 데모 회사(tenants.slug). 비어 있으면 로그인 전에는 아무 부서도 주지 않는다. */
+  private String publicTenant;
 
-  public WorkspaceController(JdbcClient jdbc) {
+  public WorkspaceController(JdbcClient jdbc, @Value("${oom.public-tenant:}") String publicTenant) {
     this.jdbc = jdbc;
+    this.publicTenant = publicTenant;
   }
 
   public record WorkspaceDto(long id, String name, boolean policyEnabled, boolean caseEnabled, Long parentId, String kind) {}
@@ -34,7 +38,8 @@ public class WorkspaceController {
   public record ManageableDto(long id, String name, boolean policyEnabled, boolean caseEnabled, Long parentId, long policyDocs, long cases) {}
   public record PatchRequest(Boolean policyEnabled, Boolean caseEnabled) {}
 
-  /** 로그인 전에도 호출된다(앱 셸·로그인 화면). 로그인 상태면 소속 부서만, 아니면 부서 목록 전체(데모). */
+  /** 로그인 전에도 호출된다(앱 셸·로그인 화면). 로그인 상태면 소속 부서만. 로그인 전에는 데모 회사(oom.public-tenant)의 부서만 —
+   *  설정이 없으면 빈 목록. 다른 회사의 조직 구조가 로그인 없이 드러나지 않게 한다. */
   @GetMapping("/workspaces")
   public List<WorkspaceDto> list() {
     return CurrentUser.id()
@@ -42,7 +47,9 @@ public class WorkspaceController {
               SELECT w.id, w.name, w.policy_enabled, w.case_enabled, w.parent_id, w.kind FROM workspaces w
               JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = ? WHERE w.kind = 'dept' ORDER BY w.id
               """).param(uid).query(this::map).list())
-        .orElseGet(() -> jdbc.sql("SELECT " + COLS + " FROM workspaces WHERE kind = 'dept' ORDER BY id").query(this::map).list());
+        .orElseGet(() -> publicTenant == null || publicTenant.isBlank() ? List.of()
+            : jdbc.sql("SELECT " + COLS + " FROM workspaces WHERE kind = 'dept' AND tenant_id = (SELECT id FROM tenants WHERE slug = ?) ORDER BY id")
+                .param(publicTenant).query(this::map).list());
   }
 
   /** 설정을 바꿀 수 있는 부서. 부서 관리자는 자기 부서, 회사 관리자(전사 공통의 admin)는 회사의 모든 부서. 없으면 빈 목록. */
