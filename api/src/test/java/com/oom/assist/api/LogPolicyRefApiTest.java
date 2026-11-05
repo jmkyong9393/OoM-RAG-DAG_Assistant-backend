@@ -108,19 +108,44 @@ class LogPolicyRefApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$[2].revision").value("replaced")).andExpect(jsonPath("$[2].article_label").isEmpty())
         .andExpect(jsonPath("$[2].from_label").value("운영지침 1 [별표 2] 배포 전 점검표"));
     mvc.perform(as(get("/policy-revisions/impact"), userLead, wsSw)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.cases").value(1)).andExpect(jsonPath("$.summary.same").value(1))
-        .andExpect(jsonPath("$.summary.amended").value(1)).andExpect(jsonPath("$.summary.replaced").value(1))
+        // 요약은 사례 수다 — 한 사례가 여러 조문을 가리키면 가장 나쁜 상태로 한 번만 센다. 목록(items)은 조문마다 한 줄
+        .andExpect(jsonPath("$.cases").value(1)).andExpect(jsonPath("$.summary.same").value(0))
+        .andExpect(jsonPath("$.summary.amended").value(0)).andExpect(jsonPath("$.summary.replaced").value(1))
         .andExpect(jsonPath("$.items", hasSize(3))).andExpect(jsonPath("$.items[0].status").value("replaced"))
         .andExpect(jsonPath("$.items[0].node_id").value(id)).andExpect(jsonPath("$.items[0].current_policy").value("ops-2027"))
         .andExpect(jsonPath("$.items[1].status").value("amended")).andExpect(jsonPath("$.items[1].current_label").value("제10조 (컨테이너 자원)"))
         .andExpect(jsonPath("$.items[1].note").value("당시 75%"));
     // 다른 부서에는 이 부서의 사례가 보이지 않는다
     mvc.perform(as(get("/policy-revisions/impact"), userBackend, wsHr)).andExpect(status().isOk()).andExpect(jsonPath("$.cases").value(0));
+    // 저장돼 있던 근거는 개정 뒤에도 그대로 다시 저장할 수 있다(메모만 고칠 때). 개정 전 문서의 조문을 새로 붙이는 것은 안 된다
+    mvc.perform(as(put("/logs/" + id + "/policy-refs"), userLead, wsSw).content("""
+        {"policy_refs": [
+          {"relation": "follows", "policy": "ops-2026", "article": "제9조", "note": "메모 추가"},
+          {"relation": "exception", "policy": "ops-2026", "article": "제10조", "note": "당시 75%"},
+          {"relation": "follows", "policy": "ops-2026", "article": "별표 2"}]}"""))
+        .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(3))).andExpect(jsonPath("$[0].note").value("메모 추가"));
+    long other = node(wsSw, "fail", "다른 사례", userLead);
+    mvc.perform(as(put("/logs/" + other + "/policy-refs"), userLead, wsSw)
+            .content("{\"policy_refs\": [{\"relation\": \"follows\", \"policy\": \"ops-2026\", \"article\": \"제9조\"}]}"))
+        .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("POLICY_REF_NOT_FOUND"));
     // 다시 연결하면 영향 목록에서 빠진다
     mvc.perform(as(put("/logs/" + id + "/policy-refs"), userLead, wsSw)
             .content("{\"policy_refs\": [{\"relation\": \"follows\", \"policy\": \"ops-2027\", \"article\": \"제11조\"}]}"))
         .andExpect(status().isOk());
     mvc.perform(as(get("/policy-revisions/impact"), userLead, wsSw)).andExpect(status().isOk()).andExpect(jsonPath("$.cases").value(0));
+  }
+
+  @Test
+  void faqItemsArePickedAndLinkedLikeArticles() throws Exception {
+    long faq = doc(wsSw, "faq-2026", "계정·보안 FAQ", "active");
+    chunk(faq, "faq-2026-q3-1", "Q3. 인증번호가 오지 않아요");
+    chunk(faq, "faq-2026-q30-1", "Q30. 탈퇴하면 기록은 어떻게 되나요");
+    mvc.perform(as(get("/logs/policy-articles").param("q", "FAQ"), userLead, wsSw)).andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(2))).andExpect(jsonPath("$[?(@.article == 'Q3')]", hasSize(1))).andExpect(jsonPath("$[?(@.article == 'Q30')]", hasSize(1)));
+    long n = node(wsSw, "success", "인증번호 재발송", userLead);
+    mvc.perform(as(put("/logs/" + n + "/policy-refs"), userLead, wsSw)
+            .content("{\"policy_refs\": [{\"relation\": \"follows\", \"policy\": \"faq-2026\", \"article\": \"Q3\"}]}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$[0].article_label").value("Q3. 인증번호가 오지 않아요"));
   }
 
   @Test

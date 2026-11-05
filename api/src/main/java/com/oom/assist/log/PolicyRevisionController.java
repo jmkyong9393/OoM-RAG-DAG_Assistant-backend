@@ -4,10 +4,8 @@ import com.oom.assist.common.context.TenantContext;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,7 +38,8 @@ public class PolicyRevisionController {
     Map<String, Integer> summary = new LinkedHashMap<>(Map.of());
     for (String k : List.of("same", "amended", "replaced")) summary.put(k, 0);
     List<Item> items = new ArrayList<>();
-    Set<Long> cases = new LinkedHashSet<>();
+    List<String> order = List.of("replaced", "amended", "same");   // 손봐야 하는 것부터
+    Map<Long, String> worst = new LinkedHashMap<>();                // 사례마다 가장 나쁜 상태 — 요약은 사례 수로 센다
     jdbc.sql("""
         SELECT n.id, n.title, n.type, r->>'relation' AS relation, r->>'policy' AS policy, r->>'article' AS article, r->>'note' AS note
         FROM log_nodes n
@@ -53,18 +52,16 @@ public class PolicyRevisionController {
           PolicyRefService.Resolved v = policyRefs.resolve(ws, (String) row.get("policy"), (String) row.get("article"), cache);
           if (v == PolicyRefService.Resolved.MISSING) return;
           String status = v.stale() ? "replaced" : v.status();
-          summary.merge(status, 1, Integer::sum);
-          cases.add(((Number) row.get("id")).longValue());
+          worst.merge(((Number) row.get("id")).longValue(), status, (a, b) -> order.indexOf(a) <= order.indexOf(b) ? a : b);
           java.util.regex.Matcher m = v.suggestedLabel() == null ? null
-              : java.util.regex.Pattern.compile("^\\[?(제\\d+조(?:의\\d+)?|별표 ?\\d+)").matcher(v.suggestedLabel());
+              : PolicyRefService.ARTICLE.matcher(v.suggestedLabel());
           items.add(new Item(((Number) row.get("id")).longValue(), (String) row.get("title"), (String) row.get("type"), (String) row.get("relation"),
               (String) row.get("policy"), (String) row.get("article"), (String) row.get("note"), status, v.from(),
               v.slug(), v.docTitle(), v.version(), v.stale() ? null : v.articleLabel(),
               m != null && m.find() ? m.group(1) : null, v.suggestedLabel()));
         });
-    // 손봐야 하는 것부터: 대응 조문 없음 → 조문 개정 → 그대로
-    List<String> order = List.of("replaced", "amended", "same");
+    worst.values().forEach(st -> summary.merge(st, 1, Integer::sum));
     items.sort(java.util.Comparator.comparingInt((Item i) -> order.indexOf(i.status())).thenComparingLong(Item::nodeId));
-    return new Impact(cases.size(), summary, items);
+    return new Impact(worst.size(), summary, items);
   }
 }

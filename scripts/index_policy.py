@@ -114,8 +114,10 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
                      (chunk_id(slug, c, i + 1), doc_id, ws, c["article_label"], c.get("article_title"), c.get("page"), c["text"],
                       Jsonb(c["bboxes"]) if c.get("bboxes") else None, Jsonb(c.get("meta", {}))))
 
-    # R8: 개정 자동 폐기
-    if doc.get("supersedes"):
+    # R8: 개정 자동 폐기. 이미 폐기된 옛 판을 다시 적재한 것이면 건너뛴다 — 같은 제목의 현행판을 폐기시키지 않게
+    if existing and existing["status"] == "retired":
+        olds = []
+    elif doc.get("supersedes"):
         olds = conn.execute("SELECT id, slug, version FROM policy_documents WHERE slug = %s AND status = 'active' AND id <> %s",
                             (doc["supersedes"], doc_id)).fetchall()
     else:

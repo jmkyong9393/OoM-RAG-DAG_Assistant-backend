@@ -21,7 +21,8 @@ import tools.jackson.databind.ObjectMapper;
 public class PolicyRefService {
 
   private static final List<String> RELATIONS = List.of("follows", "exception", "gap");
-  private static final Pattern ARTICLE = Pattern.compile("^\\[?(제\\d+조(?:의\\d+)?|별표 ?\\d+)");
+  /** 청크 라벨 머리의 조문 표기: 조문 · 별표 · FAQ 항목. */
+  static final Pattern ARTICLE = Pattern.compile("^\\[?(제\\d+조(?:의\\d+)?|별표 ?\\d+|Q\\d+)");
   private static final int MAX_REFS = 5;
   /** 이 부서(자기 + 상위)에서 검색되는 활성 규정의 청크. 조문의 첫 청크가 먼저 오도록 id 순. */
   private static final String VISIBLE_CHUNKS = """
@@ -62,6 +63,11 @@ public class PolicyRefService {
 
   /** 입력을 검증해 저장 형태로 바꾼다. 잘못된 관계·없는 조문은 400. null 은 '건드리지 않음', 빈 목록은 '비움'. */
   public List<Map<String, String>> normalize(long ws, List<RefInput> in) {
+    return normalize(ws, in, java.util.Set.of());
+  }
+
+  /** kept: 그 사례에 이미 저장돼 있던 근거(slug|조문). 규정이 개정돼 활성 문서에 없어도 그대로 다시 저장할 수 있다 — 메모만 고칠 때 막히지 않게. */
+  public List<Map<String, String>> normalize(long ws, List<RefInput> in, java.util.Set<String> kept) {
     if (in == null) return null;
     if (in.size() > MAX_REFS) throw ApiException.badRequest("VALIDATION", "policy_refs: at most " + MAX_REFS);
     List<Map<String, String>> out = new ArrayList<>();
@@ -77,7 +83,7 @@ public class PolicyRefService {
       } else {
         if (blank(r.policy()) || blank(r.article())) throw ApiException.badRequest("VALIDATION", "policy_refs: policy and article are required");
         String article = r.article().trim();
-        if (labelOf(ws, r.policy().trim(), article) == null) {
+        if (!kept.contains(r.policy().trim() + "|" + article) && labelOf(ws, r.policy().trim(), article) == null) {
           throw ApiException.badRequest("POLICY_REF_NOT_FOUND", r.policy().trim() + " " + article + " 을(를) 이 부서의 활성 규정에서 찾을 수 없습니다");
         }
         m.put("policy", r.policy().trim());
@@ -88,6 +94,14 @@ public class PolicyRefService {
       out.add(m);
     }
     return out;
+  }
+
+  /** 그 사례에 저장돼 있는 근거의 (slug|조문). */
+  public java.util.Set<String> storedKeys(long nodeId) {
+    return new java.util.HashSet<>(jdbc.sql("""
+        SELECT (r->>'policy') || '|' || (r->>'article') FROM log_nodes n CROSS JOIN LATERAL jsonb_array_elements(
+          CASE WHEN jsonb_typeof(n.attributes->'policy_refs') = 'array' THEN n.attributes->'policy_refs' ELSE '[]'::jsonb END) r
+        WHERE n.id = ? AND r->>'policy' IS NOT NULL AND r->>'article' IS NOT NULL""").param(nodeId).query(String.class).list());
   }
 
   public void write(long nodeId, List<Map<String, String>> refs) {
