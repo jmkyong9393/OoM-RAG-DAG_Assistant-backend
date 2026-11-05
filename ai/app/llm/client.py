@@ -16,15 +16,20 @@ from app.retrieval.tokenize import Tokenizer, extract_error_code
 # 규칙 분류 힌트. 한쪽 힌트만 있으면 LLM 없이 확정, 둘 다 있으면 both, 둘 다 없으면 LLM(openai) 또는 both(fake).
 # 넓은 말("되나요", "거부")은 넣지 않는다 — 규정 FAQ 질문을 troubleshoot 로 잘못 보내면 규정 검색을 건너뛰기 때문.
 POLICY_HINTS = ("규정", "기준", "지침", "정책", "신청", "절차", "환불", "환급", "교환", "승인", "조항", "몇 조", "규칙", "허용",
-                "보증기간", "보유기간", "내용연수", "배상", "보상", "위약금", "수수료", "취소", "해지", "약관", "고시", "법령", "법에", "기한", "며칠", "언제까지", "청구")
-TROUBLE_HINTS = ("오류", "에러", "장애", "해결", "예전에", "사례", "복구", "재발", "먹통", "타임아웃", "멈춘", "멈춤", "느려", "거절", "문제", "배치",
+                "보증기간", "보유기간", "내용연수", "배상", "보상", "위약금", "수수료", "취소", "해지", "약관", "고시", "법령", "법에", "기한", "시한", "며칠", "언제까지", "청구",
+                "보관", "파기", "유효기간", "주기", "금지", "서약", "동의")
+TROUBLE_HINTS = ("오류", "에러", "장애", "해결", "예전에", "사례", "재발", "먹통", "타임아웃", "멈춘", "멈춤", "느려", "거절", "문제", "배치",
                  "timeout", "error", "exception", "stacktrace")
 # 약한 힌트: 규정 질문에도 흔히 나온다("인증이 실패하나요"). 단독으로는 troubleshoot 확정 대신 LLM 에 넘긴다
-TROUBLE_WEAK_HINTS = ("실패", "원인", "조치", "안 돼", "안돼", "안 됨", "안됨")
+# "복구" 도 약한 힌트다 — 장애 복구뿐 아니라 계정 복구(고객 FAQ)에도 쓰인다
+TROUBLE_WEAK_HINTS = ("실패", "원인", "조치", "복구", "거부", "안 돼", "안돼", "안 됨", "안됨")
 # 약한 규정 힌트: "~해야 해?"(의무·판단) · "몇 초/몇 회/상한"(기준값) 은 규정이 답을 가진 질문이다. 장애 힌트와 함께 오면 both,
 # 단독이면 LLM 에 넘긴다 — 사례만 보고 "타임아웃은 20초" 처럼 로그 수치를 규정인 양 답하는 것을 막는다(실험 2026-10-29)
 POLICY_WEAK_HINTS = ("해야 해", "해야 하", "해야 되", "해야 돼", "해야돼", "해야해", "해도 되", "해도 돼", "되나요", "몇 초", "몇 번", "몇 회", "몇 분",
                      "몇 시간", "몇 퍼센트", "몇 %", "상한", "한도", "최대", "최소", "기본값", "의무")
+# 의무·허용·기준값을 묻는 어미와 수량 표현: "써야 하는", "끝내야 돼", "내보내도 돼", "몇 주", "얼마나" — 목록으로는 동사마다 다 적을 수 없다.
+# 규정+사례형 부서(개발·총무)의 규정 질문은 "장애"·"배치" 같은 단어를 품고 있어, 이 표현이 없으면 사례 전용으로 분류돼 규정 검색이 빠진다
+OBLIGATION_RE = re.compile(r"[가-힣]야\s?(?:해|하|돼|되|합|됩)|[가-힣]도\s?(?:돼|되|됩)|몇\s?(?:초|번|회|분|시간|시|일|주|개월|달|년|개|명|퍼센트|%|급|자)|얼마나|얼마까지|얼마 안")
 HTTP_STATUS_RE = re.compile(r"(?<!\d)[45]\d\d(?!\d)")   # '504', '429로', '403 떨어지는데' — 접두어 없는 HTTP 상태 코드
 
 
@@ -34,13 +39,15 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
     has_policy = any(h in q for h in POLICY_HINTS)
     has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q))
     weak_trouble = any(h in q for h in TROUBLE_WEAK_HINTS)
-    weak_policy = any(h in q for h in POLICY_WEAK_HINTS)
+    weak_policy = any(h in q for h in POLICY_WEAK_HINTS) or bool(OBLIGATION_RE.search(q))
     if has_policy and (has_trouble or weak_trouble):
         return IntentResult(intent="both", reason="rule: policy+trouble hints")
     if has_trouble and weak_policy:
         return IntentResult(intent="both", reason="rule: trouble + obligation/threshold hints")
     if has_policy:
         return IntentResult(intent="policy", reason="rule: policy hints")
+    if weak_policy and not has_trouble and not weak_trouble:   # 장애 낌새 없이 의무·허용·기준값만 묻는다 → 규정이 답을 가진 질문
+        return IntentResult(intent="policy", reason="rule: obligation/threshold hints")
     if has_trouble:
         return IntentResult(intent="troubleshoot", reason="rule: error code" if error_code else "rule: trouble hints")
     return None
