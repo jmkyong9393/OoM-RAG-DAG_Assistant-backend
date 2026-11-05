@@ -1,7 +1,7 @@
 # 로컬 개발 진입점. Windows는 Git Bash 또는 WSL에서 실행.
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: pdf up down migrate api ai index worker seed seed-reset load-logs test test-ai psql logs
+.PHONY: pdf up down migrate api ai index index-revision worker seed seed-reset load-logs test test-ai psql logs
 
 up:            ## postgres 기동
 	$(COMPOSE) up -d postgres
@@ -35,6 +35,10 @@ index:         ## data/policies/src/*/meta.json → 변환(chunks.json, PDF 면 
 	  if [ -f "$$d/$$s.pdf" ]; then (cd ai && uv run --extra pdf python ../scripts/pdf_locate.py "../data/policies/$$s.chunks.json" --write) || exit 1; fi; \
 	done; \
 	uv run --with "psycopg[binary]" scripts/index_policy.py $(ARGS) && cd ai && uv run python -m app.worker --once --reindex
+
+index-revision: ## 개정판 적재(시연용). make index-revision SLUG=retail-refund-2027-01 — data/policies/revisions/<slug> 를 변환·적재하면 supersedes 대상이 폐기된다
+	test -n "$(SLUG)" || { echo "SLUG=<slug> 필요"; exit 1; }
+	set -a; . deploy/.env; set +a; 	uv run scripts/build_policy_json.py --meta "data/policies/revisions/$(SLUG)/meta.json" --out data/policies/revisions && 	uv run --with "psycopg[binary]" scripts/index_policy.py "data/policies/revisions/$(SLUG).chunks.json" && cd ai && uv run python -m app.worker --once --reindex
 
 pdf:           ## PDF 쪽 번호 채우기 + 서빙 위치 복사. make pdf SLUG=vpn-guide-v30  (원문 data/policies/src/<slug>/<slug>.pdf → data/files/policies/)
 	test -n "$(SLUG)" || { echo "SLUG=<slug> 필요"; exit 1; }

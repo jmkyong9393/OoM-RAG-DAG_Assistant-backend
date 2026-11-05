@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 1, "kind": "policy", "query": "보호 브랜치에 병합하려면 승인이 몇 명 필요해?", "expect": ["c:retail-secure-dev-2026-11-a6-1"], "note": "기본 | 제6조 ③⑤ | 작성자 외 1명 이상. 인증·결제·가격·개인정보 처리 코드는 2명 이상, 긴급 수정은 팀장 승인으로 1명 후 사후 리뷰"},
+  {"workspace_id": 1, "kind": "policy", "query": "API 키가 로그에 노출된 걸 알았을 때 언제까지 보고해야 하나요", "expect": ["c:retail-secure-dev-2026-11-a13-1"], "note": "기본 | 제13조 ①② | 즉시 폐기·재발급, 1시간 이내 부서 보안담당자와 정보보안책임자에게 신고, 24시간 이내 영향 범위 기록"},
+  {"workspace_id": 1, "kind": "policy", "query": "긴급 등급 취약점은 몇 시간 안에 임시 조치해야 해", "expect": ["c:retail-secure-dev-2026-11-a20-1"], "note": "기본 | 제20조 ② | 팀장과 정보보안책임자에게 즉시 보고, 24시간 이내 임시 조치"},
+  {"workspace_id": 1, "kind": "policy", "query": "개인 접근 토큰 유효기간은 최대 며칠이야", "expect": ["c:retail-secure-dev-2026-11-a14-1"], "note": "기본 | 제14조 ③ | 30일 이내. 자동화 작업에 사용 금지"},
+  {"workspace_id": 1, "kind": "policy", "query": "저장소 백업은 얼마나 보존해?", "expect": ["c:retail-secure-dev-2026-11-a8-1"], "note": "기본 | 제8조 ①③ | 매일 1회 백업, 최소 1년 보존. 삭제 저장소 90일 복구 가능"},
+  {"workspace_id": 1, "kind": "policy", "query": "신규 입사자 개발보안 교육은 언제까지 받아야 해", "expect": ["c:retail-secure-dev-2026-11-a25-1"], "note": "기본 | 제25조 ④⑤ | 업무 시작일로부터 30일 이내. 모든 개발자는 연 1회 2시간"},
+  {"workspace_id": 1, "kind": "policy", "query": "POS 새 버전은 전 매장에 한 번에 깔아도 돼?", "expect": ["c:retail-secure-dev-2026-11-a18-2-1"], "note": "기본 | 제18조의2 ①②⑤ | 서명 검증 후 시범 매장 3곳 이상에 1영업일 이상 운영한 뒤 단계 배포. 결제 장애 긴급 수정은 승인 시 시범 생략"},
+  {"workspace_id": 1, "kind": "policy", "query": "운영 DB 덤프 개발 환경에 가져와도 돼?", "expect": ["c:retail-secure-dev-2026-11-a10-1"], "note": "의역(구어) | 제10조 ②③④⑤ | 원칙 금지, 합성 데이터 사용. 불가피하면 더 이상 개인을 알아볼 수 없게 처리(법 제58조의2), 가명정보는 보호책임자 승인, 반입 기록·30일 이내 삭제(가명정보는 목적 달성 시 지체 없이 파기)"},
+  {"workspace_id": 1, "kind": "policy", "query": "지원 끝난 라이브러리는 언제까지 갈아야 돼", "expect": ["c:retail-secure-dev-2026-11-a16-1"], "note": "의역 | 제16조 ③④⑤ | 지원 종료일로부터 180일 이내 교체. 긴급·상 등급 취약점이 나오면 별표 1 기한, 수정판이 없으면 7일 이내 보완 대책"},
+  {"workspace_id": 1, "kind": "policy", "query": "레지스트리 토큰 만료되기 전에 언재 갱신해야 해", "expect": ["c:retail-secure-dev-2026-11-a12-1"], "note": "의역(오타) | 제12조 ③ | 유효기간 90일, 만료 7일 전 자동 재발급으로 갱신"},
+  {"workspace_id": 1, "kind": "policy", "query": "쿠폰 할인 금액을 앱에서 계산해서 넘기면 그대로 결제해도 되나", "expect": ["c:retail-secure-dev-2026-11-a17-3-1"], "note": "의역 | 제17조의3 ②③ | 안 됨. 금액·할인·쿠폰·포인트는 서버에서 재계산해 대조, 중복 결제 방지 식별값"},
+  {"workspace_id": 1, "kind": "policy", "query": "중 등급 취약점의 완전 조치 기한은?", "expect": ["c:retail-secure-dev-2026-11-s33-1"], "note": "표 | 별표 1 중 행 | 30일 이내, 주간 보고"},
+  {"workspace_id": 1, "kind": "policy", "query": "인증서 개인키는 언제 갱신해?", "expect": ["c:retail-secure-dev-2026-11-s34-1"], "note": "표 | 별표 2 인증서 개인키 행 | 유효기간 1년, 만료 30일 전 갱신"},
+  {"workspace_id": 1, "kind": "policy", "query": "개인정보 다운로드 기능 만들 때 뭘 남겨야 해?", "expect": ["c:retail-secure-dev-2026-11-a17-2-1", "c:retail-secure-dev-2026-11-a21-1"], "note": "교차 | 제17조의2 ③, 제21조 ② (+ 개인정보 보호 내부관리계획 제18조·제19조) | 접속기록 항목(식별자·접속일시·접속지 정보·처리한 정보주체 정보·수행업무)과 조회·다운로드 건수를 기록, 접속기록은 2년 이상 보존"},
+  {"workspace_id": 1, "kind": "policy", "query": "취약점 조치 기한이 내부관리계획이랑 다르면 뭘 따라?", "expect": ["c:retail-secure-dev-2026-11-a27-1"], "note": "교차 | 제27조 ③ (+ 개인정보 보호 내부관리계획 제21조 ②⑤) | 같은 취약점에 기한이 다르면 더 짧은 기한 적용. 개발 지침 기한은 내부관리계획과 같거나 짧게 정한 세부 기준"}
+]

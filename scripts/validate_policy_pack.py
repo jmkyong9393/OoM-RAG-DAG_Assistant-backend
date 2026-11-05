@@ -30,7 +30,7 @@ META_OPTIONAL = ["file_path", "supersedes"]
 DOC_TYPES = {"규정", "지침", "FAQ", "매뉴얼", "약관", "방침", "고시"}
 SOURCE_TYPES = {"pdf", "hwp", "markdown", "json"}
 CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮"
-Q_TYPES = ("기본", "의역", "표", "비교", "결합")
+Q_TYPES = ("기본", "의역", "표", "비교", "결합", "교차")   # 교차 = 다른 문서의 조문과 함께 답하는 질의
 NUM_UNIT = re.compile(r"\d[\d,.]*\s*(?:영업일|개월|시간|퍼센트|만\s?원|천\s?원|일|년|회|분|원|%|배|주|건|명|세|자|초|급|개|GB|Gi|Mi|MB)")
 # 한 회사의 규정으로 읽히지 않게 만드는 흔적(경고): 해외 시각·통화·행사, 영문 역할 약어
 FOREIGN = {"해외 시각": r"\b(?:UTC|PST|GMT|EST)\b", "외화": r"달러|USD|\$\s?\d|(?<![가-힣])유로(?![가-힣])", "해외 고유": r"추수감사절|블랙프라이데이|GDPR",
@@ -227,10 +227,12 @@ def main() -> int:
     ap.add_argument("--blocklist", type=Path, default=None)
     ap.add_argument("--require-questions", action="store_true", help="질의표가 없으면 오류(기본은 경고)")
     ap.add_argument("--quiet", action="store_true", help="통과한 문서는 한 줄만")
+    ap.add_argument("--src", type=Path, default=None, help="점검할 폴더 (기본 data/policies/src). 개정판은 data/policies/revisions")
     a = ap.parse_args()
     block = [l.strip() for l in a.blocklist.read_text(encoding="utf-8").splitlines() if l.strip() and not l.startswith("#")] if a.blocklist else []
     seeds = seed_index()
-    dirs = sorted(p for p in SRC.iterdir() if p.is_dir() and (p / "meta.json").exists() and (not a.slugs or p.name in a.slugs))
+    scan = a.src.resolve() if a.src else SRC
+    dirs = sorted(p for p in scan.iterdir() if p.is_dir() and (p / "meta.json").exists() and (not a.slugs or p.name in a.slugs))
     errors: dict[str, list] = defaultdict(list); warns: dict[str, list] = defaultdict(list); metas: dict[str, dict] = {}; stats = {}
     for d in dirs:
         slug = d.name; E, W = errors[slug], warns[slug]

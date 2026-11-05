@@ -12,6 +12,6 @@
   {"workspace_id": 10, "kind": "policy", "query": "아파트 현관 비번은 받고 나서 언제까지 갖고 있어도 되요?", "expect": ["c:retail-privacy-2026-11-a8-1"], "note": "의역(오타) | 제8조 ③ | 입력 후 3개월 보관"},
   {"workspace_id": 10, "kind": "policy", "query": "상담 기록은 언제부터 세서 몇 년 보관하는 건가요?", "expect": ["c:retail-privacy-2026-11-s15-1"], "note": "표 | 별표 1 고객상담 기록 행 | 문의 처리 후부터 3년"},
   {"workspace_id": 10, "kind": "policy", "query": "해외 판매자한테 정보 넘기는 걸 고객이 거부하면 어떻게 돼요?", "expect": ["c:retail-privacy-2026-11-s16-1"], "note": "표 | 별표 2 제3자 제공 행 | 해외직구 상품 구매 제한"},
-  {"workspace_id": 10, "kind": "policy", "query": "처리시스템 접속기록이랑 법정 보존 접속 로그는 보관 기간이 달라?", "expect": ["c:retail-privacy-2026-11-a17-1", "c:retail-privacy-2026-11-a6-1"], "note": "비교 | 제17조 ①④, 제6조 ② | 처리시스템 접속기록은 최소 1년 이상, 통신비밀보호법상 접속기록·로그는 3개월"},
+  {"workspace_id": 10, "kind": "policy", "query": "처리시스템 접속기록이랑 법정 보존 접속 로그는 보관 기간이 달라?", "expect": ["c:retail-privacy-2026-11-a17-1", "c:retail-privacy-2026-11-a6-1"], "note": "비교 | 제17조 ①④, 제6조 ② | 처리시스템 접속기록은 2년 이상, 통신비밀보호법상 접속기록·로그는 3개월"},
   {"workspace_id": 10, "kind": "policy", "query": "일반 회원 정보랑 매장 통합멤버십 정보는 탈퇴 후 파기 시점이 달라?", "expect": ["c:retail-privacy-2026-11-a5-1", "c:retail-privacy-2026-11-a7-1"], "note": "비교 | 제5조 ②, 제7조 ④ | 회원 기본 정보는 탈퇴 후 5일 이내 파기, 통합멤버십 정보는 탈퇴 후 3개월 보관"}
 ]
