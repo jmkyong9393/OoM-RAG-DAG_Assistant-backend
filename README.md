@@ -79,7 +79,8 @@ Git Bash 에서 한글 본문은 `--data-binary @file.json` 으로 보낸다(`-d
 
 - `make test` (Spring 99, Docker 필요 — Testcontainers pgvector), `make test-ai` (Python 72, DB 통합 18건은 로컬 Postgres 가 떠 있을 때만).
 - PR 마다 `ci.yml`: `guard`(API 키 패턴·공개 레포 금지 단어) · `python` · `spring` · `policy-data`(규정 원문 PR 에서 변환기를 돌려 청크 수·형식 위반을 Job Summary 로).
-- 검색 품질: `cd ai && uv run python ../eval/hit_at_k.py` (평가셋 `data/evalset/*.json`, 3모드 hit@k·MRR).
+- 검색 품질: `cd ai && uv run python ../eval/hit_at_k.py` (평가셋 `data/evalset/*.json`, 3모드 hit@k·MRR). `--record` 를 붙이면 결과를 `eval_runs` 에 남겨 대시보드(`GET /dashboard/summary` 의 `retrieval`)에 실측값이 나온다.
+- 답변 점검: `cd ai && uv run python ../eval/answer_checks.py --runs 2` (점검표 `data/answer_checks/*.json`, 실제 답변 생성 — LLM 호출 있음).
 
 ## 운영 배포 (단일 호스트)
 

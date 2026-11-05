@@ -37,6 +37,15 @@ def test_cross_doc_ref_is_split_off():
     assert qe.split_refs("별표 3 환급 행") == ("별표 3 환급 행", "")
 
 
+def test_cross_doc_ref_maps_to_the_other_documents_chunks_within_scope():
+    docs = [{"title": "급여 규정", "slug": "pay", "ws": 2, "chunks": [{"id": "pay-a18-1", "article_label": "제18조", "text": "① 유급."}]},
+            {"title": "개인정보 보호 내부관리계획", "slug": "plan", "ws": 10,
+             "chunks": [{"id": "plan-a18-1", "article_label": "제18조", "text": "x"}, {"id": "plan-a19-1", "article_label": "제19조", "text": "y"}]}]
+    ids, outside = qe.map_cross("급여 규정 제18조 ①, 개인정보 보호 내부관리계획 제18조·제19조", docs, {3, 10})
+    assert ids == ["plan-a18-1", "plan-a19-1"], "그 부서에서 검색되는 문서만 정답으로 삼는다"
+    assert outside == ["급여 규정"], "다른 부서의 규정은 검색 범위 밖"
+
+
 def test_parse_rows_reads_table():
     md = "# t\n\n| # | 유형 | 질의 | 정답 조문 | 정답 요지 |\n|---|---|---|---|---|\n| 1 | 기본 | 며칠? | 제5조 ① | 14일 |\n"
     rows = qe.parse_rows(md)

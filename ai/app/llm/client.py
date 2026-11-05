@@ -122,10 +122,11 @@ async def judge_case(profile: LlmProfile, query: str, case: dict, usage: Usage) 
 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.
 규칙: (1) 인용은 제공된 마커([P1], [N2] 등)만 쓴다. (2) 사실을 담은 모든 문장과 표의 모든 행 끝에 근거 마커를 붙인다. 마커는 그 내용이 실제로 적힌 줄의 것만 쓴다(해결 방법은 그 해결이 적힌 줄의 마커). 컨텍스트에 없는 내용은 "근거 없음"이라고 말하고 일반 상식으로 채우지 않는다.
-(3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. 단, 해당 컨텍스트가 없는 절("규정"·"해결 사례")은 만들지 않는다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다.
+(3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. 단, 해당 컨텍스트가 없는 절("규정"·"해결 사례")은 만들지 않는다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다. 원칙과 예외·단서(다만, 긴급, 승인을 받으면 등)가 함께 있으면 결론 첫 문장에 둘을 함께 쓴다 — "원칙적으로 …이나, …이면 …할 수 있다". 예외가 있는데 "할 수 없다"고만 쓰지 않는다.
 (6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내(규정과 사례를 함께 쓸 때는 6문장), 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다.
 (7) 사례 줄 끝의 "(규정 관계: …)"는 그 조치와 규정의 관계를 알려 주는 자료다. 괄호를 그대로 옮겨 적지 않는다. 사례로 답할 때는 사례 문장마다 [N…] 마커를 붙이고, 이어서 규정 관계를 한 문장으로 쓴다 — 따른 조치면 "이 조치는 ○○ 제○조 기준에 따른 것이다 [P…]", 예외면 "당시에는 규정과 달리 …했다 [N…][P…]", 기준이 없으면 "이 부분은 규정에 기준이 없다 [N…]".
-(8) 질문 뒤에 [답변에 꼭 담을 것]이 있으면 그 항목을 빠짐없이 답변에 담는다. 항목의 문장을 그대로 베끼지 말고 답변의 흐름에 맞게 쓴다."""
+(8) 질문 뒤에 [답변에 꼭 담을 것]이 있으면 그 항목을 빠짐없이 답변에 담는다. 항목의 문장을 그대로 베끼지 말고 답변의 흐름에 맞게 쓴다.
+(9) 조문이 정한 조건과 질문의 상황이 같은지 먼저 본다. 다르면(예: 조문은 '기한 경과'를 정했는데 질문은 '기한 임박') 그 조문을 그대로 적용하지 않는다. 첫 문장을 "이 경우를 직접 정한 조문은 없습니다"로 시작하고, 이어서 각 조문이 정한 조건을 그대로 밝혀 "…인 경우에는 …" 꼴로 답한다. 질문의 상황이 어느 조건에 해당한다고 스스로 판정하지 않는다(예: "하자로 간주된다", "대상이 아니다"). 조문에 없는 일반론("일반적으로 …", 법령 상식)을 덧붙이지 않는다 — 가까운 조문도 없으면 관련 조문을 찾지 못했다고만 답한다."""
 
 
 async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage,
@@ -133,7 +134,8 @@ async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chai
     """policy_ctx: {ref, article_label, doc_title, text}, chain_ctx: {ref, type, status, title, resolution_summary, depth}"""
     if ai_mode() == "openai" and profile.has_key:
         context = _render_context(policy_ctx, chain_ctx)
-        must = _must_include(chain_ctx, case_required, {p["ref"] for p in policy_ctx if p.get("source") == "search"})
+        # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
+        must = _must_include(chain_ctx, case_required, {p["ref"] for p in [x for x in policy_ctx if x.get("source") == "search"][:2]})
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -173,8 +175,11 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     if not live:
         return []
     # 규정을 물은 질문에 딸려 온 사례는 참고다 — 질문과 닿을 때만 쓰게 한다 (억지로 인용시키면 주제만 비슷한 사례가 답에 섞인다)
-    out = ["해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다." if case_required else
-           "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않는다."]
+    fixes = [n["ref"] for n in live if n["type"] == "success" and (n.get("entry") or n.get("near"))]
+    cite = (f"해결 사례를 한 문장 이상 쓴다. 해결 방법은 해결 줄({' '.join(f'[{r}]' for r in fixes[:4])}) 가운데 질문에 맞는 것에서 쓰고 그 줄의 마커를 붙인다."
+            if fixes else "해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다.")
+    out = [cite if case_required else
+           "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않고, 사례가 없다거나 다루지 않는다는 말도 하지 않는다."]
     for n in live:
         for p in n.get("policy") or []:
             if p["relation"] == "exception" and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
@@ -185,8 +190,10 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
         if p["relation"] == "gap":
             out.append(f"[{entry['ref']}] 이 다루는 부분({p.get('topic') or '이 조치'})은 회사 규정에 기준이 없다. "
                        f"'이 부분은 규정에 기준이 없다'는 문장을 답변에 넣고 [{entry['ref']}] 를 붙인다.")
-        elif p["relation"] == "follows":
+        elif p["relation"] == "follows" and (entry["type"] == "success" or not fixes):
             out.append(f"[{entry['ref']}] 의 조치가 따른 규정 [{p['ref']}] 을 한 문장으로 밝힌다.")
+    if entry and entry["type"] != "success" and fixes and case_required:
+        out.append("인용한 해결 줄 끝의 규정 관계에 적힌 규정을 한 문장으로 밝히고 그 [P…] 를 붙인다.")
     return out[:5]
 
 
@@ -254,7 +261,7 @@ async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, us
 
 async def _chat_stream(profile: LlmProfile, model: str, system: str, user: str, usage: Usage,
                        max_tokens: int | None = None) -> AsyncIterator[str]:
-    body = {"model": model, "temperature": 0.2, "stream": True, "stream_options": {"include_usage": True},
+    body = {"model": model, "temperature": 0, "stream": True, "stream_options": {"include_usage": True},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     if max_tokens:
         body["max_tokens"] = max_tokens

@@ -75,12 +75,20 @@ class SessionFeedbackDashboardApiTest extends AbstractApiTest {
     // 평가: 예시 행
     jdbc.sql("INSERT INTO eval_runs (workspace_id, dataset_version, is_sample, faithfulness, answer_relevance, meta) VALUES (?, 'sample', true, 0.94, 0.91, "
         + "'{\"search_time\":{\"before_min\":5.5,\"after_min\":1.4,\"by_intent\":[]}}'::jsonb)").param(wsSw).update();
+    // 검색 품질 실측 행: 전체(NULL)와 이 부서 — 부서 행이 우선. 예시 행을 가리지 않는다
+    jdbc.sql("INSERT INTO eval_runs (workspace_id, dataset_version, mode, hit_at_5, n_samples, meta) VALUES "
+        + "(NULL, 'evalset v1', 'hybrid', 0.95, 452, '{\"mrr\":0.86}'::jsonb), "
+        + "(?, 'evalset v1', 'hybrid', 0.9, 30, '{\"mrr\":0.8,\"by_kind\":{\"policy\":{\"hit\":27,\"n\":30}}}'::jsonb)").param(wsSw).update();
 
     mvc.perform(as(get("/dashboard/summary"), userBackend, wsSw))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.is_sample").value(true))
         .andExpect(jsonPath("$.search_time.before_min").value(5.5))
         .andExpect(jsonPath("$.eval.faithfulness").value(0.94))
+        .andExpect(jsonPath("$.retrieval.hit_at_5").value(0.9))
+        .andExpect(jsonPath("$.retrieval.n_samples").value(30))
+        .andExpect(jsonPath("$.retrieval.mrr").value(0.8))
+        .andExpect(jsonPath("$.retrieval.by_kind.policy.hit").value(27))
         .andExpect(jsonPath("$.logs.total").value(3))
         .andExpect(jsonPath("$.logs.open_roots").value(1))
         .andExpect(jsonPath("$.logs.resolved_roots").value(1))
@@ -109,6 +117,7 @@ class SessionFeedbackDashboardApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.is_sample").value(false))
         .andExpect(jsonPath("$.search_time").isEmpty())
         .andExpect(jsonPath("$.eval.faithfulness").isEmpty())
+        .andExpect(jsonPath("$.retrieval").isEmpty())
         .andExpect(jsonPath("$.latency_ms.total").isEmpty())
         .andExpect(jsonPath("$.no_evidence.rate").isEmpty())
         .andExpect(jsonPath("$.resolve_time.median_hours").isEmpty())

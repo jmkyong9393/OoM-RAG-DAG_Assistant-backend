@@ -11,7 +11,7 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * GET /dashboard/summary — 한 번의 호출로 대시보드 전체 집계 (FE-007, BE-HANDOFF-001 §3-5).
- * 실시간 집계(로그·세션·피드백)는 DB 값 그대로. search_time·eval 은 eval_runs 최신 행에서 오며, 실측 전에는 is_sample=true 인
+ * 실시간 집계(로그·세션·피드백)는 DB 값 그대로. retrieval(검색 품질 hit@5)은 eval_runs 의 최신 실측 행. search_time·eval 은 eval_runs 최신 행에서 오며, 실측 전에는 is_sample=true 인
  * 'sample' 행만 있고, 그것도 없으면 null (화면은 "측정 전"으로 표시한다). 0 을 지어내지 않는다.
  */
 @RestController
@@ -33,7 +33,8 @@ public class DashboardController {
     // eval_runs 최신 행 (워크스페이스 행 우선, 없으면 전역)
     Map<String, Object> eval = jdbc.sql("""
         SELECT is_sample, faithfulness, answer_relevance, dataset_version, run_at, meta::text AS meta
-        FROM eval_runs WHERE workspace_id = ? OR workspace_id IS NULL
+        FROM eval_runs WHERE (workspace_id = ? OR workspace_id IS NULL)
+          AND (is_sample OR faithfulness IS NOT NULL OR answer_relevance IS NOT NULL OR jsonb_exists(meta, 'search_time'))
         ORDER BY (workspace_id IS NOT NULL) DESC, run_at DESC LIMIT 1
         """).param(ws).query().listOfRows().stream().findFirst().orElse(null);
     boolean isSample = eval != null && Boolean.TRUE.equals(eval.get("is_sample"));
@@ -42,6 +43,13 @@ public class DashboardController {
     out.put("eval", eval == null ? map("faithfulness", null, "answer_relevance", null, "dataset_version", null, "run_at", null)
         : map("faithfulness", eval.get("faithfulness"), "answer_relevance", eval.get("answer_relevance"),
             "dataset_version", eval.get("dataset_version"), "run_at", eval.get("run_at")));
+
+    // 검색 품질: 오프라인 평가(eval/hit_at_k.py --record)의 최신 실측 행. 없으면 null
+    out.put("retrieval", jdbc.sql("""
+        SELECT hit_at_5, n_samples, mode, dataset_version, run_at, meta::text AS meta
+        FROM eval_runs WHERE (workspace_id = ? OR workspace_id IS NULL) AND hit_at_5 IS NOT NULL AND NOT is_sample
+        ORDER BY (workspace_id IS NOT NULL) DESC, run_at DESC LIMIT 1
+        """).param(ws).query().listOfRows().stream().findFirst().map(this::retrieval).orElse(null));
 
     Map<String, Object> logs = jdbc.sql("""
         SELECT count(*) AS total,
@@ -110,6 +118,14 @@ public class DashboardController {
     Map<String, Object> meta = json.readValue(metaJson, Map.class);
     Object st = meta.get("search_time");
     return st instanceof Map<?, ?> m ? (Map<String, Object>) m : null;
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, Object> retrieval(Map<String, Object> row) {
+    Map<String, Object> meta = json.readValue(String.valueOf(row.get("meta")), Map.class);
+    return map("hit_at_5", row.get("hit_at_5"), "n_samples", row.get("n_samples"), "mode", row.get("mode"),
+        "mrr", meta.get("mrr"), "by_kind", meta.get("by_kind"), "embedding_model", meta.get("embedding_model"),
+        "dataset_version", row.get("dataset_version"), "run_at", row.get("run_at"));
   }
 
   private static Map<String, Object> map(Object... kv) {
