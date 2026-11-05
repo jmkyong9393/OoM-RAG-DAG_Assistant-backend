@@ -63,5 +63,45 @@
     "workspace_id": 3,
     "user_id": 5,
     "role": "member"
+  },
+  {
+    "workspace_id": 21,
+    "user_id": 11,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 22,
+    "user_id": 11,
+    "role": "member"
+  },
+  {
+    "workspace_id": 23,
+    "user_id": 11,
+    "role": "member"
+  },
+  {
+    "workspace_id": 21,
+    "user_id": 12,
+    "role": "member"
+  },
+  {
+    "workspace_id": 22,
+    "user_id": 13,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 21,
+    "user_id": 13,
+    "role": "member"
+  },
+  {
+    "workspace_id": 23,
+    "user_id": 14,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 23,
+    "user_id": 15,
+    "role": "member"
   }
 ]
