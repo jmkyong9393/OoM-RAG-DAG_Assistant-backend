@@ -6,9 +6,11 @@
   - R8 개정 자동 폐기: `supersedes` 로 지목한 slug, 또는 같은 workspace·같은 title 의 다른 active 문서를 retired 로
     (retire_reason='<version> 개정', retired_by='script', audit_log superseded)
   - tokens/embedding 은 비워 두고 정제 워커가 채운다: `python -m app.worker --once` (make index 가 이어서 실행)
+  - `terms`(meta.json → build_policy_json.py --meta)는 workspace_terms(workspace_id, term, source='manual') 에 넣는다 — kiwi 사용자 사전.
+    사전은 전 워크스페이스 합집합 하나(db.user_terms)이므로 새 term 이 들어가면 `app.worker --once --reindex` 로 기존 청크·노드도 재토크나이즈해야 한다
 
 파일 형식 (data/policies/README.md):
-  {"slug", "workspace_id", "title", "version", "doc_type", "source_type", "file_path"?, "effective_from"?, "supersedes"?, "tags"?, "meta"?,
+  {"slug", "workspace_id", "title", "version", "doc_type", "source_type", "file_path"?, "effective_from"?, "supersedes"?, "tags"?, "terms"?, "meta"?,
    "chunks": [{"id"?, "article_label", "article_title"?, "page"?, "text", "bboxes"?}]}
 
 실행: uv run --with "psycopg[binary]" scripts/index_policy.py [파일...] [--dry-run]   (파일 생략 시 data/policies/*.chunks.json 전부)
@@ -58,11 +60,21 @@ def validate(doc: dict, path: Path) -> list[str]:
     return errs
 
 
+def add_terms(conn, ws: int, terms: list[str]) -> int:
+    """meta.json terms → workspace_terms(manual). 이미 있으면(auto 포함) 그대로. 넣은 건수를 돌려준다."""
+    n = 0
+    for t in dict.fromkeys(x.strip() for x in terms if x and x.strip()):
+        n += conn.execute("INSERT INTO workspace_terms (workspace_id, term, source) VALUES (%s, %s, 'manual') ON CONFLICT DO NOTHING", (ws, t)).rowcount
+    return n
+
+
 def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
     slug, ws = doc["slug"], doc["workspace_id"]
     h = source_hash(doc)
     existing = conn.execute("SELECT id, source_hash, status FROM policy_documents WHERE slug = %s", (slug,)).fetchone()
-    result = {"slug": slug, "action": None, "chunks": len(doc["chunks"]), "retired": []}
+    result = {"slug": slug, "action": None, "chunks": len(doc["chunks"]), "retired": [], "terms": 0}
+    if not dry_run:
+        result["terms"] = add_terms(conn, ws, doc.get("terms") or [])   # 문서가 스킵돼도 terms 는 멱등 적재 (meta.json 에 term 만 추가한 경우)
     if existing and existing["source_hash"] == h:
         result["action"] = "skipped"
         return result
@@ -129,9 +141,10 @@ def main(argv: list[str]) -> int:
         for doc in docs:
             with conn.transaction():
                 r = index_document(conn, doc, dry)
-            print(f"{r['action']:<14} {r['slug']:<28} chunks={r['chunks']}" + (f" retired={r['retired']}" if r["retired"] else ""))
+            print(f"{r['action']:<14} {r['slug']:<28} chunks={r['chunks']}" + (f" retired={r['retired']}" if r["retired"] else "")
+                  + (f" terms+{r['terms']}" if r.get("terms") else ""))
     if not dry:
-        print("다음: cd ai && uv run python -m app.worker --once  (토큰·임베딩 백필)")
+        print("다음: cd ai && uv run python -m app.worker --once --reindex  (토큰·임베딩 백필. terms 가 늘었으면 --reindex 로 기존 청크·노드 재토크나이즈)")
     return 0
 
 

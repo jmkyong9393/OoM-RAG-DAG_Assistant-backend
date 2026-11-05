@@ -1,0 +1,14 @@
+{
+  "slug": "consumer-dispute-2025",
+  "workspace_id": 3,
+  "title": "소비자분쟁해결기준",
+  "version": "2025-12-18",
+  "doc_type": "고시",
+  "source_type": "hwp",
+  "effective_from": "2025-12-18",
+  "supersedes": "consumer-dispute",
+  "tags": ["소비자", "분쟁해결", "공정위", "고시"],
+  "terms": [],
+  "author": "공정거래위원회 고시 제2025-14호 (law.go.kr HWPX → hwpx_to_md.py)",
+  "summary": "품목별 소비자 분쟁 해결 기준. 별표 Ⅰ~Ⅳ 포함 277청크"
+}

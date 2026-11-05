@@ -1,5 +1,6 @@
 """원문 → 청크 JSON 변환기(scripts/build_policy_json.py) 단위 테스트. DB 불필요."""
 import json
+import pytest
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -94,6 +95,18 @@ def test_table_sections_split_on_row_boundaries(tmp_path):
     assert sum(c["text"].count("\n") + 1 for c in doc["chunks"]) == 13, "행 수 보존(머리행 1 + 12)"
 
 
+def test_header_row_joins_following_oversized_row(tmp_path):
+    """700자를 넘는 행 앞에 머리글 행만 쌓여 있으면 머리글을 그 행의 첫 조각 앞에 붙인다 — '| 분쟁유형 | 해결기준 | 비고 |' 한 줄짜리 청크가 생기지 않게."""
+    long_row = "| 1) 성수기 주중 " + "ㆍ 사용예정일 전까지 취소함. " * 30 + "| o 환급 | 비고 |"
+    src = tmp_path / "tbl.md"
+    src.write_text("## 별표 Ⅱ 서비스업 › 숙박업\n\n| 분쟁유형 | 해결기준 | 비고 |\n" + long_row + "\n| 2) 비수기 | o 환급 | |\n", encoding="utf-8")
+    doc = b.build(src, args(max_chars=300))
+    texts = [c["text"] for c in doc["chunks"]]
+    assert all(len(t) <= 300 for t in texts)
+    assert not any(t.strip() == "| 분쟁유형 | 해결기준 | 비고 |" for t in texts), "머리글만 있는 청크 없음"
+    assert texts[0].startswith("| 분쟁유형 | 해결기준 | 비고 |\n1) 성수기 주중"), "머리글이 긴 행의 첫 조각 앞에 붙는다"
+
+
 def test_sub_headings_extend_parent_label(tmp_path):
     src = tmp_path / "sub.md"
     src.write_text("# 별표 Ⅰ 대상품목\n| 번호 | 업종 |\n\n## 별표 Ⅱ 상품 › 5. 공산품\n공통 규정.\n\n#### ⑤자동차\n| 1) 하자 | o 교환 |\n\n"
@@ -111,3 +124,29 @@ def test_supersedes_and_no_articles(tmp_path):
     assert b.build(src, args(supersedes="old-slug"))["supersedes"] == "old-slug"
     src.write_text("   \n\n", encoding="utf-8")
     assert b.build(src, args())["chunks"] == []
+
+
+def test_meta_json_replaces_cli_args_and_carries_terms(tmp_path):
+    """D-4 ①: src/<slug>/meta.json 하나로 변환 — 원문은 <slug>.md, 인자는 meta, terms 는 결과에 실려 index_policy 가 사용자 사전에 넣는다."""
+    d = tmp_path / "refund-policy-v4"
+    d.mkdir()
+    (d / "refund-policy-v4.md").write_text(SAMPLE, encoding="utf-8")
+    meta = {"slug": "refund-policy-v4", "workspace_id": 3, "title": "환불규정", "version": "v4.0", "doc_type": "규정", "source_type": "markdown",
+            "effective_from": "2026-11-01", "supersedes": "refund-policy-v3", "tags": ["환불"], "terms": ["단순변심", " 구입가 ", "", "교환환급"],
+            "author": "배종현", "summary": "테스트"}
+    (d / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+
+    m = b.load_meta(d / "meta.json")
+    assert m["source"] == d / "refund-policy-v4.md" and m["workspace"] == 3 and m["supersedes"] == "refund-policy-v3"
+    assert m["terms"] == ["단순변심", "구입가", "교환환급"]          # 공백·빈 값 정리
+    doc = b.build(m.pop("source"), SimpleNamespace(max_chars=700, **m))
+    assert doc["slug"] == "refund-policy-v4" and doc["terms"] == ["단순변심", "구입가", "교환환급"] and doc["supersedes"] == "refund-policy-v3"
+    assert doc["meta"]["author"] == "배종현" and doc["chunks"][1]["id"] == "refund-policy-v4-a1-1"
+    assert index_policy.validate(doc, d / "x.json") == []
+
+    # slug 가 폴더 이름과 다르면 거부 (청크 id 접두어·README 규칙)
+    bad = tmp_path / "other"
+    bad.mkdir()
+    (bad / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    with pytest.raises(ValueError):
+        b.load_meta(bad / "meta.json")

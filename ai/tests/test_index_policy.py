@@ -18,7 +18,7 @@ SLUG = "test-refund-v9"
 
 def _doc(text_suffix: str = "", supersedes: str | None = None, title: str = "[test] 환불규정") -> dict:
     d = {"slug": SLUG, "workspace_id": 3, "title": title, "version": "v9.0", "doc_type": "규정", "source_type": "json",
-         "effective_from": "2026-11-01", "tags": ["test"],
+         "effective_from": "2026-11-01", "tags": ["test"], "terms": ["테스트단순변심", "테스트교환환급"],
          "chunks": [{"article_label": "제1조 (목적)", "text": "이 규정은 테스트 환불 절차를 정한다." + text_suffix},
                     {"id": f"{SLUG}-a7-1", "article_label": "제7조 (개봉 상품)", "page": 3, "text": "개봉한 신선식품은 단순 변심 환불이 불가하다."}]}
     if supersedes:
@@ -38,6 +38,7 @@ def cleanup(admin_conn):
     yield
     admin_conn.execute("DELETE FROM audit_log WHERE table_name = 'policy_documents' AND (label LIKE '[test]%%' OR label LIKE '환불규정 v3%%')")
     admin_conn.execute("DELETE FROM policy_documents WHERE slug LIKE 'test-%%'")   # 청크는 CASCADE
+    admin_conn.execute("DELETE FROM workspace_terms WHERE term LIKE '테스트%%'")
     admin_conn.execute("UPDATE policy_documents SET status = 'active', retired_at = NULL, retire_reason = NULL, retired_by = NULL WHERE slug = 'refund-policy-v3'")
 
 
@@ -60,8 +61,14 @@ def test_index_then_skip_then_reindex_and_r8(ai_conn, admin_conn, cleanup):
     assert admin_conn.execute("SELECT count(*) AS c FROM audit_log WHERE table_name='policy_documents' AND row_id=%s AND action='indexed'",
                               (str(doc["id"]),)).fetchone()["c"] == 1
 
-    # 2) 같은 내용 재실행 → 스킵 (해시)
-    assert index_policy.index_document(ai_conn, _doc())["action"] == "skipped"
+    # terms → workspace_terms(manual). 재실행(스킵)에도 멱등
+    assert r["terms"] == 2
+    terms = admin_conn.execute("SELECT term, source FROM workspace_terms WHERE workspace_id = 3 AND term LIKE '테스트%' ORDER BY term").fetchall()
+    assert [(t["term"], t["source"]) for t in terms] == [("테스트교환환급", "manual"), ("테스트단순변심", "manual")]
+
+    # 2) 같은 내용 재실행 → 스킵 (해시). terms 는 이미 있으니 0
+    r = index_policy.index_document(ai_conn, _doc())
+    assert r["action"] == "skipped" and r["terms"] == 0
     assert index_policy.index_document(ai_conn, _doc(), dry_run=True)["action"] == "skipped"
 
     # 3) 본문 변경 → 청크 교체, 문서 id 유지
