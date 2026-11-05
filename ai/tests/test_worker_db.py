@@ -83,11 +83,11 @@ async def test_failed_refine_increments_attempts(fake_mode, pending_node, admin_
 
 
 def test_classify_context_reads_workspace_data():
-    """db.classify_context — 사례 유무와 에러 코드의 규정 등장 여부. 시드: ws1·ws2 에 로그, ws3 에는 없음. 시드 FAQ·VPN 지침에 E-403 없음."""
+    """db.classify_context — 사례 유무와 에러 코드의 규정 등장 여부. 시드: ws1·ws2 에 로그. 전사 공통(10)에는 로그를 두지 않는다."""
     from app.retrieval import db
     with db.connect() as conn:
         assert db.classify_context(conn, 1, None) == {"has_cases": True, "code_in_policy": False}
-        assert db.classify_context(conn, 3, None)["has_cases"] is False
+        assert db.classify_context(conn, 10, None)["has_cases"] is False
         assert db.classify_context(conn, 2, "E-NOSUCH-999")["code_in_policy"] is False
         row = conn.execute("""SELECT c.workspace_id FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
                               WHERE d.status = 'active' AND c.text LIKE '%%E-403%%' LIMIT 1""").fetchone()

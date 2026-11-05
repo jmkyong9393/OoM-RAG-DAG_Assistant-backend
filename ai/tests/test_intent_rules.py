@@ -23,7 +23,9 @@ def test_rules_never_contradict_evalset_kind(capsys):
         if r is None:
             continue
         decided += 1
-        if (it["kind"] == "policy" and r.intent == "troubleshoot") or (it["kind"] == "troubleshoot" and r.intent == "policy"):
+        # 규정 질문을 사례 전용으로 보내면 규정 근거를 잃는다 — 이것만 어긋남으로 센다.
+        # 반대(사례에서 뽑은 질의를 규정 질문으로 봄)는 어긋남이 아니다: 고객지원 사례의 질의는 "영수증 없이 환불 되나요" 처럼 규정 질문의 모양이다
+        if it["kind"] == "policy" and r.intent == "troubleshoot":
             wrong.append((it["query"], r.intent, r.reason))
     assert wrong == [], f"규칙이 평가셋 kind 와 어긋남: {wrong}"
     with capsys.disabled():

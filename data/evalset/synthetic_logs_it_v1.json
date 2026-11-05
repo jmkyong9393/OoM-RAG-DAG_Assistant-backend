@@ -1,0 +1,350 @@
+[
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "동영상 재생 HTTP 503 터졌을 때 어떻게 대응했어?",
+  "expect": [
+   "n:337",
+   "n:339",
+   "n:341",
+   "n:343"
+  ],
+  "note": "code · d2-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "스트리밍 503남 오리진 문제였나",
+  "expect": [
+   "n:337",
+   "n:339",
+   "n:341",
+   "n:343"
+  ],
+  "note": "code · d2-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "간편결제 HTTP 504 나고 중복 승인된 거 어떻게 처리했어?",
+  "expect": [
+   "n:345",
+   "n:347",
+   "n:348"
+  ],
+  "note": "code · d3-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "api 429 뜸 한도 설정 잘못됐나",
+  "expect": [
+   "n:352",
+   "n:354",
+   "n:355",
+   "n:357"
+  ],
+  "note": "code · d4-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "429 받으면 몇 초 뒤에 다시 호출하라고 안내해?",
+  "expect": [
+   "n:352",
+   "n:354",
+   "n:355",
+   "n:357",
+   "n:358"
+  ],
+  "note": "code · d4-guide"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "게임 매칭 E-408 계속 뜰 때 어떻게 해결했어?",
+  "expect": [
+   "n:359",
+   "n:362",
+   "n:364"
+  ],
+  "note": "code · d5-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "포털 메인 정시마다 HTTP 500 나는 거 어떻게 고쳤어?",
+  "expect": [
+   "n:365",
+   "n:367",
+   "n:370",
+   "n:371"
+  ],
+  "note": "code · d6-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "오류 코드 -401 뜨는 이유",
+  "expect": [
+   "n:373",
+   "n:375",
+   "n:377"
+  ],
+  "note": "code · d7-ip-fix"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "클라우드 DB ETIMEDOUT 장애 어떻게 처리했어?",
+  "expect": [
+   "n:380",
+   "n:382",
+   "n:383"
+  ],
+  "note": "code · d8-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "휴대폰 결제 취소 CANCEL_PERIOD_EXPIRED 뜨는 이유",
+  "expect": [
+   "n:316",
+   "n:317",
+   "n:318",
+   "n:320"
+  ],
+  "note": "code · s5-queue"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "메신저 푸시 알림 늦게 오는 장애 어떻게 처리했어?",
+  "expect": [
+   "n:329",
+   "n:331",
+   "n:333",
+   "n:336"
+  ],
+  "note": "symptom · d1-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "결제가 두 번 됐다는 문의가 쏟아져요",
+  "expect": [
+   "n:345",
+   "n:347",
+   "n:348"
+  ],
+  "note": "symptom · d3-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "매칭이 몇 분씩 안 잡혀요",
+  "expect": [
+   "n:359",
+   "n:362",
+   "n:364"
+  ],
+  "note": "symptom · d5-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "API 키 유출 제보 받았을 때 어떻게 처리했어?",
+  "expect": [
+   "n:373",
+   "n:375",
+   "n:377"
+  ],
+  "note": "symptom · d7-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "클라우드디비 접속안됨 작업중이었다던데",
+  "expect": [
+   "n:380",
+   "n:382",
+   "n:383"
+  ],
+  "note": "symptom · d8-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "중도해지 환불금 왜케 적냐는 문의",
+  "expect": [
+   "n:289",
+   "n:291",
+   "n:293",
+   "n:294"
+  ],
+  "note": "symptom · s1-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "2단계 인증 폰 잃어버린 고객 어떻게 처리했어?",
+  "expect": [
+   "n:303",
+   "n:305",
+   "n:307",
+   "n:310"
+  ],
+  "note": "symptom · s3-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "돈이 두 번 빠져나갔대요",
+  "expect": [
+   "n:311",
+   "n:314"
+  ],
+  "note": "symptom · s4-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "환불 신청한 지 일주일 넘었는데 안 들어온대요",
+  "expect": [
+   "n:316",
+   "n:318",
+   "n:320"
+  ],
+  "note": "symptom · s5-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "차지백 들어옴 뭐부터 해야됨",
+  "expect": [
+   "n:322",
+   "n:324",
+   "n:326"
+  ],
+  "note": "symptom · s6-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "경보 안 보면 몇 분 뒤에 윗선으로 넘어가?",
+  "expect": [
+   "n:329",
+   "n:331",
+   "n:333",
+   "n:336"
+  ],
+  "note": "reverse · d1-page-fix"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "설정 변경도 카나리로 배포해?",
+  "expect": [
+   "n:352",
+   "n:354",
+   "n:355",
+   "n:357"
+  ],
+  "note": "reverse · d4-canary"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "추천 서버 죽어도 메인 뜨게 한 방법",
+  "expect": [
+   "n:365",
+   "n:367",
+   "n:370",
+   "n:371"
+  ],
+  "note": "reverse · d6-fallback"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "상담원이 잘못 안내한 환불 금액 그대로 준 사례",
+  "expect": [
+   "n:289",
+   "n:291",
+   "n:293",
+   "n:294"
+  ],
+  "note": "reverse · s1-goodwill"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "도용 의심 계정 어떻게 조치했어?",
+  "expect": [
+   "n:322",
+   "n:324",
+   "n:326"
+  ],
+  "note": "reverse · s6-limit"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "푸시가 10분씩 밀려서 와요 예전에도 그랬나요",
+  "expect": [
+   "n:329",
+   "n:331",
+   "n:333",
+   "n:336"
+  ],
+  "note": "symptom · d1-root"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "rate limit 설정 잘못 나간 사례",
+  "expect": [
+   "n:352",
+   "n:353",
+   "n:354",
+   "n:355",
+   "n:357"
+  ],
+  "note": "other · d4-conf"
+ },
+ {
+  "workspace_id": 21,
+  "kind": "troubleshoot",
+  "query": "DB 상품이 한 시간 가까이 접속이 안 됐어요",
+  "expect": [
+   "n:380",
+   "n:382",
+   "n:383"
+  ],
+  "note": "symptom · d8-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "otp 폰 분실 계정복구 얼마나 걸림",
+  "expect": [
+   "n:303",
+   "n:305",
+   "n:307",
+   "n:310"
+  ],
+  "note": "symptom · s3-root"
+ },
+ {
+  "workspace_id": 23,
+  "kind": "troubleshoot",
+  "query": "차지백 대응 절차 정리된 거 있어?",
+  "expect": [
+   "n:322",
+   "n:324",
+   "n:326",
+   "n:327"
+  ],
+  "note": "other · s6-flow"
+ }
+]

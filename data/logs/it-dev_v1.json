@@ -1,0 +1,1135 @@
+{
+  "workspace_id": 21,
+  "version": "v1",
+  "description": "OoM 테크 SW 개발 워크스페이스 합성 로그 v1 — 푸시 지연·CDN 오리진 전환·결제 중복 승인·API 한도 429·매칭 대기열·캐시 스탬피드·API 키 유출·클라우드 DB 변경 8체인 + 고아 ref 2. 전부 가공 데이터.",
+  "items": [
+    {
+      "ref": "d1-root",
+      "type": "fail",
+      "title": "메신저 푸시 알림 최대 12분 지연 — 발송 큐 적체",
+      "body": "저녁 9시 4분부터 메신저 새 메시지 푸시가 최대 12분 늦게 도착. 발송 큐 대기 건수가 평소의 40배. 메시지는 앱을 열면 보이지만 알림이 메신저의 핵심 기능이라 핵심 기능의 심각한 저하로 보고 SEV-2로 선언.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-001",
+      "error_code": null,
+      "keywords": [
+        "푸시 알림",
+        "발송 큐",
+        "SEV-2"
+      ],
+      "resolution_summary": "온콜 호출 지연과 대형 방 팬아웃 쏠림이 겹침",
+      "created_at": "2026-07-07T21:40:00+09:00",
+      "expected_queries": [
+        "메신저 푸시 알림 늦게 오는 장애 어떻게 처리했어?",
+        "푸시가 10분씩 밀려서 와요 예전에도 그랬나요",
+        "푸쉬 알림 밀리는거 어케 잡았지"
+      ]
+    },
+    {
+      "ref": "d1-page",
+      "type": "fail",
+      "title": "원인: 경보를 온콜이 못 봤고 자동 이관이 30분 뒤로 설정",
+      "body": "21시 4분 경보가 울렸지만 온콜 엔지니어의 호출 앱이 방해금지 모드라 확인되지 않음. 미확인 경보의 자동 이관 시간이 30분으로 잡혀 있어 21시 34분에야 장애 관리 책임자에게 넘어감. 그 30분 동안 아무도 대응하지 않음.",
+      "parent_ref": "d1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-002",
+      "error_code": null,
+      "keywords": [
+        "온콜 호출",
+        "자동 이관",
+        "방해금지"
+      ],
+      "resolution_summary": "미확인 경보 이관이 30분으로 늦게 설정",
+      "created_at": "2026-07-08T10:30:00+09:00",
+      "expected_queries": [
+        "온콜이 호출 못 받아서 대응 늦은 사례"
+      ]
+    },
+    {
+      "ref": "d1-page-fix",
+      "type": "success",
+      "title": "해결: 미확인 경보 15분 뒤 자동 이관 + 교대 때 호출 수신 점검",
+      "body": "경보를 15분 안에 확인하지 않으면 장애 관리 책임자에게 자동으로 넘어가게 이관 시간을 줄임. 온콜 교대 체크리스트에 호출 앱의 방해금지 예외 설정 확인과 시험 호출 1회를 추가.",
+      "parent_ref": "d1-page",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-003",
+      "error_code": null,
+      "keywords": [
+        "자동 이관",
+        "15분",
+        "시험 호출"
+      ],
+      "resolution_summary": "15분 미확인 시 장애 관리 책임자 이관 + 교대 점검",
+      "created_at": "2026-07-09T15:00:00+09:00",
+      "expected_queries": [
+        "경보 안 보면 몇 분 뒤에 윗선으로 넘어가?"
+      ]
+    },
+    {
+      "ref": "d1-fanout",
+      "type": "fail",
+      "title": "원인: 참여자 수만 명 대형 방 공지가 한 파티션에 몰림",
+      "body": "참여자 4만 명 규모 오픈 대화방 3곳에서 동시에 공지가 올라와 팬아웃 작업 12만 건이 발송 큐의 한 파티션에 쌓임. 1:1 대화 푸시가 그 뒤에 줄을 섬.",
+      "parent_ref": "d1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-004",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-08T14:00:00+09:00",
+      "expected_queries": [
+        "대형 단톡방 때문에 푸시 밀린 적 있어?"
+      ]
+    },
+    {
+      "ref": "d1-fanout-fix",
+      "type": "success",
+      "title": "해결: 대형 방 팬아웃을 전용 큐로 분리",
+      "body": "참여자 1,000명 이상 방의 팬아웃은 전용 큐와 전용 워커로 분리하고 대기 5,000건을 넘으면 워커를 자동 증설. 대형 방 공지가 밀려도 1:1 대화 알림이라는 핵심 기능이 단독으로 실행되게 함. 재현 시험에서 1:1 푸시 지연 2초 이내.",
+      "parent_ref": "d1-fanout",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-005",
+      "error_code": null,
+      "keywords": [
+        "팬아웃",
+        "전용 큐",
+        "자동 증설"
+      ],
+      "resolution_summary": "대형 방 팬아웃 전용 큐 분리 + 자동 증설",
+      "created_at": "2026-07-14T16:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d1-token",
+      "type": "fail",
+      "title": "추정 원인(폐기): 푸시 인증서 만료",
+      "body": "처음엔 푸시 발송용 인증서 만료를 의심했으나 만료일이 5개월 남았고 발송 성공률도 정상. 지연만 있고 실패는 없어 무관으로 결론.",
+      "parent_ref": "d1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-006",
+      "error_code": null,
+      "keywords": [
+        "푸시 인증서"
+      ],
+      "resolution_summary": "무관으로 판명",
+      "created_at": "2026-07-07T22:10:00+09:00",
+      "expected_queries": [],
+      "_deprecate_reason": "인증서는 유효 — 실제 원인은 d1-page·d1-fanout"
+    },
+    {
+      "ref": "d1-notice",
+      "type": "ref",
+      "title": "장애 내부 후속 공지 틀",
+      "body": "후속 공지는 1~2문장 요약, 현재 상태 2~4개 항목, 다음 단계 2~4개 항목, 다음 공지 시각과 채널 순서로 쓴다. 원인을 아직 모르면 '원인 미상'이라고 그대로 적는다. 보내기 전에 한 사람의 검토를 받는다.",
+      "parent_ref": "d1-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-007",
+      "error_code": null,
+      "keywords": [
+        "후속 공지",
+        "공지 틀"
+      ],
+      "resolution_summary": "요약·현재 상태·다음 단계·다음 공지 시각",
+      "created_at": "2026-07-10T09:30:00+09:00",
+      "expected_queries": [
+        "장애 공지 어떻게 써야 해?"
+      ]
+    },
+    {
+      "ref": "d1-pm",
+      "type": "success",
+      "title": "해결: SEV-2 사후분석 — 호출 누락과 큐 쏠림을 함께 닫음",
+      "body": "장애 지휘자가 대응자 1명을 오너로 지정. 회의는 SEV-2 기한인 5영업일 안(4영업일째)에 열었고 문서 링크는 최소 24시간 전에 공유. 호출 누락과 팬아웃 쏠림 두 원인의 조치를 티켓으로 등록.",
+      "parent_refs": [
+        "d1-page",
+        "d1-fanout"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-itdev-008",
+      "error_code": null,
+      "keywords": [
+        "사후분석",
+        "오너",
+        "5영업일"
+      ],
+      "resolution_summary": "5영업일 안 회의 + 두 원인 조치 티켓화",
+      "created_at": "2026-07-13T15:00:00+09:00",
+      "expected_queries": [
+        "SEV-2 사후분석 회의 언제까지 해야 해?"
+      ]
+    },
+    {
+      "ref": "d2-root",
+      "type": "fail",
+      "title": "동영상 재생 시작 실패 급증 HTTP 503 — 전 요금제 재생 불가",
+      "body": "저녁 8시 10분부터 동영상 재생 요청의 62%가 HTTP 503. 지역·요금제와 무관하게 재생이 안 돼 다수·전체 고객 서비스 중단으로 보고 SEV-1 선언. 시간대와 무관하게 온콜을 즉시 호출해 화상회의에 모음.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-009",
+      "error_code": "HTTP 503",
+      "keywords": [
+        "동영상 재생",
+        "CDN 오리진",
+        "SEV-1"
+      ],
+      "resolution_summary": "주 오리진 장애와 자동 전환 실패, 지휘 혼선이 겹침",
+      "created_at": "2026-07-21T20:25:00+09:00",
+      "expected_queries": [
+        "동영상 재생 HTTP 503 터졌을 때 어떻게 대응했어?",
+        "영상이 전부 안 틀어져요 전에도 이런 적 있나요",
+        "스트리밍 503남 오리진 문제였나"
+      ]
+    },
+    {
+      "ref": "d2-origin",
+      "type": "fail",
+      "title": "원인: 주 오리진 장애 때 자동 전환이 동작하지 않음",
+      "body": "주 데이터센터의 스토리지 게이트웨이가 멈췄는데 보조 오리진으로 넘기는 자동 전환이 동작하지 않음. 전환 판단에 쓰는 설정 저장소(운영도구)가 주 데이터센터 안에서만 이중화돼 있어 함께 멈춘 것이 원인.",
+      "parent_ref": "d2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-010",
+      "error_code": "HTTP 503",
+      "keywords": [
+        "오리진 전환",
+        "설정 저장소",
+        "이중화"
+      ],
+      "resolution_summary": "운영도구가 한 데이터센터 안에서만 이중화",
+      "created_at": "2026-07-21T22:30:00+09:00",
+      "expected_queries": [
+        "오리진 자동 전환이 왜 안 됐어?"
+      ]
+    },
+    {
+      "ref": "d2-origin-fix",
+      "type": "success",
+      "title": "해결: 보조 오리진 수동 전환 후 설정 저장소를 다른 데이터센터와 이중화",
+      "body": "당일은 운영 담당이 CDN 오리진을 보조 데이터센터로 수동 전환해 21시 2분 복구. 이후 설정 저장소를 다른 데이터센터와 이중화했고 삼중화는 다음 분기 과제로 등록. 전환 판단은 설정 저장소가 멈춰도 마지막 정상값으로 동작하게 바꿈.",
+      "parent_ref": "d2-origin",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-011",
+      "error_code": "HTTP 503",
+      "keywords": [
+        "수동 전환",
+        "데이터센터 간 이중화",
+        "삼중화"
+      ],
+      "resolution_summary": "수동 전환 복구 + 운영도구 데이터센터 간 이중화",
+      "created_at": "2026-07-28T17:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d2-cmd",
+      "type": "fail",
+      "title": "원인: 지휘 역할을 나누지 않아 CDN 설정이 두 번 뒤집힘",
+      "body": "화상회의에 12명이 모였지만 지휘자를 정하지 않음. 세 사람이 각자 CDN 설정을 바꿔 보조 오리진 전환이 두 번 원복됨. 복구가 약 20분 늦어짐.",
+      "parent_ref": "d2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-012",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-22T11:00:00+09:00",
+      "expected_queries": [
+        "장애 때 여러 명이 동시에 설정 바꿔서 꼬인 적"
+      ]
+    },
+    {
+      "ref": "d2-cmd-fix",
+      "type": "success",
+      "title": "해결: 장애 선언 때 4개 역할을 먼저 지정",
+      "body": "호출 봇이 장애 선언과 동시에 장애 지휘자, 운영 담당, 커뮤니케이션 담당, 계획 담당의 4개 역할을 묻고 채널 상단에 고정. 장애 중 시스템 변경은 운영 담당만 하고, 비어 있는 역할은 지휘자가 겸함.",
+      "parent_ref": "d2-cmd",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-013",
+      "error_code": null,
+      "keywords": [
+        "장애 지휘자",
+        "운영 담당",
+        "역할 분담"
+      ],
+      "resolution_summary": "선언 시 4개 역할 지정, 변경은 운영 담당만",
+      "created_at": "2026-07-27T14:00:00+09:00",
+      "expected_queries": [
+        "장애 지휘자는 누가 맡고 역할은 어떻게 나눠?"
+      ]
+    },
+    {
+      "ref": "d2-ext",
+      "type": "fail",
+      "title": "대외 공지가 장애 선언 42분 뒤에야 나감",
+      "body": "원인을 확인한 뒤 알리려고 미루다 서비스 상태 페이지와 대외 공지가 20시 52분에 올라감. 그 사이 고객센터 문의 3,100건. 내부 통보는 선언 즉시 나갔음.",
+      "parent_ref": "d2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-014",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-22T13:30:00+09:00",
+      "expected_queries": [
+        "원인 모를 때 장애 공지 먼저 내도 돼?"
+      ]
+    },
+    {
+      "ref": "d2-pm",
+      "type": "success",
+      "title": "해결: SEV-1 사후분석 회의를 3일 안에 열고 두 원인 조치 확정",
+      "body": "SEV-1이라 회의를 3일 안(7월 23일)에 열고 장애 지휘자, 서비스 오너, 핵심 대응 엔지니어가 참석. 비난 없는 회의임을 먼저 밝히고 5 Whys로 '왜 자동 전환이 안 됐나'와 '왜 설정이 뒤집혔나'를 따라감.",
+      "parent_refs": [
+        "d2-origin",
+        "d2-cmd"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-itdev-015",
+      "error_code": null,
+      "keywords": [
+        "사후분석",
+        "SEV-1",
+        "5 Whys"
+      ],
+      "resolution_summary": "3일 안 회의, 5 Whys로 두 원인 정리",
+      "created_at": "2026-07-23T16:00:00+09:00",
+      "expected_queries": [
+        "SEV-1 사후분석 기한이 며칠이야?"
+      ]
+    },
+    {
+      "ref": "d2-report",
+      "type": "ref",
+      "title": "대외 장애 보고서에 넣는 항목",
+      "body": "광범위한 고객 영향이 있었던 장애는 보고서를 공개한다. 원인, 한국 시각 기준 분 단위 타임라인, 영향 트래픽 비율, 후속 조치를 담고 최종 사용자를 알아볼 수 있는 정보는 뺀다.",
+      "parent_ref": "d2-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-016",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-07-24T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d3-root",
+      "type": "fail",
+      "title": "간편결제 승인 중복 — 한 주문에 2회 승인 312건",
+      "body": "저녁 7시대에 간편결제 승인 응답이 HTTP 504로 늦어지면서 같은 주문이 2회 승인된 건이 312건 발생. 고객 금전 피해가 있어 SEV-2와 SEV-3 사이에서 판단이 갈렸고, 애매하면 높은 등급이라는 원칙대로 SEV-2로 대응 시작.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-017",
+      "error_code": "HTTP 504",
+      "keywords": [
+        "간편결제",
+        "중복 승인",
+        "SEV-2"
+      ],
+      "resolution_summary": "타임아웃 뒤 자동 재시도에 멱등 키가 없어 중복 승인",
+      "created_at": "2026-09-22T19:40:00+09:00",
+      "expected_queries": [
+        "간편결제 HTTP 504 나고 중복 승인된 거 어떻게 처리했어?",
+        "결제가 두 번 됐다는 문의가 쏟아져요",
+        "간편결재 중복승인 어케 막음"
+      ]
+    },
+    {
+      "ref": "d3-retry",
+      "type": "fail",
+      "title": "원인: 타임아웃 뒤 자동 재시도에 멱등 키 없음",
+      "body": "승인 요청이 3초 타임아웃에 걸리면 앱이 같은 요청을 다시 보내는데, 요청을 구분하는 멱등 키가 없어 첫 요청과 재시도가 각각 승인됨. 전날 켠 '빠른 재시도' 피처 플래그가 재시도 간격을 0.5초로 줄여 중복을 키움.",
+      "parent_ref": "d3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-018",
+      "error_code": "HTTP 504",
+      "keywords": [
+        "멱등 키",
+        "자동 재시도",
+        "타임아웃"
+      ],
+      "resolution_summary": "재시도 요청을 구분할 멱등 키 부재",
+      "created_at": "2026-09-22T21:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d3-flag",
+      "type": "success",
+      "title": "해결: '빠른 재시도' 피처 플래그를 즉시 이전 상태로",
+      "body": "원인이 확정되기 전이었지만 최근 바뀐 피처 플래그라 허가를 기다리지 않고 이전 상태로 되돌림. 19시 52분 이후 신규 중복 승인 0건. 되돌린 사실은 계획 담당이 상태 문서에 기록.",
+      "parent_ref": "d3-retry",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-019",
+      "error_code": "HTTP 504",
+      "keywords": [
+        "피처 플래그",
+        "즉시 원복"
+      ],
+      "resolution_summary": "최근 바뀐 피처 플래그를 허가 없이 원복",
+      "created_at": "2026-09-22T19:55:00+09:00",
+      "expected_queries": [
+        "피처 플래그 허락 없이 꺼도 돼?"
+      ]
+    },
+    {
+      "ref": "d3-idem",
+      "type": "success",
+      "title": "해결: 승인 요청에 멱등 키 도입",
+      "body": "주문번호와 시도 묶음 번호로 만든 멱등 키를 승인 요청에 넣고, 서버가 24시간 동안 같은 키의 두 번째 요청에는 첫 결과를 그대로 돌려줌. 재시도 부하 시험에서 중복 승인 0건.",
+      "parent_ref": "d3-retry",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-020",
+      "error_code": "HTTP 504",
+      "keywords": [
+        "멱등 키",
+        "중복 방지"
+      ],
+      "resolution_summary": "멱등 키로 재시도 요청을 한 건으로 처리",
+      "created_at": "2026-09-24T11:30:00+09:00",
+      "expected_queries": [
+        "멱등키 넣어서 중복 결제 막은 사례"
+      ]
+    },
+    {
+      "ref": "d3-hard",
+      "type": "fail",
+      "title": "추석 Hard 동결 중에 멱등 키 배포 — 임원 승인 없이 진행",
+      "body": "멱등 키 배포일이 추석 Hard 동결(연휴 직전 영업일 18:00~연휴 직후 영업일 09:00)에 걸림. 플래그 원복으로 장애는 이미 멈춘 상태라 임원 승인 대상이었지만, 연휴 결제량을 이유로 SEV-2 대응의 연장으로 보고 온콜 엔지니어와 장애 관리 책임자 승인만 받아 배포.",
+      "parent_ref": "d3-idem",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-021",
+      "error_code": null,
+      "keywords": [
+        "Hard 동결",
+        "예외 배포",
+        "승인"
+      ],
+      "resolution_summary": "진행 중 장애가 아닌데 장애 대응 예외로 배포",
+      "created_at": "2026-09-24T13:00:00+09:00",
+      "expected_queries": [
+        "연휴 배포 동결 기간에 배포한 적 있어?",
+        "추석 동결 중 긴급 배포 승인 누구한테 받아"
+      ]
+    },
+    {
+      "ref": "d3-pm-late",
+      "type": "fail",
+      "title": "사후분석 회의가 9영업일 뒤에 열림",
+      "body": "SEV-2라 회의 기한이 있었지만 추석 연휴와 대응 인원 휴가가 겹쳐 장애 9영업일 뒤인 10월 7일에 열림. 오너는 당일 지정됐고 문서 초안은 연휴 전에 공유됨. 늦어진 사유를 사후분석 문서에 적음.",
+      "parent_ref": "d3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-022",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-07T17:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d3-recon",
+      "type": "ref",
+      "title": "중복 승인 건 찾는 대사 절차",
+      "body": "승인 원장에서 같은 주문번호로 승인이 2건 이상인 건을 뽑고, 취소 원장과 대조해 아직 취소되지 않은 건만 남긴다. 목록은 고객지원 부서와 공유 폴더로 주고받고 카드번호는 가린다.",
+      "parent_ref": "d3-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-023",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-23T10:00:00+09:00",
+      "expected_queries": [
+        "중복 승인 건 어떻게 뽑아?"
+      ]
+    },
+    {
+      "ref": "d4-root",
+      "type": "fail",
+      "title": "커머스 API 정상 호출에 HTTP 429 급증",
+      "body": "한도 안에서 호출하던 파트너 앱들이 오전 10시부터 HTTP 429를 받음. 경보는 없었고 개발자 커뮤니티 제보로 알게 됨. 외부 제보라 일단 SEV-3로 장애를 선언한 뒤 조사 시작.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-024",
+      "error_code": "HTTP 429",
+      "keywords": [
+        "커머스 API",
+        "호출 한도",
+        "HTTP 429"
+      ],
+      "resolution_summary": "한도 설정 배포 오류와 순간 초과 허용 미구현",
+      "created_at": "2026-08-04T10:50:00+09:00",
+      "expected_queries": [
+        "커머스 API HTTP 429 급증했을 때 어떻게 했어?",
+        "한도 안 넘었는데 호출이 막힌대요",
+        "api 429 뜸 한도 설정 잘못됐나"
+      ]
+    },
+    {
+      "ref": "d4-conf",
+      "type": "fail",
+      "title": "원인: 앱별 2RPS 한도가 전체 합산 2RPS로 배포됨",
+      "body": "판매자 본인 스토어용 앱의 한도 2RPS를 앱별이 아니라 전체 앱 합산으로 적용하는 설정이 배포됨. 한도 키에서 앱 식별자가 빠진 것이 원인. 설정이 수 초 만에 전체 게이트웨이로 한꺼번에 퍼짐.",
+      "parent_ref": "d4-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-025",
+      "error_code": "HTTP 429",
+      "keywords": [
+        "2RPS",
+        "한도 키",
+        "설정 배포"
+      ],
+      "resolution_summary": "한도 키에 앱 식별자 누락, 전역 일괄 적용",
+      "created_at": "2026-08-04T11:40:00+09:00",
+      "expected_queries": [
+        "rate limit 설정 잘못 나간 사례"
+      ]
+    },
+    {
+      "ref": "d4-rollback",
+      "type": "success",
+      "title": "해결: 한도 설정을 직전 버전으로 롤백",
+      "body": "SEV-3이고 원인이 최근 배포라 바로 롤백. 11시 52분 이후 HTTP 429 비율이 평소 수준으로 돌아옴. 상위 등급으로 번지는지 1시간 더 지켜봄.",
+      "parent_ref": "d4-conf",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-026",
+      "error_code": "HTTP 429",
+      "keywords": [
+        "롤백",
+        "한도 설정"
+      ],
+      "resolution_summary": "최근 배포가 원인이라 즉시 롤백",
+      "created_at": "2026-08-04T12:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d4-canary",
+      "type": "success",
+      "title": "해결: 한도 설정에도 점진 배포와 헬스 검증",
+      "body": "설정 데이터도 코드처럼 게이트웨이 1% → 10% → 전체 순서로 점진 배포. 단계마다 HTTP 429 비율을 헬스 검증으로 보고 기준을 넘으면 자동으로 빠른 롤백. 설정이 손상되면 검증된 정상값으로 동작.",
+      "parent_ref": "d4-conf",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-027",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-11T15:00:00+09:00",
+      "expected_queries": [
+        "설정 변경도 카나리로 배포해?"
+      ]
+    },
+    {
+      "ref": "d4-burst",
+      "type": "fail",
+      "title": "원인: 순간 초과 요청을 전부 거절",
+      "body": "롤백 뒤에도 일부 앱에서 HTTP 429가 남음. 게이트웨이가 1초 창을 넘는 요청을 바로 거절하고 있었고, 다음 1초 한도를 당겨쓰는 처리가 구현돼 있지 않았음.",
+      "parent_ref": "d4-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-028",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-05T14:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d4-burst-fix",
+      "type": "success",
+      "title": "해결: 다음 1초 한도 당겨쓰기(최대 2배) 구현",
+      "body": "커머스 API는 순간 초과 때 다음 1초 한도를 당겨쓸 수 있게 하고 상한은 최대 2배로 둠. 남은 한도는 응답 헤더로 내려줌. 적용 후 정상 호출의 HTTP 429 0건.",
+      "parent_ref": "d4-burst",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-029",
+      "error_code": "HTTP 429",
+      "keywords": [
+        "당겨쓰기",
+        "최대 2배",
+        "응답 헤더"
+      ],
+      "resolution_summary": "다음 1초 한도 당겨쓰기 최대 2배 + 응답 헤더",
+      "created_at": "2026-08-13T16:00:00+09:00",
+      "expected_queries": [
+        "순간 초과 허용 어떻게 구현했어?"
+      ]
+    },
+    {
+      "ref": "d4-guide",
+      "type": "ref",
+      "title": "파트너 안내: HTTP 429를 받았을 때 재시도 방법",
+      "body": "한도를 넘으면 1·2·4·8·16초 간격의 지수 백오프로 재시도한다. 사용률이 80%를 넘으면 호출 속도를 줄이고, 초당 요청 수로 한도를 두는 API는 요청을 큐에 쌓아 1초 간격으로 보낸다.",
+      "parent_ref": "d4-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-030",
+      "error_code": null,
+      "keywords": [
+        "지수 백오프",
+        "재시도",
+        "사용률 80%"
+      ],
+      "resolution_summary": "429 재시도는 1·2·4·8·16초 백오프",
+      "created_at": "2026-08-06T10:00:00+09:00",
+      "expected_queries": [
+        "429 받으면 몇 초 뒤에 다시 호출하라고 안내해?"
+      ]
+    },
+    {
+      "ref": "d5-root",
+      "type": "fail",
+      "title": "게임 매칭 대기 20초에서 6분으로 — 매칭 시간 초과 E-408",
+      "body": "신규 시즌 업데이트 다음 날 오전부터 매칭 대기가 평균 6분으로 늘고 E-408(매칭 시간 초과)이 반복. 담당 팀이 혼자 3시간 넘게 붙잡고 있다가 오후 3시에야 장애를 선언. 1시간 동안 집중 분석해도 풀리지 않으면 선언한다는 기준을 지키지 못함. 친구 초대 방이라는 우회책이 있어 SEV-3.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-031",
+      "error_code": "E-408",
+      "keywords": [
+        "매칭 대기열",
+        "E-408",
+        "장애 선언"
+      ],
+      "resolution_summary": "매칭 풀 쪼개짐과 읽기 복제본 지연, 선언 지연",
+      "created_at": "2026-08-28T15:10:00+09:00",
+      "expected_queries": [
+        "게임 매칭 E-408 계속 뜰 때 어떻게 해결했어?",
+        "매칭이 몇 분씩 안 잡혀요",
+        "매치메이킹 대기열 안빠짐 왜그럼"
+      ]
+    },
+    {
+      "ref": "d5-region",
+      "type": "fail",
+      "title": "원인 후보: 랭크 구간을 20개로 쪼개 구간별 인원 부족",
+      "body": "신규 시즌에서 랭크 구간을 8개에서 20개로 나누면서 구간별 대기 인원이 매칭 최소 인원에 못 미침. 대기 60초를 넘으면 인접 구간까지 넓히는 방안을 검토 중.",
+      "parent_ref": "d5-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-032",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-28T17:30:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d5-db",
+      "type": "fail",
+      "title": "원인: 읽기 복제본 지연 45초로 이미 매칭된 플레이어가 다시 대기열에",
+      "body": "매칭 결과는 주 DB에 쓰고 대기열 판정은 읽기 복제본에서 읽는데, 시즌 집계 배치 때문에 복제 지연이 45초까지 벌어짐. 이미 매칭된 플레이어가 대기 중으로 보여 유령 매칭이 생기고 E-408로 끝남.",
+      "parent_ref": "d5-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-033",
+      "error_code": "E-408",
+      "keywords": [
+        "읽기 복제본",
+        "복제 지연",
+        "유령 매칭"
+      ],
+      "resolution_summary": "복제 지연으로 매칭 완료 상태를 늦게 읽음",
+      "created_at": "2026-08-28T18:20:00+09:00",
+      "expected_queries": [
+        "복제 지연 때문에 데이터 안 맞은 사례"
+      ]
+    },
+    {
+      "ref": "d5-db-fix",
+      "type": "success",
+      "title": "해결: 대기열 판정을 주 DB에서 읽고 복제 지연 5초 경보",
+      "body": "대기열 판정 조회를 주 DB로 옮기고 복제 지연이 5초를 넘으면 경보. 데이터베이스 서비스 변경이라 DB 신뢰성 담당자 검토를 받아 C3로 진행. 적용 후 유령 매칭 0건, 평균 대기 25초.",
+      "parent_ref": "d5-db",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-034",
+      "error_code": "E-408",
+      "keywords": [
+        "주 DB 읽기",
+        "복제 지연 경보",
+        "C3"
+      ],
+      "resolution_summary": "판정 조회를 주 DB로 + 지연 5초 경보",
+      "created_at": "2026-08-31T11:00:00+09:00",
+      "expected_queries": [
+        "읽기 복제본 지연 경보 몇 초로 잡았어?"
+      ]
+    },
+    {
+      "ref": "d5-freeze",
+      "type": "fail",
+      "title": "금요일 저녁 핫픽스가 Soft 동결에 걸림",
+      "body": "금요일 19시에 인덱스 추가 마이그레이션이 든 핫픽스를 올리려 했으나 금요일 18:00~월요일 09:00 Soft 동결 구간이라 배포 후 마이그레이션이 막힘. 주말 내내 대기열 문제가 이어질 상황.",
+      "parent_ref": "d5-db",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-035",
+      "error_code": null,
+      "keywords": [
+        "Soft 동결",
+        "핫픽스",
+        "마이그레이션"
+      ],
+      "resolution_summary": "동결 구간이라 마이그레이션 포함 배포 불가",
+      "created_at": "2026-08-28T19:20:00+09:00",
+      "expected_queries": [
+        "금요일 저녁에 배포해도 돼?"
+      ]
+    },
+    {
+      "ref": "d5-split",
+      "type": "success",
+      "title": "해결: 마이그레이션 없는 설정 변경만 먼저 배포, 인덱스는 월요일로",
+      "body": "핫픽스를 둘로 나눔. 마이그레이션 없는 설정 변경은 온콜 엔지니어와 협의해 금요일 밤에 배포했고, 인덱스 추가는 월요일 09:00 이후로 미룸. 주말 평균 대기 1분 10초로 버팀.",
+      "parent_ref": "d5-freeze",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-036",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-28T21:30:00+09:00",
+      "expected_queries": [
+        "동결 기간에 배포 가능한 변경이 뭐야?"
+      ]
+    },
+    {
+      "ref": "d6-root",
+      "type": "fail",
+      "title": "포털 메인이 매 정시마다 30~40초 HTTP 500",
+      "body": "포털 메인의 뉴스 영역이 매 정시에 30~40초씩 HTTP 500 또는 빈 화면. 새로고침하면 보이는 우회책이 있는 불편이라 SEV-3. 경보가 아니라 운영자가 화면을 보다가 수동으로 발견.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-037",
+      "error_code": "HTTP 500",
+      "keywords": [
+        "포털 메인",
+        "캐시 만료",
+        "HTTP 500"
+      ],
+      "resolution_summary": "캐시 동시 만료와 추천 API 강한 의존이 겹침",
+      "created_at": "2026-08-18T10:05:00+09:00",
+      "expected_queries": [
+        "포털 메인 정시마다 HTTP 500 나는 거 어떻게 고쳤어?",
+        "메인 화면이 정각마다 하얗게 떠요",
+        "캐시 스탬피드 났을때 어케했음"
+      ]
+    },
+    {
+      "ref": "d6-ttl",
+      "type": "fail",
+      "title": "원인: 인기 캐시 키가 정시에 한꺼번에 만료",
+      "body": "메인 영역 캐시 200여 개가 모두 1시간 TTL로 정시에 만들어져 정시에 함께 만료. 만료 직후 수천 요청이 동시에 원본 DB를 조회해 DB 응답이 밀림.",
+      "parent_ref": "d6-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-038",
+      "error_code": "HTTP 500",
+      "keywords": [
+        "캐시 스탬피드",
+        "동시 만료",
+        "TTL"
+      ],
+      "resolution_summary": "같은 시각 만료로 원본 조회 폭주",
+      "created_at": "2026-08-18T13:00:00+09:00",
+      "expected_queries": [
+        "캐시가 한꺼번에 만료돼서 DB 터진 사례"
+      ]
+    },
+    {
+      "ref": "d6-jitter",
+      "type": "success",
+      "title": "해결: TTL 지터 ±10%와 재생성 잠금",
+      "body": "TTL에 ±10% 지터를 줘 만료 시각을 흩고, 같은 키는 한 요청만 원본을 조회하고 나머지는 직전 값을 받게 재생성 잠금을 둠. 정시 DB 조회 최대치 9,000건 → 400건.",
+      "parent_ref": "d6-ttl",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-039",
+      "error_code": "HTTP 500",
+      "keywords": [
+        "TTL 지터",
+        "재생성 잠금"
+      ],
+      "resolution_summary": "만료 분산 + 키당 한 요청만 재생성",
+      "created_at": "2026-08-20T16:00:00+09:00",
+      "expected_queries": [
+        "캐시 만료 시간 흩뜨린 사례"
+      ]
+    },
+    {
+      "ref": "d6-warm",
+      "type": "success",
+      "title": "해결(구): 정시 5분 전 캐시 예열 크론",
+      "body": "매 정시 5분 전에 인기 키를 미리 다시 만들어 두는 크론. 당일 완화용으로 넣었고 키 목록을 사람이 관리해야 했음. 지터와 재생성 잠금 도입 뒤로는 돌리지 않음.",
+      "parent_ref": "d6-ttl",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-040",
+      "error_code": "HTTP 500",
+      "keywords": [
+        "캐시 예열",
+        "크론"
+      ],
+      "resolution_summary": "정시 전 예열로 당일 완화",
+      "created_at": "2026-08-18T15:30:00+09:00",
+      "expected_queries": [
+        "캐시 예열 크론 아직 써?"
+      ],
+      "_deprecate_reason": "TTL 지터·재생성 잠금(d6-jitter) 도입으로 예열 크론 폐기"
+    },
+    {
+      "ref": "d6-dep",
+      "type": "fail",
+      "title": "원인: 메인 전체가 뉴스 추천 API 응답을 기다림",
+      "body": "메인 화면 조립이 뉴스 추천 API 응답을 끝까지 기다림. 추천이 3초 넘게 늦으면 검색창·메일 바로가기까지 메인 전체가 HTTP 500. 추천 한 곳에 화면 전체가 묶여 있음.",
+      "parent_ref": "d6-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-041",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-19T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d6-fallback",
+      "type": "success",
+      "title": "해결: 추천 0.8초 타임아웃 + 직전 정상 응답 제공",
+      "body": "추천 호출에 0.8초 타임아웃을 두고 넘기면 직전 정상 응답을 보여 줌. 추천이 멈춰도 검색창과 바로가기는 그대로 뜸. 추천을 강제로 내린 시험에서 메인 오류 0건.",
+      "parent_ref": "d6-dep",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-042",
+      "error_code": "HTTP 500",
+      "keywords": [
+        "타임아웃",
+        "직전 응답",
+        "의존성 분리"
+      ],
+      "resolution_summary": "추천 장애가 메인으로 번지지 않게 분리",
+      "created_at": "2026-08-25T15:00:00+09:00",
+      "expected_queries": [
+        "추천 서버 죽어도 메인 뜨게 한 방법"
+      ]
+    },
+    {
+      "ref": "d6-pm",
+      "type": "success",
+      "title": "해결: SEV-3이지만 수동 발견이라 사후분석 작성",
+      "body": "등급은 SEV-3이라 사후분석이 선택이지만, 경보가 아니라 사람이 화면을 보다 찾은 수동 발견 같은 모니터링 실패는 등급과 관계없이 쓰는 대상. 캐시 동시 만료와 추천 의존 두 원인을 한 문서로 정리하고 정시 오류율 경보를 추가.",
+      "parent_refs": [
+        "d6-ttl",
+        "d6-dep"
+      ],
+      "source": "synthetic",
+      "source_ref": "syn-itdev-043",
+      "error_code": null,
+      "keywords": [
+        "사후분석",
+        "모니터링 실패",
+        "수동 발견"
+      ],
+      "resolution_summary": "모니터링 실패라 등급 무관 사후분석",
+      "created_at": "2026-08-26T14:00:00+09:00",
+      "expected_queries": [
+        "SEV-3도 사후분석 써야 해?"
+      ]
+    },
+    {
+      "ref": "d6-ticket",
+      "type": "ref",
+      "title": "재발방지 조치 티켓 등록 규칙",
+      "body": "사후분석에서 나온 조치는 모두 이슈 추적 시스템 티켓으로 등록하고 등급 태그와 날짜 태그를 붙인다. 근본원인을 고치는 우선 조치의 이행 목표는 서비스에 따라 4주 또는 8주. 근본원인이 아닌 개선은 개선 조치로 따로 추적한다.",
+      "parent_ref": "d6-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-044",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-08-27T10:00:00+09:00",
+      "expected_queries": [
+        "사후분석 조치는 언제까지 끝내야 해?"
+      ]
+    },
+    {
+      "ref": "d7-root",
+      "type": "fail",
+      "title": "버그바운티 제보: 파트너 앱 어드민 키가 공개 저장소에 노출",
+      "body": "외부 연구자가 버그바운티 프로그램으로 제보. 파트너 앱의 어드민 키가 공개 코드 저장소 커밋에 그대로 올라와 있고 그 키로 주문 조회 API가 호출됨. 제보 2영업일째에 평가 결과와 예상 해결 일정을 회신(기한 3영업일).",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-045",
+      "error_code": null,
+      "keywords": [
+        "버그바운티",
+        "어드민 키",
+        "키 유출"
+      ],
+      "resolution_summary": "키 노출과 허용 IP 미등록, 교체 순서 실수",
+      "created_at": "2026-09-08T09:30:00+09:00",
+      "expected_queries": [
+        "API 키 유출 제보 받았을 때 어떻게 처리했어?",
+        "어드민 키가 공개 저장소에 올라갔대요",
+        "api키 털렸을때 뭐부터 함"
+      ]
+    },
+    {
+      "ref": "d7-rotate",
+      "type": "fail",
+      "title": "교체 실수: 새 키 적용 전에 기존 키부터 삭제해 HTTP 401",
+      "body": "급한 마음에 기존 어드민 키를 먼저 삭제함. 삭제한 키는 복구할 수 없어, 새 키를 발급해 서비스에 적용할 때까지 12분 동안 파트너 앱의 관리 API 호출이 전부 HTTP 401.",
+      "parent_ref": "d7-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-046",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "키 교체",
+        "키 삭제",
+        "HTTP 401"
+      ],
+      "resolution_summary": "교체 전에 기존 키를 지워 12분 중단",
+      "created_at": "2026-09-08T11:20:00+09:00",
+      "expected_queries": [
+        "어드민 키 교체하다 HTTP 401 난 적 있어?"
+      ]
+    },
+    {
+      "ref": "d7-rotate-fix",
+      "type": "success",
+      "title": "해결: 키 교체 순서 런북 — 발급, 적용, 확인 뒤 삭제",
+      "body": "새 키를 발급해 서비스에 적용하고 호출 성공을 확인한 뒤 기존 키를 삭제하는 순서를 런북으로 고정. 복제 키로 바꿀 때는 원본 키가 자동으로 비활성화되지 않으므로 전환 뒤 원본 키를 직접 삭제하는 단계를 넣음.",
+      "parent_ref": "d7-rotate",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-047",
+      "error_code": "HTTP 401",
+      "keywords": [
+        "키 교체 런북",
+        "복제 키",
+        "원본 키"
+      ],
+      "resolution_summary": "발급→적용→확인→삭제 순서 고정",
+      "created_at": "2026-09-10T14:00:00+09:00",
+      "expected_queries": [
+        "API 키 교체 순서 알려줘"
+      ]
+    },
+    {
+      "ref": "d7-ip",
+      "type": "fail",
+      "title": "원인: 호출 허용 IP를 등록하지 않아 유출된 키가 밖에서 쓰임",
+      "body": "해당 앱은 호출 허용 IP를 하나도 등록하지 않은 상태. 유출된 키로 해외 IP에서 주문 조회 API가 41회 호출된 기록 확인. 허용 IP가 있었다면 키가 새도 쓰이지 않았을 것.",
+      "parent_ref": "d7-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-048",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-08T15:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d7-ip-fix",
+      "type": "success",
+      "title": "해결: 호출 허용 IP 등록 — 미등록 IP는 -401로 차단",
+      "body": "파트너와 함께 운영 서버 IP 8개를 호출 허용 IP로 등록(최대 10개). 등록하지 않은 IP의 호출은 오류 코드 -401로 막히는 것을 확인. 파트너 온보딩 점검표에 허용 IP 등록 항목 추가.",
+      "parent_ref": "d7-ip",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-049",
+      "error_code": "-401",
+      "keywords": [
+        "호출 허용 IP",
+        "-401",
+        "온보딩 점검표"
+      ],
+      "resolution_summary": "허용 IP 등록, 미등록 호출 -401 차단",
+      "created_at": "2026-09-11T16:00:00+09:00",
+      "expected_queries": [
+        "오류 코드 -401 뜨는 이유",
+        "api 허용 ip 몇 개까지 등록돼?"
+      ]
+    },
+    {
+      "ref": "d7-nat",
+      "type": "fail",
+      "title": "허용 IP 10개로는 배치 서버 14대를 다 못 넣음",
+      "body": "다른 파트너는 배치 서버가 14대라 허용 IP 10개에 다 들어가지 않음. 등록하지 못한 4대가 -401을 받음. 출구 주소를 하나로 묶는 방안을 파트너와 검토 중.",
+      "parent_ref": "d7-ip-fix",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-050",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-09-18T10:30:00+09:00",
+      "expected_queries": [
+        "허용 IP 개수 모자랄 때 어떻게 해?"
+      ]
+    },
+    {
+      "ref": "d7-bounty",
+      "type": "ref",
+      "title": "버그바운티 제보 처리 순서",
+      "body": "제보를 받으면 3영업일 안에 평가 결과와 예상 해결 일정을 답한다. 취약점 관련 소통은 제보 건 안에서만 하고, 포상은 분류 뒤 1주 안에 지급하도록 한다(최대 1억 원). 기능 오류는 포상 대상이 아니다.",
+      "parent_ref": "d7-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-051",
+      "error_code": null,
+      "keywords": [
+        "버그바운티",
+        "제보 회신",
+        "포상"
+      ],
+      "resolution_summary": "3영업일 회신, 분류 뒤 1주 안 포상",
+      "created_at": "2026-09-09T10:00:00+09:00",
+      "expected_queries": [
+        "취약점 제보 받으면 며칠 안에 답해야 해?"
+      ]
+    },
+    {
+      "ref": "d8-root",
+      "type": "fail",
+      "title": "클라우드 데이터베이스 상품 연결 실패 47분 — 스토리지 펌웨어 교체 중",
+      "body": "기업용 클라우드 데이터베이스 상품의 한 구역에서 14시 20분부터 47분 동안 연결이 ETIMEDOUT으로 실패. 같은 시각 스토리지 펌웨어 교체 작업이 진행 중이었음. 일부 고객 서비스 중단이라 SEV-2.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-052",
+      "error_code": "ETIMEDOUT",
+      "keywords": [
+        "클라우드 데이터베이스",
+        "ETIMEDOUT",
+        "펌웨어 교체"
+      ],
+      "resolution_summary": "고위험 변경을 낮은 등급으로 분류해 승인·롤백 준비 없이 진행",
+      "created_at": "2026-10-13T14:45:00+09:00",
+      "expected_queries": [
+        "클라우드 DB ETIMEDOUT 장애 어떻게 처리했어?",
+        "DB 상품이 한 시간 가까이 접속이 안 됐어요",
+        "클라우드디비 접속안됨 작업중이었다던데"
+      ]
+    },
+    {
+      "ref": "d8-change",
+      "type": "fail",
+      "title": "원인: 다운타임 위험이 있는 변경을 C3로 분류",
+      "body": "펌웨어 교체는 다운타임 가능성이 있는 고위험 변경이라 C1이어야 했는데 수동 단계가 있는 저위험 변경(C3)으로 올림. 그래서 다른 팀 인프라 조직장 승인도, 온콜 엔지니어 동석도 없이 실행됨.",
+      "parent_ref": "d8-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-053",
+      "error_code": null,
+      "keywords": [
+        "변경 등급",
+        "C1",
+        "승인 누락"
+      ],
+      "resolution_summary": "C1을 C3로 낮게 분류해 승인 절차를 건너뜀",
+      "created_at": "2026-10-13T17:00:00+09:00",
+      "expected_queries": [
+        "변경 등급 잘못 매겨서 장애 난 적 있어?"
+      ]
+    },
+    {
+      "ref": "d8-change-fix",
+      "type": "success",
+      "title": "해결: 변경 등급 판정표와 C1 준비 기간 2주",
+      "body": "변경 요청 양식에 '다운타임 가능성', '되돌리는 데 걸리는 시간' 질문을 넣어 등급을 자동 제안. C1은 계획 가능한 경우 최소 2주 전에 준비를 시작하고 릴리스 매니저에게 알림. 스토리지·네트워크 펌웨어는 기본 C1.",
+      "parent_ref": "d8-change",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-054",
+      "error_code": null,
+      "keywords": [
+        "변경 등급 판정",
+        "C1",
+        "2주"
+      ],
+      "resolution_summary": "등급 자동 제안 + C1은 최소 2주 전 준비",
+      "created_at": "2026-10-20T15:00:00+09:00",
+      "expected_queries": [
+        "C1 변경은 며칠 전에 준비해야 해?"
+      ]
+    },
+    {
+      "ref": "d8-rollback",
+      "type": "success",
+      "title": "해결: 검토된 롤백 계획과 안전한 중단 지점, 오전 시작",
+      "body": "교체 대상 12대 중 4대째에서 문제가 났는데 멈출 지점이 없어 끝까지 진행했던 것이 복구를 늦춤. 이후 장시간 작업은 4대마다 안전한 중단 지점을 두고, 검토된 롤백 계획 없이는 시작하지 않으며, 업무일 이른 시간에 시작.",
+      "parent_ref": "d8-change",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-055",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-21T11:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "d8-sla",
+      "type": "fail",
+      "title": "10월 가용률 99.89%로 목표 99.95% 미달 — 크레딧 문의",
+      "body": "47분 중단으로 해당 구역의 10월 월간 가용률이 99.89%. 고가용성(HA) 선택 고객의 목표 99.95%에 못 미쳐 99.0% 이상 99.95% 미만 구간인 월 이용요금 10% 크레딧 대상. 크레딧이 자동 지급되는지 묻는 문의가 이어짐.",
+      "parent_ref": "d8-root",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-056",
+      "error_code": null,
+      "keywords": [
+        "가용률",
+        "서비스 크레딧",
+        "99.95%"
+      ],
+      "resolution_summary": "가용률 미달, 10% 크레딧 대상(청구 필요)",
+      "created_at": "2026-10-14T10:00:00+09:00",
+      "expected_queries": [
+        "가용률 미달이면 크레딧 얼마 줘?"
+      ]
+    },
+    {
+      "ref": "d8-credit",
+      "type": "ref",
+      "title": "서비스 크레딧 청구 안내문",
+      "body": "크레딧은 장애가 난 달의 다음 달 말일까지 고객센터에 청구한다. 상품명·인스턴스 ID·장애 일시·로그를 내면 확인 뒤 청구 다음 달 말일까지 지급하고 100원 미만은 버린다. 사전 계획된 점검과 베타·무료 이용 기간은 대상이 아니다.",
+      "parent_ref": "d8-sla",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-057",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-14T14:00:00+09:00",
+      "expected_queries": [
+        "크레딧 청구 언제까지 해야 해?"
+      ]
+    },
+    {
+      "ref": "d8-nonha",
+      "type": "fail",
+      "title": "HA 미선택 고객 3곳에도 10% 크레딧 지급",
+      "body": "고가용성(HA)을 선택하지 않은 고객은 가용률 목표 적용 대상이 아니지만, 장기 계약 고객 3곳이 강하게 항의해 영업 판단으로 10% 크레딧을 지급. 별도 계약이 없는 지급이라 선례가 될 수 있다는 지적이 나옴.",
+      "parent_ref": "d8-sla",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-058",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-16T16:00:00+09:00",
+      "expected_queries": [
+        "HA 안 쓰는 고객도 크레딧 받을 수 있어?"
+      ]
+    },
+    {
+      "ref": "o1-oncall",
+      "type": "ref",
+      "title": "온콜 교대 인수인계 메모",
+      "body": "교대는 매주 월요일 10시. 넘길 것: 진행 중인 경보, 임시로 꺼 둔 알림, 이번 주 예정된 C1·C2 변경. 호출 앱 시험 호출 1회를 받고 나서 교대를 마친다.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-059",
+      "error_code": null,
+      "keywords": [],
+      "resolution_summary": null,
+      "_refine": true,
+      "created_at": "2026-10-05T10:00:00+09:00",
+      "expected_queries": []
+    },
+    {
+      "ref": "o2-status",
+      "type": "ref",
+      "title": "서비스 상태 페이지 표기 메모",
+      "body": "상품별 상태는 정상·일부장애·심각장애 3가지로만 표시한다. SEV-3 이하는 보통 '정상'을 유지하고 공지사항으로만 알린다. 문구는 커뮤니케이션 담당이 고친다.",
+      "source": "synthetic",
+      "source_ref": "syn-itdev-060",
+      "error_code": null,
+      "keywords": [
+        "상태 페이지",
+        "상태 표기"
+      ],
+      "resolution_summary": "상태는 정상·일부장애·심각장애 3단계",
+      "created_at": "2026-10-08T11:00:00+09:00",
+      "expected_queries": []
+    }
+  ]
+}
