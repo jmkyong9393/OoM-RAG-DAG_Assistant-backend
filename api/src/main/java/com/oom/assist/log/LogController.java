@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,11 +22,37 @@ public class LogController {
   private final LogService service;
   private final LogRepository repo;
   private final LogBulkService bulk;
+  private final PolicyRefService policyRefs;
 
-  public LogController(LogService service, LogRepository repo, LogBulkService bulk) {
+  public LogController(LogService service, LogRepository repo, LogBulkService bulk, PolicyRefService policyRefs) {
     this.service = service;
     this.repo = repo;
     this.bulk = bulk;
+    this.policyRefs = policyRefs;
+  }
+
+  /** 등록 화면의 근거 조문 고르기. 이 부서에서 검색되는 활성 규정의 조문만. */
+  @GetMapping("/logs/policy-articles")
+  public List<PolicyRefService.ArticleOption> policyArticles(@RequestParam(defaultValue = "") String q, @RequestParam(defaultValue = "20") int limit, TenantContext ctx) {
+    return policyRefs.options(ctx.workspaceId(), q, limit);
+  }
+
+  @GetMapping("/logs/{id}/policy-refs")
+  public List<PolicyRefService.RefView> getPolicyRefs(@PathVariable long id, TenantContext ctx) {
+    return policyRefs.read(ctx.workspaceId(), id);
+  }
+
+  public record PolicyRefsRequest(List<PolicyRefService.RefInput> policyRefs) {}
+
+  /** 사례의 근거 조문을 통째로 바꾼다(빈 목록이면 비움). 열람 전용(viewer)은 불가. */
+  @PutMapping("/logs/{id}/policy-refs")
+  public List<PolicyRefService.RefView> putPolicyRefs(@PathVariable long id, @RequestBody PolicyRefsRequest body, TenantContext ctx) {
+    if ("viewer".equals(ctx.role())) throw ApiException.forbidden("viewer cannot edit");
+    if (body == null || body.policyRefs() == null) throw ApiException.badRequest("VALIDATION", "policy_refs is required");
+    service.get(ctx, id);   // 이 부서의 로그가 아니면 404
+    policyRefs.write(id, policyRefs.normalize(ctx.workspaceId(), body.policyRefs()));
+    repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), "policy_refs_set", ctx.userName(), "refs=" + body.policyRefs().size(), null);
+    return policyRefs.read(ctx.workspaceId(), id);
   }
 
   /** 상위 로그 자동완성: 추천(에러 코드·키워드·어휘 점수) + 검색(제목·코드 부분 일치). 두 섹션은 겹치지 않는다. */
@@ -61,7 +88,10 @@ public class LogController {
 
   @PostMapping("/logs")
   public ResponseEntity<LogNodeDto> create(@RequestBody LogService.CreateRequest body, TenantContext ctx) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(service.create(ctx, body));
+    var refs = policyRefs.normalize(ctx.workspaceId(), body.policyRefs());   // 로그를 만들기 전에 검증한다
+    LogNodeDto node = service.create(ctx, body);
+    policyRefs.write(node.id(), refs);
+    return ResponseEntity.status(HttpStatus.CREATED).body(node);
   }
 
   @PostMapping("/logs/{id}/refine")

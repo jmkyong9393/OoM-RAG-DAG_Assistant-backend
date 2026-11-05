@@ -29,7 +29,8 @@ public class LogService {
     this.repo = repo;
   }
 
-  public record CreateRequest(String type, String title, String body, Long parentId, Boolean resolveRoot, String problemTitle, Integer composeMs) {}
+  public record CreateRequest(String type, String title, String body, Long parentId, Boolean resolveRoot, String problemTitle, Integer composeMs,
+                              List<PolicyRefService.RefInput> policyRefs) {}
 
   @Transactional
   public LogNodeDto create(TenantContext ctx, CreateRequest req) {
