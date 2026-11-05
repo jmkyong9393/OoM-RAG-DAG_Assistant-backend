@@ -28,10 +28,10 @@ def vec_literal(vec: list[float] | None) -> str | None:
 # ── 워크스페이스 ────────────────────────────────────────────────────────────
 
 def workspace_settings(conn, ws: int) -> dict[str, Any]:
-    row = conn.execute("SELECT policy_enabled, settings FROM workspaces WHERE id = %s", (ws,)).fetchone()
+    row = conn.execute("SELECT policy_enabled, case_enabled, settings FROM workspaces WHERE id = %s", (ws,)).fetchone()
     if not row:
-        return {"policy_enabled": False, "settings": {}}
-    return {"policy_enabled": row["policy_enabled"], "settings": row["settings"] or {}}
+        return {"policy_enabled": False, "case_enabled": True, "settings": {}}
+    return {"policy_enabled": row["policy_enabled"], "case_enabled": row["case_enabled"], "settings": row["settings"] or {}}
 
 
 def classify_context(conn, ws: int, error_code: str | None) -> dict[str, bool]:

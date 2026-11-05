@@ -36,6 +36,9 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             cctx = db.classify_context(conn, workspace_id, error_code)
         if policy_enabled is None:
             policy_enabled = bool(ws["policy_enabled"])
+        # 부서 설정: 사례를 끈 부서(규정 참조형)는 사례를 찾지 않는다. 규정까지 꺼져 있으면 사례가 유일한 근거라 켠 것으로 본다
+        case_enabled = bool(ws["case_enabled"]) or not policy_enabled
+        cctx["has_cases"] = cctx["has_cases"] and case_enabled
         prof = load_profile(ws["settings"].get("llm_profile", "default"))
         mode = "policy" if policy_enabled else "dag_only"
         tokenizer = Tokenizer(terms)
@@ -54,7 +57,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
 
         # workers (병렬. 한쪽 실패는 stage error 로 보고하고 계속)
         do_policy = policy_enabled and intent in ("policy", "both")
-        do_graph = intent in ("troubleshoot", "both") or not policy_enabled
+        do_graph = case_enabled and (intent in ("troubleshoot", "both") or not policy_enabled)
         if do_policy:
             yield sse("stage", StageEvent(node="policy_rag", status="start").model_dump())
         if do_graph:
