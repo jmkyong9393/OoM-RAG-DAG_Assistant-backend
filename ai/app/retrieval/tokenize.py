@@ -20,19 +20,26 @@ _added_terms: set[str] = set()
 _SYN_PATH = Path(__file__).with_name("synonyms_ko.json")
 
 
+def _valid_group(g) -> bool:
+    """양방향 묶음은 문자열 목록(2개 이상), 한 방향 묶음은 {"from": [...], "to": [...]}."""
+    if isinstance(g, list):
+        return len(g) > 1
+    return isinstance(g, dict) and bool(g.get("from")) and bool(g.get("to"))
+
+
 @lru_cache(maxsize=1)
-def default_synonym_groups() -> tuple[tuple[str, ...], ...]:
+def default_synonym_groups() -> tuple:
     try:
         data = json.loads(_SYN_PATH.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001 — 파일이 없으면 확장 없이 동작
         return ()
-    return tuple(tuple(g) for g in data.get("groups", []) if isinstance(g, list) and len(g) > 1)
+    return tuple(g for g in data.get("groups", []) if _valid_group(g))
 
 
-def synonym_groups(settings: dict | None) -> list[list[str]]:
-    """기본 동의어 묶음 + 워크스페이스 settings.synonyms (같은 형식: 문자열 목록의 목록)."""
+def synonym_groups(settings: dict | None) -> list:
+    """기본 동의어 묶음 + 워크스페이스 settings.synonyms (같은 형식). 묶음은 양방향 목록이거나 한 방향 {"from", "to"}."""
     extra = (settings or {}).get("synonyms") or []
-    return [list(g) for g in default_synonym_groups()] + [list(g) for g in extra if isinstance(g, list) and len(g) > 1]
+    return list(default_synonym_groups()) + [g for g in extra if _valid_group(g)]
 
 
 def normalize_code(raw: str) -> str:
@@ -115,15 +122,21 @@ class Tokenizer:
 
     def query_tokens(self, text: str, groups: list[list[str]] | None = None) -> str:
         """질의용 토큰: tokens() + 동의어 확장. 한 묶음의 어느 표현(토큰 전부)이 질의에 있으면 나머지 표현의 토큰을 덧붙인다.
+        한 방향 묶음은 from(구어)이 있을 때 to(규정 용어)만 덧붙인다 — 규정 용어로 물은 질의에 구어 토큰이 섞이지 않게.
         OR tsquery 라 recall 만 넓어진다. 인덱스 쪽은 tokens() 그대로 — 색인을 다시 만들 필요가 없다."""
         base = self.tokens(text)
         if not groups:
             return base
         out = base.split()
         have = set(out)
+        seen = set(out)   # 확장으로 붙은 토큰이 다른 묶음을 연쇄로 켜지 않도록, 일치 판정은 원래 토큰으로만 한다
         for g in groups:
-            forms = [f for f in (self._phrase_tokens(p) for p in g) if f]
-            if any(set(f) <= have for f in forms):
+            if isinstance(g, dict):
+                trigger = [f for f in (self._phrase_tokens(p) for p in g["from"]) if f]
+                forms = [f for f in (self._phrase_tokens(p) for p in g["to"]) if f]
+            else:
+                trigger = forms = [f for f in (self._phrase_tokens(p) for p in g) if f]
+            if any(set(f) <= seen for f in trigger):
                 for f in forms:
                     for t in f:
                         if t not in have:
