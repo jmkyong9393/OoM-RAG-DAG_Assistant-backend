@@ -97,6 +97,23 @@ async def classify(profile: LlmProfile, query: str, error_code: str | None, poli
     return IntentResult(intent="both", reason="rule: unsure → both")
 
 
+JUDGE_SYSTEM = ("사용자 질문과 사내 해결 사례가 같은 문제를 다루는지 판단한다. "
+                "같은 대상(시스템·물건·절차)의 같은 종류 문제면 relevant=true. 주제가 비슷해 보여도 대상이 다르면 false "
+                "(예: 법인카드 분실 질문 ↔ 출입카드 인식 오류 사례 = false). 질문이 사례의 원인·해결·후속 조치를 묻는 것도 true. "
+                'JSON 으로만 답한다: {"relevant": true|false}')
+
+
+async def judge_case(profile: LlmProfile, query: str, case: dict, usage: Usage) -> bool:
+    """사례 후보 하나가 질문과 같은 문제를 다루는가. 키가 없으면 판정하지 않고 True."""
+    if ai_mode() != "openai" or not profile.has_key:
+        return True
+    user = f"질문: {query}\n\n사례 묶음 제목: {case['root_title']}\n해당 기록: {case['title']}\n요약: {(case.get('summary') or '')[:200]}"
+    data = await _chat_json(profile, profile.model_light, JUDGE_SYSTEM, user, usage)
+    if not isinstance(data.get("relevant"), bool):
+        raise ValueError("judge: no 'relevant' boolean")
+    return data["relevant"]
+
+
 # ── 생성 (스트리밍) ──────────────────────────────────────────────────────────
 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.

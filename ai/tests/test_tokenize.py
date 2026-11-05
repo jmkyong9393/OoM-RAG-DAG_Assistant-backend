@@ -76,3 +76,16 @@ def test_query_and_index_share_tokenizer():
     idx = set(tok.tokens("제12조 (원격접속 신청) 사외에서 사내망에 접속하려는 임직원은 사전에 신청하여야 한다").split())
     q = set(tok.tokens("원격접속 신청은 어떻게 하나요").split())
     assert idx & q, "질의 토큰과 인덱스 토큰이 하나도 겹치지 않으면 어휘 검색이 불가능하다"
+
+
+def test_directed_synonyms_expand_only_from_colloquial_side():
+    """한 방향 묶음: 구어('물러달라', '얼린')는 규정 용어를 부르지만, 규정 용어('반품')로 물으면 구어 토큰이 붙지 않는다."""
+    tok = Tokenizer()
+    groups = tokenize.synonym_groups({})
+    colloquial = tok.query_tokens("얼린 고기 잘못 샀다고 물러달라는데", groups).split()
+    assert {"냉동", "반품", "신선", "식품"} <= set(colloquial) or {"냉동", "반품", "신선식품"} <= set(colloquial), colloquial
+    formal = "불량 상품은 언제까지 반품 받아줄 수 있어요"
+    assert tok.query_tokens(formal, groups) == tok.tokens(formal), "규정 용어만 있으면 확장하지 않는다"
+    # 워크스페이스 설정도 같은 형식을 받는다. 형식이 틀린 묶음은 버린다
+    ws = tokenize.synonym_groups({"synonyms": [{"from": ["빵꾸"], "to": ["장애"]}, {"from": [], "to": ["x"]}, ["하나뿐"], "문자열"]})
+    assert {"from": ["빵꾸"], "to": ["장애"]} in ws and len(ws) == len(groups) + 1

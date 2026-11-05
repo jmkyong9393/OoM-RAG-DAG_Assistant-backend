@@ -4,7 +4,11 @@ import pytest
 from app.graph import pipeline
 from tests.conftest import collect, requires_db
 
-FLOOR = (0.62, 0.70, 2)
+FLOOR = pipeline.CaseFloor(near=0.62, far=0.70, terms=2, sure=0.45)
+
+
+async def _no_case(*a, **k):
+    return [], None
 
 
 @pytest.mark.parametrize("hit,expected", [
@@ -38,7 +42,7 @@ async def test_entry_search_returns_evidence(fake_mode, backfilled):
 @requires_db
 async def test_falls_back_to_policy_when_no_relevant_case(fake_mode, backfilled, monkeypatch):
     """사례 질의로 분류됐지만 관련 사례가 없으면 규정에서 근거를 찾는다."""
-    monkeypatch.setattr(pipeline, "_graph_search", lambda *a, **k: ([], None))
+    monkeypatch.setattr(pipeline, "_graph_search", _no_case)
     blocks = await collect(pipeline.run(2, True, "VPN 접속 권한 문제 예전에 어떻게 풀었어?"))
     d, names = dict(blocks), [b[0] for b in blocks]
     assert d["intent"]["intent"] == "troubleshoot" and "chain" not in names
@@ -50,7 +54,7 @@ async def test_falls_back_to_policy_when_no_relevant_case(fake_mode, backfilled,
 
 @requires_db
 async def test_no_fallback_when_policy_is_off(fake_mode, backfilled, monkeypatch):
-    monkeypatch.setattr(pipeline, "_graph_search", lambda *a, **k: ([], None))
+    monkeypatch.setattr(pipeline, "_graph_search", _no_case)
     blocks = await collect(pipeline.run(2, False, "VPN 접속 권한 문제 예전에 어떻게 풀었어?"))
     names = [b[0] for b in blocks]
     assert "policy" not in names and dict(blocks)["done"]["model"] == "gate"
@@ -67,3 +71,38 @@ def test_company_rules_keep_two_slots_among_external_standards():
     assert pipeline._with_company_rules(ext) == ext[:5], "회사 규정 후보가 없으면 그대로"
     one = ext[:5] + [row("c1", "규정")]
     assert [r["id"] for r in pipeline._with_company_rules(one)] == ["e0", "e1", "e2", "e3", "c1"]
+
+
+async def test_borderline_candidate_goes_to_judge(monkeypatch):
+    """확실한 후보는 판정 없이 채택, 경계선 후보는 후보별 판정을 따르고, 1위 판정이 실패하면 순위대로."""
+    calls = []
+
+    def judge(verdicts):
+        async def fn(prof, query, case, usage):
+            calls.append(case["node_id"])
+            v = verdicts[case["node_id"]]
+            if isinstance(v, Exception):
+                raise v
+            return v
+        return fn
+
+    sure = {"node_id": 1, "exact": False, "distance": 0.30, "lex_terms": 0}
+    a = {"node_id": 2, "exact": False, "distance": 0.55, "lex_terms": 1}
+    b = {"node_id": 3, "exact": False, "distance": 0.60, "lex_terms": 2}
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({2: False, 3: True}))
+    assert await pipeline._choose_entry(None, "q", [sure, a], FLOOR, None) == 1 and not calls
+    assert await pipeline._choose_entry(None, "q", [a, b], FLOOR, None) == 3 and sorted(calls) == [2, 3], "통과한 두 번째 후보"
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({2: False, 3: False}))
+    assert await pipeline._choose_entry(None, "q", [a, b], FLOOR, None) is None, "같은 문제가 아니면 사례 없음"
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({2: RuntimeError("llm down"), 3: False}))
+    assert await pipeline._choose_entry(None, "q", [a, b], FLOOR, None) == 2, "1위 판정 실패는 순위대로"
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({2: False, 3: RuntimeError("llm down")}))
+    assert await pipeline._choose_entry(None, "q", [a, b], FLOOR, None) is None, "뒤 후보의 판정 실패는 통과로 치지 않는다"
+    assert await pipeline._choose_entry(None, "q", [], FLOOR, None) is None
+    assert await pipeline._choose_entry(None, "q", [a], None, None) == 2, "보정하지 않은 모델은 판정하지 않는다"
+
+
+async def test_judge_is_skipped_without_key(fake_mode):
+    from app.config import profile
+    from app.llm import client as llm
+    assert await llm.judge_case(profile(), "q", {"root_title": "r", "title": "t", "summary": "s"}, llm.Usage()) is True

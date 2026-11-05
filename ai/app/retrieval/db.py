@@ -99,6 +99,15 @@ def root_of(conn, ws: int, node_id: int) -> int | None:
     return row["root_id"] if row else None
 
 
+def case_briefs(conn, ws: int, node_ids: list[int]) -> dict[int, dict]:
+    """관련성 판정에 보여 줄 요약: 체인 루트 제목 · 그 기록의 제목 · 해결 요약(없으면 본문 앞부분)."""
+    rows = conn.execute("""
+        SELECT v.id, v.title, coalesce(v.resolution_summary, left(v.body, 200)) AS summary, r.title AS root_title
+        FROM v_log_nodes v JOIN log_nodes r ON r.id = coalesce(v.root_id, v.id)
+        WHERE v.workspace_id = %s AND v.id = ANY(%s)""", (ws, node_ids)).fetchall()
+    return {r["id"]: {"title": r["title"], "summary": r["summary"], "root_title": r["root_title"]} for r in rows}
+
+
 # ── 정제 워커 ────────────────────────────────────────────────────────────────
 
 def claim_pending_log(conn, exclude: list[int] | None = None) -> dict | None:

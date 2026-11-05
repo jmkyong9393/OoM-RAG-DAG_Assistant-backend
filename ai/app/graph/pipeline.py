@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from typing import AsyncIterator
+from typing import AsyncIterator, NamedTuple
 
 from app.config import ai_mode, profile as load_profile
 from app.llm import client as llm
@@ -61,7 +61,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             yield sse("stage", StageEvent(node="graph_search", status="start").model_dump())
         results = await asyncio.gather(
             asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec) if do_policy else _noop(),
-            asyncio.to_thread(_graph_search, workspace_id, q_tokens, q_vec, error_code, CASE_FLOOR.get(prof.embedding_model)) if do_graph else _noop(),
+            _graph_search(workspace_id, q_tokens, q_vec, error_code, CASE_FLOOR.get(prof.embedding_model), prof, query, usage) if do_graph else _noop(),
             return_exceptions=True)
         pol, gra = results
         if do_policy:
@@ -161,25 +161,71 @@ def _policy_rag(ws: int, q_tokens: str, q_vec: list[float] | None) -> list[dict]
              "article_label": r["article_label"], "page": r["page"], "text": r["text"]} for i, r in enumerate(rows)]
 
 
-# 사례 관련성 하한 (근거리, 원거리, 원거리일 때 필요한 일치 단어 수). 벡터 거리 분포는 임베딩 모델마다 달라 보정한 모델에만 적용한다.
-CASE_FLOOR = {"text-embedding-3-small": (0.62, 0.70, 2)}
+class CaseFloor(NamedTuple):
+    """사례 관련성 기준. near: 이 거리 안이면 후보, far·terms: 조금 멀어도 질의 단어가 이만큼 일치하면 후보, sure: 이 거리 안이면 판정 없이 채택."""
+    near: float
+    far: float
+    terms: int
+    sure: float
 
 
-def _relevant(hit: dict, floor: tuple[float, float, int] | None) -> bool:
-    """에러 코드 일치, 벡터 거리가 가까움, 조금 멀어도 질의 단어가 여럿 일치 — 셋 중 하나면 근거로 쓴다. 벡터가 없으면 판단하지 않는다."""
+# 벡터 거리 분포는 임베딩 모델마다 달라 보정한 모델에만 적용한다
+CASE_FLOOR = {"text-embedding-3-small": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.45)}
+JUDGE_TIMEOUT = 4.0
+
+
+def _relevant(hit: dict, floor: CaseFloor | None) -> bool:
+    """에러 코드 일치, 벡터 거리가 가까움, 조금 멀어도 질의 단어가 여럿 일치 — 셋 중 하나면 후보로 둔다. 벡터가 없으면 판단하지 않는다."""
     if floor is None or hit["exact"] or hit["distance"] is None:
         return True
-    near, far, terms = floor
-    return hit["distance"] <= near or (hit["distance"] <= far and hit["lex_terms"] >= terms)
+    return hit["distance"] <= floor.near or (hit["distance"] <= floor.far and hit["lex_terms"] >= floor.terms)
 
 
-def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,
-                  floor: tuple[float, float, int] | None = None) -> tuple[list[dict], ChainEvent | None]:
+def _sure(hit: dict, floor: CaseFloor | None) -> bool:
+    """판정 없이 채택하는 후보: 에러 코드 일치이거나 아주 가깝다."""
+    return floor is None or hit["exact"] or hit["distance"] is None or hit["distance"] <= floor.sure
+
+
+def _case_candidates(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None, floor: CaseFloor | None) -> list[dict]:
     with db.connect() as conn:
-        hits = db.search_case_entry(conn, ws, q_tokens, q_vec, error_code, 3)
-        entry = next((h["node_id"] for h in hits if _relevant(h, floor)), None)
-        if entry is None:
-            return [], None
+        hits = [h for h in db.search_case_entry(conn, ws, q_tokens, q_vec, error_code, 3) if _relevant(h, floor)]
+        if hits and not _sure(hits[0], floor):   # 판정에 보여 줄 제목·요약
+            briefs = db.case_briefs(conn, ws, [h["node_id"] for h in hits])
+            hits = [{**h, **briefs[h["node_id"]]} for h in hits if h["node_id"] in briefs]
+    return hits
+
+
+async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | None, usage) -> int | None:
+    """후보 중 진입 노드. 경계선 후보(주제만 비슷할 수 있다)는 가벼운 모델이 후보마다 같은 문제인지 보고(병렬), 통과한 첫 후보를 쓴다.
+    1위 후보의 판정이 실패하면 순위를 그대로 믿는다."""
+    if not hits:
+        return None
+    if _sure(hits[0], floor):
+        return hits[0]["node_id"]
+
+    async def judge(h: dict) -> bool | None:
+        try:
+            return await asyncio.wait_for(llm.judge_case(prof, query, h, usage), JUDGE_TIMEOUT)
+        except Exception:  # noqa: BLE001
+            return None
+
+    verdicts = await asyncio.gather(*(judge(h) for h in hits))
+    if verdicts[0] is None:
+        return hits[0]["node_id"]
+    return next((h["node_id"] for h, v in zip(hits, verdicts) if v), None)
+
+
+async def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,
+                        floor: CaseFloor | None = None, prof=None, query: str = "", usage=None) -> tuple[list[dict], ChainEvent | None]:
+    hits = await asyncio.to_thread(_case_candidates, ws, q_tokens, q_vec, error_code, floor)
+    entry = await _choose_entry(prof, query, hits, floor, usage)
+    if entry is None:
+        return [], None
+    return await asyncio.to_thread(_load_chain, ws, entry)
+
+
+def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
+    with db.connect() as conn:
         # 루트 기준 체인: 진입 노드의 루트에서 하향 (BE-HANDOFF-001 §4 ④)
         root = db.root_of(conn, ws, entry) or entry
         ch = db.chain(conn, ws, root, 4, 30)
