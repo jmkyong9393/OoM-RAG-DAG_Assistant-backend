@@ -83,6 +83,9 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
         conn.execute("""INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
                         VALUES ((SELECT tenant_id FROM workspaces WHERE id = %s), %s, 'policy_documents', %s, 'moved', 'script', 'script', %s, %s)""",
                      (ws, ws, str(existing["id"]), f"부서 {existing['workspace_id']} → {ws}", doc["title"]))
+    if existing and doc.get("supersedes") and not dry_run:   # 이미 적재된 개정판의 사슬을 채운다 (superseded_by 가 생기기 전에 적재한 DB)
+        conn.execute("UPDATE policy_documents SET superseded_by = %s WHERE slug = %s AND superseded_by IS NULL AND id <> %s",
+                     (existing["id"], doc["supersedes"], existing["id"]))
     if existing and existing["source_hash"] == h:
         result["action"] = "moved" if moved else "skipped"
         return result
@@ -120,7 +123,8 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
                                WHERE workspace_id = %s AND title = %s AND status = 'active' AND id <> %s""", (ws, doc["title"], doc_id)).fetchall()
     for o in olds:
         reason = f"{doc['version']} 개정"
-        conn.execute("UPDATE policy_documents SET status='retired', retired_at=%s, retire_reason=%s, retired_by='script' WHERE id=%s", (now, reason, o["id"]))
+        conn.execute("UPDATE policy_documents SET status='retired', retired_at=%s, retire_reason=%s, retired_by='script', superseded_by=%s WHERE id=%s",
+                     (now, reason, doc_id, o["id"]))
         conn.execute("""INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
                         SELECT w.tenant_id, %s, 'policy_documents', %s, 'superseded', 'script', 'script', %s, %s FROM workspaces w WHERE w.id = %s""",
                      (ws, str(o["id"]), reason, f"{doc['title']} {o['version']}", ws))
@@ -129,6 +133,30 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
                     SELECT w.tenant_id, %s, 'policy_documents', %s, 'indexed', 'script', 'script', %s, %s FROM workspaces w WHERE w.id = %s""",
                  (ws, str(doc_id), f"chunks={len(doc['chunks'])}", f"{doc['title']} {doc['version']}", ws))
     return result
+
+
+def revision_impact(conn, retired_slugs: list[str]) -> dict:
+    """폐기된 문서의 조문을 근거로 적어 둔 사례가 개정 뒤 어떻게 되는가. 사례(노드) 수를 상태별로 센다 — 한 사례가 여러 조문을 가리키면 가장 나쁜 상태로."""
+    rows = conn.execute("""
+        SELECT n.id, n.workspace_id AS ws, r->>'policy' AS slug, r->>'article' AS article
+        FROM log_nodes n CROSS JOIN LATERAL jsonb_array_elements(
+               CASE WHEN jsonb_typeof(n.attributes->'policy_refs') = 'array' THEN n.attributes->'policy_refs' ELSE '[]'::jsonb END) r
+        WHERE n.status = 'active' AND r->>'policy' = ANY(%s)""", (retired_slugs,)).fetchall()
+    rank = {"same": 0, "amended": 1, "replaced": 2, "retired": 2}
+    cache: dict[tuple, str] = {}
+    worst: dict[int, str] = {}
+    for r in rows:
+        key = (r["ws"], r["slug"], r["article"])
+        if key not in cache:
+            hit = conn.execute("SELECT status FROM resolve_policy_ref(%s, %s, %s)", key).fetchone()
+            cache[key] = hit["status"] if hit else "replaced"
+        st = cache[key]
+        if r["id"] not in worst or rank.get(st, 2) > rank.get(worst[r["id"]], 2):
+            worst[r["id"]] = st
+    out = {"cases": len(worst), "same": 0, "amended": 0, "replaced": 0}
+    for st in worst.values():
+        out["replaced" if st in ("replaced", "retired") else st] += 1
+    return out
 
 
 def order_by_supersedes(docs: list[dict]) -> list[dict]:
@@ -173,6 +201,11 @@ def main(argv: list[str]) -> int:
                 r = index_document(conn, doc, dry)
             print(f"{r['action']:<14} {r['slug']:<28} chunks={r['chunks']}" + (f" retired={r['retired']}" if r["retired"] else "")
                   + (f" terms+{r['terms']}" if r.get("terms") else ""))
+            if r["retired"] and not dry:   # 개정으로 폐기된 문서를 근거로 적어 둔 사례가 어떻게 되는지 알린다
+                imp = revision_impact(conn, r["retired"])
+                if imp["cases"]:
+                    print(f"  개정 영향: 사례 {imp['cases']}건 — 조문 그대로 {imp['same']} · 조문 개정 {imp['amended']} · 대응 조문 확인 필요 {imp['replaced']}"
+                          "  (목록: GET /policy-revisions/impact)")
     if not dry:
         print("다음: cd ai && uv run python -m app.worker --once --reindex  (토큰·임베딩 백필. terms 가 늘었으면 --reindex 로 기존 청크·노드 재토크나이즈)")
     return 0

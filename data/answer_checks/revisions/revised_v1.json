@@ -1,0 +1,12 @@
+[
+ {"workspace_id": 1, "query": "JVM 힙 비율은 얼마로 잡았어?", "note": "조문 개정(제10조 70% → 65%): 사례의 75%, 지금 기준 65%, 사례가 개정 전 기준이라는 것을 함께 말한다",
+  "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c5-heap-fix"}], "contains_all": ["75", "65"], "contains_any": ["개정"]},
+ {"workspace_id": 1, "query": "사후분석은 장애 복구하고 며칠 안에 써야 돼?", "note": "조문 개정(제16조 3영업일 → 2영업일): 지금 조문으로 답한다",
+  "contains_all": ["2영업일"], "contains_none": ["3영업일"]},
+ {"workspace_id": 1, "query": "커넥션풀 꽉찼을때 어케했어", "note": "개정됐지만 제9조는 그대로: 개정 안내를 붙이지 않는다",
+  "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c2-size-fix"}], "contains_all": ["20"], "contains_none": ["개정"]},
+ {"workspace_id": 3, "query": "영수증 잃어버렸는데 환불 되나요", "note": "개정판에 영수증 없는 경우의 조문이 생겼다: 사례 당시의 '기준 없음'을 지금도 없다고 말하지 않는다",
+  "cited": true, "contains_none": ["기준이 없", "규정에 없", "정해져 있지 않"]},
+ {"workspace_id": 3, "query": "직구 깨져서옴 환불 어케해", "note": "대응 조문이 정해지지 않은 개정: 사례가 개정 전 규정에 따른 처리라고 알린다",
+  "cited": true, "contains_any": ["개정"]}
+]

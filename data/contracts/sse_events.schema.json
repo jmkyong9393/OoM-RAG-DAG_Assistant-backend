@@ -278,6 +278,34 @@
           ],
           "default": null,
           "title": "Topic"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "enum": [
+                "amended",
+                "replaced"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "from_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From Version"
         }
       },
       "required": [

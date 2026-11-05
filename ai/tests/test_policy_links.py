@@ -58,6 +58,34 @@ def test_link_policies_adds_evidence_and_marks_nodes(monkeypatch):
     assert "(규정 관계: P2 운영지침 제5조 — 규정과 달리 처리한 예외. 0.6% 인데 롤백)" in text and "규정에 기준이 없다 — 합산 상한" in text
 
 
+def test_link_policies_marks_cases_whose_rule_was_revised(monkeypatch):
+    """개정된 조문: 내용이 바뀐 조문은 지금 조문을 근거로 싣고 표시한다. 대응 조문이 없으면 근거로 싣지 않고 개정 전 조문만 알린다."""
+    chunks = {("ops-1", "제10조"): {**_chunk("ops-2-a10-1", label="제10조 (컨테이너 자원)"), "status": "amended", "from_version": "v1"},
+              ("ops-1", "제11조"): {"id": None, "chunk_id": None, "status": "replaced", "from_title": "운영지침", "from_version": "v1",
+                                   "from_label": "제11조 (로그 보관)", "suggested_label": "제12조 (로그 보관 기간)"}}
+    monkeypatch.setattr(pipeline.db, "connect", lambda: __import__("contextlib").nullcontext())
+    monkeypatch.setattr(pipeline.db, "policy_ref_chunks", lambda conn, ws, keys: {k: chunks[k] for k in keys if k in chunks})
+    nodes = [_node(1, 0, [{"policy": "ops-1", "article": "제10조", "relation": "exception", "note": "당시 75%. 70% 가 현재 기준"}], type_="success"),
+             _node(2, 1, [{"policy": "ops-1", "article": "제11조", "relation": "follows"}]),
+             _node(3, 1, [{"relation": "gap", "topic": "합산 상한"}])]
+    for n in nodes:
+        n["near"] = True
+    nodes[0]["entry"] = True
+    policy: list[dict] = []
+    assert pipeline._link_policies(1, nodes, _event(nodes, entry=1), policy) == 1, "대응 조문이 없는 근거는 싣지 않는다"
+    assert nodes[0]["policy"][0] == {"relation": "exception", "ref": "P1", "label": "운영지침 제10조", "note": "당시 75%. 70% 가 현재 기준",
+                                     "revision": "amended", "from_version": "v1"}
+    assert nodes[1]["policy"][0]["ref"] is None and nodes[1]["policy"][0]["revision"] == "replaced" and nodes[1]["policy"][0]["label"] == "운영지침 v1 제11조"
+    assert nodes[2]["policy"][0]["revision"] == "replaced", "'기준 없음'도 개정 전의 판단으로 표시한다"
+    text = llm._render_context(policy, nodes)
+    assert "개정 전에 적은 메모(당시 75%. 70% 가 현재 기준)" in text and "사례는 v1 판 기준" in text
+    assert "개정 전 규정 운영지침 v1 제11조 기준의 처리" in text and "처리 당시에는 규정에 기준이 없었다" in text
+    must = llm._must_include(nodes)
+    assert any("개정되기 전(v1 판)" in m and "[P1]" in m for m in must), "지금 조문의 값을 현재 기준으로 쓰게 한다"
+    assert any("개정 전 규정(운영지침 v1 제11조)" in m for m in must)
+    assert not any("[None]" in m for m in must), "마커가 없는 근거를 마커로 쓰지 않는다"
+
+
 def test_linked_candidates_are_always_judged():
     linked = {"node_id": 9, "exact": False, "distance": None, "lex_terms": 0, "linked": True}
     assert pipeline._sure(linked, FLOOR) is False
@@ -87,7 +115,8 @@ async def test_case_answer_carries_the_rule_it_followed(fake_mode, backfilled, a
         cited = [p for p in d["policy"] if p["source"] == "case"]
         assert len(cited) == 1 and cited[0]["article_label"] == row["article_label"]
         node = next(n for n in d["chain"]["nodes"] if n["id"] == 113)
-        assert node["policy"] == [{"relation": "follows", "ref": cited[0]["ref"], "label": node["policy"][0]["label"], "note": "테스트", "topic": None}]
+        assert node["policy"] == [{"relation": "follows", "ref": cited[0]["ref"], "label": node["policy"][0]["label"], "note": "테스트", "topic": None,
+                                  "revision": None, "from_version": None}]
         stages = [(b[1]["node"], b[1]["status"], b[1].get("detail")) for b in blocks if b[0] == "stage"]
         assert ("policy_rag", "start", "linked") in stages
         names = [b[0] for b in blocks]

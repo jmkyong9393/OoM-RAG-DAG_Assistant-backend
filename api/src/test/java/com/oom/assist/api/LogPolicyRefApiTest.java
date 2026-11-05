@@ -85,6 +85,45 @@ class LogPolicyRefApiTest extends AbstractApiTest {
   }
 
   @Test
+  void revisionKeepsLinksAndListsAffectedCases() throws Exception {
+    String body = mvc.perform(as(post("/logs"), userLead, wsSw).content("""
+        {"type": "fail", "title": "풀 고갈", "body": "b", "policy_refs": [
+          {"relation": "follows", "policy": "ops-2026", "article": "제9조"},
+          {"relation": "exception", "policy": "ops-2026", "article": "제10조", "note": "당시 75%"},
+          {"relation": "follows", "policy": "ops-2026", "article": "별표 2"}]}""")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    long id = com.jayway.jsonpath.JsonPath.parse(body).read("$.id", Long.class);
+    // 개정판: 제9조는 그대로, 제10조는 내용이 바뀌고, 별표 2 는 없어졌다(점검표가 제11조로 옮겨짐)
+    long next = jdbc.sql("INSERT INTO policy_documents (workspace_id, slug, title, version, source_type, status) VALUES (?, 'ops-2027', '운영지침', '2', 'markdown', 'active') RETURNING id")
+        .param(wsSw).query(Long.class).single();
+    chunk(next, "ops-2027-a9-1", "제9조 (커넥션 풀)");
+    chunk(next, "ops-2027-a9-2", "제9조 (커넥션 풀)");
+    jdbc.sql("INSERT INTO policy_chunks (id, doc_id, article_label, text, tokens) VALUES ('ops-2027-a10-1', ?, '제10조 (컨테이너 자원)', '바뀐 본문', '본문')").param(next).update();
+    chunk(next, "ops-2027-a11-1", "제11조 (배포 전 점검)");
+    jdbc.sql("UPDATE policy_documents SET status = 'retired', superseded_by = ? WHERE slug = 'ops-2026'").param(next).update();
+
+    mvc.perform(as(get("/logs/" + id + "/policy-refs"), userLead, wsSw)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(3)))
+        .andExpect(jsonPath("$[0].article_label").value("제9조 (커넥션 풀)")).andExpect(jsonPath("$[0].revision").isEmpty())
+        .andExpect(jsonPath("$[0].from_label").value("운영지침 1 제9조 (커넥션 풀)"))
+        .andExpect(jsonPath("$[1].revision").value("amended")).andExpect(jsonPath("$[1].article_label").value("제10조 (컨테이너 자원)"))
+        .andExpect(jsonPath("$[2].revision").value("replaced")).andExpect(jsonPath("$[2].article_label").isEmpty())
+        .andExpect(jsonPath("$[2].from_label").value("운영지침 1 [별표 2] 배포 전 점검표"));
+    mvc.perform(as(get("/policy-revisions/impact"), userLead, wsSw)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.cases").value(1)).andExpect(jsonPath("$.summary.same").value(1))
+        .andExpect(jsonPath("$.summary.amended").value(1)).andExpect(jsonPath("$.summary.replaced").value(1))
+        .andExpect(jsonPath("$.items", hasSize(3))).andExpect(jsonPath("$.items[0].status").value("replaced"))
+        .andExpect(jsonPath("$.items[0].node_id").value(id)).andExpect(jsonPath("$.items[0].current_policy").value("ops-2027"))
+        .andExpect(jsonPath("$.items[1].status").value("amended")).andExpect(jsonPath("$.items[1].current_label").value("제10조 (컨테이너 자원)"))
+        .andExpect(jsonPath("$.items[1].note").value("당시 75%"));
+    // 다른 부서에는 이 부서의 사례가 보이지 않는다
+    mvc.perform(as(get("/policy-revisions/impact"), userBackend, wsHr)).andExpect(status().isOk()).andExpect(jsonPath("$.cases").value(0));
+    // 다시 연결하면 영향 목록에서 빠진다
+    mvc.perform(as(put("/logs/" + id + "/policy-refs"), userLead, wsSw)
+            .content("{\"policy_refs\": [{\"relation\": \"follows\", \"policy\": \"ops-2027\", \"article\": \"제11조\"}]}"))
+        .andExpect(status().isOk());
+    mvc.perform(as(get("/policy-revisions/impact"), userLead, wsSw)).andExpect(status().isOk()).andExpect(jsonPath("$.cases").value(0));
+  }
+
+  @Test
   void putReplacesRefsAndBulkCarriesThem() throws Exception {
     long n = node(wsSw, "fail", "힙 부족", userLead);
     mvc.perform(as(put("/logs/" + n + "/policy-refs"), userBackend, wsSw)

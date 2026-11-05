@@ -6,7 +6,8 @@
     "title": "팀장",
     "employee_no": "OOM0001",
     "email": "bae@oom.local",
-    "home_workspace_id": 1
+    "home_workspace_id": 1,
+    "consented": true
   },
   {
     "id": 2,
@@ -15,7 +16,8 @@
     "title": "매니저",
     "employee_no": "OOM0002",
     "email": "jang@oom.local",
-    "home_workspace_id": 1
+    "home_workspace_id": 1,
+    "consented": true
   },
   {
     "id": 3,
@@ -24,7 +26,8 @@
     "title": "주임",
     "employee_no": "OOM0003",
     "email": "shin@oom.local",
-    "home_workspace_id": 2
+    "home_workspace_id": 2,
+    "consented": true
   },
   {
     "id": 4,
@@ -33,7 +36,8 @@
     "title": "주임",
     "employee_no": "OOM0004",
     "email": "hong@oom.local",
-    "home_workspace_id": 3
+    "home_workspace_id": 3,
+    "consented": true
   },
   {
     "id": 5,
@@ -51,7 +55,8 @@
     "title": "팀장",
     "employee_no": "OIT0001",
     "email": "han@oit.local",
-    "home_workspace_id": 21
+    "home_workspace_id": 21,
+    "consented": true
   },
   {
     "id": 12,
@@ -60,7 +65,8 @@
     "title": "엔지니어",
     "employee_no": "OIT0002",
     "email": "oh@oit.local",
-    "home_workspace_id": 21
+    "home_workspace_id": 21,
+    "consented": true
   },
   {
     "id": 13,
@@ -69,7 +75,8 @@
     "title": "매니저",
     "employee_no": "OIT0003",
     "email": "moon@oit.local",
-    "home_workspace_id": 22
+    "home_workspace_id": 22,
+    "consented": true
   },
   {
     "id": 14,
@@ -78,7 +85,8 @@
     "title": "매니저",
     "employee_no": "OIT0004",
     "email": "kwon@oit.local",
-    "home_workspace_id": 23
+    "home_workspace_id": 23,
+    "consented": true
   },
   {
     "id": 15,

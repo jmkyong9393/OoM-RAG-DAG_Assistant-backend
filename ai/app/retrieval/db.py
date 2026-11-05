@@ -106,26 +106,29 @@ def same_article(label: str, article: str) -> bool:
 
 
 def policy_ref_chunks(conn, ws: int, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
-    """(문서 slug, 조문) → 그 조문의 첫 청크. 이 부서에서 검색되는 활성 문서만."""
-    if not keys:
-        return {}
-    rows = conn.execute("""
-        SELECT c.id, c.doc_id, d.slug, d.title AS doc_title, d.version, d.doc_type, c.article_label, c.page, c.text
-        FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
-        WHERE d.status = 'active' AND d.slug = ANY(%s) AND c.workspace_id IN (SELECT workspace_ancestors(%s))
-        ORDER BY c.id""", ([k[0] for k in keys], ws)).fetchall()
+    """(문서 slug, 조문) → 지금 유효한 조문. 문서가 개정됐으면 개정 사슬을 따라간다 (DB 함수 resolve_policy_ref).
+    status 가 current·same·amended 면 청크(id·text…)가 있고, replaced·retired 면 청크 없이 이전 조문 정보(from_*)만 있다.
+    원래 문서에 없는 조문은 결과에 없다."""
     out = {}
     for slug, article in keys:
-        hit = next((r for r in rows if r["slug"] == slug and same_article(r["article_label"], article)), None)
-        if hit:
-            out[(slug, article)] = hit
+        r = conn.execute("SELECT * FROM resolve_policy_ref(%s, %s, %s)", (ws, slug, article)).fetchone()
+        if r:
+            out[(slug, article)] = {**r, "id": r["chunk_id"]}
     return out
 
 
 def cases_linked_to(conn, ws: int, keys: list[tuple[str, str]], k: int = 3) -> list[int]:
-    """그 조문을 근거로 적어 둔 활성 사례. 규정과 달리 한 사례(exception)를 먼저, 그다음 최근 것."""
+    """그 조문을 근거로 적어 둔 활성 사례. 규정과 달리 한 사례(exception)를 먼저, 그다음 최근 것.
+    검색된 조문이 개정판이면 이전 판의 같은 조문(내용이 그대로이거나 개정된 것)을 가리키는 사례도 찾는다."""
     if not keys:
         return []
+    keys = list(keys)
+    for slug, article in list(keys):
+        for old in conn.execute("""SELECT o.slug FROM policy_documents o JOIN policy_documents c ON c.slug = %s
+                                   WHERE o.id <> c.id AND policy_successor(o.id) = c.id""", (slug,)).fetchall():
+            st = conn.execute("SELECT status FROM resolve_policy_ref(%s, %s, %s)", (ws, old["slug"], article)).fetchone()
+            if st and st["status"] in ("same", "amended"):
+                keys.append((old["slug"], article))
     rows = conn.execute("""
         SELECT n.id, r->>'policy' AS policy, r->>'article' AS article, r->>'relation' AS relation
         FROM log_nodes n CROSS JOIN LATERAL jsonb_array_elements(

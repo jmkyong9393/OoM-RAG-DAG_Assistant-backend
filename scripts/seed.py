@@ -87,12 +87,14 @@ def main():
         # 비밀번호: SEED_PASSWORD 하나를 전원에 BCrypt 로 넣는다(로컬 시연용). 이미 있는 사용자는 비밀번호를 건드리지 않는다.
         pw_hash = bcrypt.hashpw(SEED_PASSWORD.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("ascii")
         for u in load("users.json"):
-            cur.execute("""INSERT INTO users (id, tenant_id, name, title, employee_no, email, password_hash, password_changed_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s, now())
+            # consented: 개인정보 동의를 마친 상태로 넣는다(시연·적재 계정이 첫 로그인 동의 화면에 막히지 않게). 없는 계정은 동의 화면 시연용
+            cur.execute("""INSERT INTO users (id, tenant_id, name, title, employee_no, email, password_hash, password_changed_at, consented_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s, now(), CASE WHEN %s THEN now() END)
                            ON CONFLICT (id) DO UPDATE SET employee_no = EXCLUDED.employee_no, email = EXCLUDED.email,
                              password_hash = coalesce(users.password_hash, EXCLUDED.password_hash),
-                             password_changed_at = coalesce(users.password_changed_at, now())""",
-                        (u["id"], u["tenant_id"], u["name"], u.get("title"), u.get("employee_no"), u.get("email"), pw_hash))
+                             password_changed_at = coalesce(users.password_changed_at, now()),
+                             consented_at = coalesce(users.consented_at, EXCLUDED.consented_at)""",
+                        (u["id"], u["tenant_id"], u["name"], u.get("title"), u.get("employee_no"), u.get("email"), pw_hash, bool(u.get("consented"))))
         for m in load("workspace_members.json"):
             cur.execute("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
                         (m["workspace_id"], m["user_id"], m["role"]))

@@ -227,3 +227,72 @@ BEGIN
   FROM workspaces w WHERE w.id = d.workspace_id;
   DELETE FROM policy_documents WHERE id = p_doc;
 END $$;
+
+-- ── 규정 개정과 사례의 근거 조문 ────────────────────────────────────────────
+
+-- 개정 사슬의 끝(지금 유효한 문서). 대체된 적이 없으면 자기 자신.
+CREATE OR REPLACE FUNCTION policy_successor(p_doc bigint) RETURNS bigint LANGUAGE sql STABLE AS $$
+  WITH RECURSIVE s(id, nxt, depth) AS (
+    SELECT id, superseded_by, 0 FROM policy_documents WHERE id = p_doc
+    UNION ALL
+    SELECT d.id, d.superseded_by, s.depth + 1 FROM s JOIN policy_documents d ON d.id = s.nxt WHERE s.depth < 20
+  )
+  SELECT id FROM s ORDER BY depth DESC LIMIT 1
+$$;
+
+-- 청크 라벨('제12조 (접근 토큰)', '[별표 2] 점검표')이 그 조문('제12조', '별표 2')인가. '제1조' 가 '제10조' 에 걸리지 않게 한다.
+CREATE OR REPLACE FUNCTION is_article(p_label text, p_article text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$
+  SELECT left(h, length(p_article)) = p_article AND substr(h, length(p_article) + 1, 1) !~ '[0-9]'
+  FROM (SELECT regexp_replace(btrim(coalesce(p_label, '')), '^\[', '') AS h) x
+$$;
+
+-- 사례가 적어 둔 근거 조문(문서 slug + 조문)을 지금 유효한 조문으로 푼다. 문서가 개정됐으면 개정 사슬을 따라간다.
+--   current  : 그 문서가 유효하다 (개정 없음)
+--   same     : 개정됐지만 그 조문은 제목·내용이 그대로다
+--   amended  : 개정으로 그 조문의 내용이 바뀌었다 (제목은 같다)
+--   replaced : 개정판에 같은 번호·같은 제목의 조문이 없다 — 대응 조문을 사람이 정해야 한다. suggested_label 은 내용이 가장 가까운 새 조문
+--   retired  : 문서가 대체 없이 폐기됐거나 이 부서에서 보이지 않는다
+-- current·same·amended 만 chunk 를 돌려준다. 조문이 원래 문서에 없으면 행이 없다.
+CREATE OR REPLACE FUNCTION resolve_policy_ref(p_ws bigint, p_slug text, p_article text)
+RETURNS TABLE(status text, chunk_id text, doc_id bigint, slug text, doc_title text, version text, doc_type text, article_label text, page int, text text,
+              from_title text, from_version text, from_label text, suggested_label text)
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  d0 policy_documents%ROWTYPE;
+  cur policy_documents%ROWTYPE;
+  old_c policy_chunks%ROWTYPE;
+  new_c policy_chunks%ROWTYPE;
+  old_text text;
+  new_text text;
+  visible boolean;
+BEGIN
+  SELECT * INTO d0 FROM policy_documents d WHERE d.slug = p_slug;
+  IF NOT FOUND THEN RETURN; END IF;
+  SELECT * INTO old_c FROM policy_chunks c WHERE c.doc_id = d0.id AND is_article(c.article_label, p_article) ORDER BY c.id LIMIT 1;
+  IF NOT FOUND THEN RETURN; END IF;
+  SELECT * INTO cur FROM policy_documents d WHERE d.id = policy_successor(d0.id);
+  visible := cur.status = 'active' AND cur.workspace_id IN (SELECT workspace_ancestors(p_ws));
+  IF NOT visible THEN
+    RETURN QUERY SELECT 'retired'::text, NULL::text, NULL::bigint, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::int, NULL::text,
+                        d0.title, d0.version, old_c.article_label, NULL::text;
+    RETURN;
+  END IF;
+  IF cur.id = d0.id THEN
+    RETURN QUERY SELECT 'current'::text, old_c.id, cur.id, cur.slug, cur.title, cur.version, cur.doc_type, old_c.article_label, old_c.page, old_c.text,
+                        NULL::text, NULL::text, NULL::text, NULL::text;
+    RETURN;
+  END IF;
+  SELECT * INTO new_c FROM policy_chunks c WHERE c.doc_id = cur.id AND is_article(c.article_label, p_article) ORDER BY c.id LIMIT 1;
+  IF FOUND AND regexp_replace(new_c.article_label, '\s+', '', 'g') = regexp_replace(old_c.article_label, '\s+', '', 'g') THEN
+    SELECT string_agg(regexp_replace(c.text, '\s+', ' ', 'g'), ' ' ORDER BY c.id) INTO old_text FROM policy_chunks c WHERE c.doc_id = d0.id AND is_article(c.article_label, p_article);
+    SELECT string_agg(regexp_replace(c.text, '\s+', ' ', 'g'), ' ' ORDER BY c.id) INTO new_text FROM policy_chunks c WHERE c.doc_id = cur.id AND is_article(c.article_label, p_article);
+    RETURN QUERY SELECT CASE WHEN old_text = new_text THEN 'same' ELSE 'amended' END, new_c.id, cur.id, cur.slug, cur.title, cur.version, cur.doc_type,
+                        new_c.article_label, new_c.page, new_c.text, d0.title, d0.version, old_c.article_label, NULL::text;
+    RETURN;
+  END IF;
+  RETURN QUERY SELECT 'replaced'::text, NULL::text, cur.id, cur.slug, cur.title, cur.version, cur.doc_type, NULL::text, NULL::int, NULL::text,
+                      d0.title, d0.version, old_c.article_label,
+                      (SELECT c.article_label FROM policy_chunks c
+                        WHERE c.doc_id = cur.id AND c.embedding IS NOT NULL AND old_c.embedding IS NOT NULL
+                        ORDER BY c.embedding <=> old_c.embedding LIMIT 1);
+END $$;

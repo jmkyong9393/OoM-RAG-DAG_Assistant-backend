@@ -37,10 +37,27 @@ public class PolicyRefService {
   }
 
   public record RefInput(String relation, String policy, String article, String note, String topic) {}
-  /** docTitle·articleLabel 은 지금 그 조문이 활성 규정에 있을 때만 채워진다(개정으로 사라졌으면 null). */
-  private static final String[] NONE = new String[0];   // 조회했지만 없는 조문(개정으로 사라짐)
+  /**
+   * docTitle·articleLabel 은 지금 유효한 조문(개정됐으면 개정판의 조문). 개정판에 대응 조문이 정해지지 않았으면 null.
+   * revision: null(개정 없음·내용 그대로) · amended(조문 내용이 바뀜) · replaced(대응 조문 없음 — suggested* 는 내용이 가장 가까운 새 조문).
+   * fromLabel 은 사례가 따른 개정 전 조문('환불 규정 2026-11 제9조 (신선식품 반품 제한)').
+   */
+  public record RefView(String relation, String policy, String article, String note, String topic, String docTitle, String articleLabel,
+                        String revision, String fromLabel, String suggestedPolicy, String suggestedArticle, String suggestedLabel) {}
 
-  public record RefView(String relation, String policy, String article, String note, String topic, String docTitle, String articleLabel) {}
+  /** resolve_policy_ref 한 행. status: current·same·amended·replaced·retired. */
+  public record Resolved(String status, String slug, String docTitle, String version, String articleLabel,
+                         String fromTitle, String fromVersion, String fromLabel, String suggestedLabel) {
+    static final Resolved MISSING = new Resolved("missing", null, null, null, null, null, null, null, null);
+
+    boolean stale() {
+      return "replaced".equals(status) || "retired".equals(status);
+    }
+
+    String from() {
+      return fromLabel == null ? null : fromTitle + " " + fromVersion + " " + fromLabel;
+    }
+  }
   public record ArticleOption(String policy, String docTitle, String article, String articleLabel) {}
 
   /** 입력을 검증해 저장 형태로 바꾼다. 잘못된 관계·없는 조문은 400. null 은 '건드리지 않음', 빈 목록은 '비움'. */
@@ -89,7 +106,7 @@ public class PolicyRefService {
   public Map<Long, List<RefView>> readMany(long ws, List<Long> nodeIds) {
     Map<Long, List<RefView>> out = new LinkedHashMap<>();
     if (nodeIds.isEmpty()) return out;
-    Map<String, String[]> labels = new java.util.HashMap<>();   // 같은 조문을 가리키는 노드가 많다 — 조문 라벨 조회를 한 번씩만
+    Map<String, Resolved> labels = new java.util.HashMap<>();   // 같은 조문을 가리키는 노드가 많다 — 조문 조회를 한 번씩만
     jdbc.sql("SELECT id, attributes->'policy_refs' AS refs FROM log_nodes WHERE workspace_id = ? AND id = ANY (?) AND jsonb_typeof(attributes->'policy_refs') = 'array'")
         .params(ws, nodeIds.toArray(Long[]::new))
         .query((rs, i) -> Map.entry(rs.getLong("id"), rs.getString("refs"))).list()
@@ -100,7 +117,7 @@ public class PolicyRefService {
     return out;
   }
 
-  private List<RefView> views(long ws, String raw, Map<String, String[]> labels) {
+  private List<RefView> views(long ws, String raw, Map<String, Resolved> cache) {
     List<Map<String, String>> refs;
     try {
       refs = json.readValue(raw, new TypeReference<>() {});
@@ -109,13 +126,29 @@ public class PolicyRefService {
     }
     List<RefView> out = new ArrayList<>();
     for (Map<String, String> r : refs) {
-      String[] hit = r.get("policy") == null ? null
-          : labels.computeIfAbsent(r.get("policy") + "|" + r.get("article"), k -> java.util.Optional.ofNullable(labelOf(ws, r.get("policy"), r.get("article"))).orElse(NONE));
-      boolean found = hit != null && hit != NONE;
+      Resolved v = r.get("policy") == null ? null : resolve(ws, r.get("policy"), r.get("article"), cache);
+      boolean live = v != null && v != Resolved.MISSING && !v.stale();
+      boolean replaced = v != null && v.stale();
+      Matcher m = replaced && v.suggestedLabel() != null ? ARTICLE.matcher(v.suggestedLabel()) : null;
       out.add(new RefView(r.get("relation"), r.get("policy"), r.get("article"), r.get("note"), r.get("topic"),
-          found ? hit[0] : null, found ? hit[1] : null));
+          live ? v.docTitle() : null, live ? v.articleLabel() : null,
+          replaced ? "replaced" : live && "amended".equals(v.status()) ? "amended" : null,
+          v == null || v == Resolved.MISSING || "current".equals(v.status()) ? null : v.from(),
+          replaced && v.suggestedLabel() != null ? v.slug() : null, m != null && m.find() ? m.group(1) : null, replaced ? v.suggestedLabel() : null));
     }
     return out;
+  }
+
+  /** 근거 조문(문서 slug + 조문)을 지금 유효한 조문으로 푼다 — 문서가 개정됐으면 개정 사슬을 따라간다. 원래 문서에 없는 조문은 MISSING. */
+  public Resolved resolve(long ws, String slug, String article, Map<String, Resolved> cache) {
+    if (slug == null || article == null) return Resolved.MISSING;
+    return cache.computeIfAbsent(slug + "|" + article, k -> jdbc.sql("""
+        SELECT status, slug, doc_title, version, article_label, from_title, from_version, from_label, suggested_label
+        FROM resolve_policy_ref(?, ?, ?)""").params(ws, slug, article)
+        .query((rs, i) -> new Resolved(rs.getString("status"), rs.getString("slug"), rs.getString("doc_title"), rs.getString("version"),
+            rs.getString("article_label"), rs.getString("from_title"), rs.getString("from_version"), rs.getString("from_label"),
+            rs.getString("suggested_label")))
+        .optional().orElse(Resolved.MISSING));
   }
 
   /** 등록 화면의 조문 고르기: 문서 제목·조문 라벨에 q 의 모든 어절이 든 조문. 조문마다 한 줄. */
