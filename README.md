@@ -60,6 +60,8 @@ make index                            # data/policies/*.chunks.json 규정 적�
 
 `AI_MODE` — `openai`(OpenAI 호환 API, 정식 경로) · `fake`(키 없는 개발용: 실제 검색 + 규칙 기반 LLM 대체) · `dummy`(고정 이벤트, DB 불필요) · `auto`(기본). 공급자는 `LLM_PROFILE_<NAME>_*` 프로필로 바꾼다. 키를 넣은 뒤 `scripts/llm_smoke.py` 로 분류·생성·정제·임베딩을 1회 점검한다.
 
+임베딩 모델은 `LLM_PROFILE_<NAME>_EMBEDDING_MODEL`(기본 `text-embedding-3-large`, 1536 차원으로 줄여 받는다). **모델을 바꾸면 저장된 벡터를 전부 다시 만들어야 한다** — `make worker ARGS=--reindex`. 다시 만들기 전까지는 질의와 저장 벡터의 모델이 달라 벡터 검색을 끄고 어휘 검색만으로 답한다(AI 서비스 로그에 한 줄 경고). 사례 관련성 기준(`CASE_FLOOR`)은 모델별로 보정한 값이라, 목록에 없는 모델은 사례 관련성 판정 없이 동작한다.
+
 확인:
 
 ```bash

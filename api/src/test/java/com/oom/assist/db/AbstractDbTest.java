@@ -90,6 +90,15 @@ abstract class AbstractDbTest {
   }
 
   /** 지정한 축만 1인 1536차원 단위 벡터 문자열. 코사인 거리: 같은 축 0, 다른 축 1. */
+  /** 두 축에 같은 크기 성분을 둔 벡터 — unitVector(a) 와의 코사인 거리가 0 과 1 사이다. */
+  protected static String mixedVector(int a, int b) {
+    String[] v = new String[1536];
+    Arrays.fill(v, "0");
+    v[a] = "1";
+    v[b] = "1";
+    return "[" + String.join(",", v) + "]";
+  }
+
   protected static String unitVector(int axis) {
     return Arrays.stream(new int[1536]).mapToObj(i -> "0").collect(Collectors.joining(",", "[", "]"))
         .replaceFirst("^\\[" + "0,".repeat(axis) + "0", "[" + "0,".repeat(axis) + "1");

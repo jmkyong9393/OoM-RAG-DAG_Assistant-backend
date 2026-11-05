@@ -104,3 +104,12 @@ def test_dictionary_terms_keep_only_words_the_analyzer_splits():
     assert got[-1] == "E-500"
     if tok.backend == "kiwi":
         assert ("서킷브레이커" in got) == (tok.tokens("서킷브레이커").split() != ["서킷브레이커"])
+
+
+def test_embedding_mismatch_detects_vectors_from_another_model(pending_node, admin_conn):
+    from app.retrieval import db as _db
+    vec = "[" + ",".join(["0"] * 1535 + ["1"]) + "]"
+    admin_conn.execute("UPDATE log_nodes SET embedding = %s::vector, embedding_model = 'zz-old' WHERE id = %s", (vec, pending_node))
+    admin_conn.commit()
+    with _db.connect() as conn:
+        assert _db.embedding_mismatch(conn, "zz-new") is True
