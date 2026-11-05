@@ -65,6 +65,18 @@ class DbFunctionsTest extends AbstractDbTest {
   }
 
   @Test
+  void chunkSearchKeepsSingleListLeadersAheadOfOverlap() {
+    long doc = document(ws, "d1", "D", "v1", "active");
+    chunk(doc, "vecTop", "1", "x", "정산", unitVector(0));              // 벡터 1위, 어휘에는 없음
+    chunk(doc, "vecSecond", "2", "x", "출장", mixedVector(0, 1));       // 벡터 2위, 어휘에는 없음
+    chunk(doc, "lexTop", "3", "x", "VPN 신청", unitVector(5));          // 어휘 1위
+    chunk(doc, "overlap", "4", "x", "VPN", unitVector(6));              // 어휘 2위 + 벡터 3~4위 — RRF 점수는 벡터 1위보다 높다
+    List<String> hits = jdbc.sql("SELECT chunk_id FROM hybrid_search_chunks(?, 'VPN 신청', CAST(? AS vector), 5)")
+        .params(ws, unitVector(0)).query(String.class).list();
+    assertThat(hits).containsExactly("lexTop", "vecTop", "vecSecond", "overlap");
+  }
+
+  @Test
   void chunkSearchScopeIsSelfPlusAncestorsAndActiveOnly() {
     long sibling = workspace(tenant, company, "HR", true);
     long companyDoc = document(company, "c", "C", "v1", "active");

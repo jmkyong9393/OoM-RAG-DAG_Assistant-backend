@@ -34,6 +34,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             ws = db.workspace_settings(conn, workspace_id)
             terms = db.user_terms(conn)
             cctx = db.classify_context(conn, workspace_id, error_code)
+            stale_vec = _stale_vectors(conn, ws)
         if policy_enabled is None:
             policy_enabled = bool(ws["policy_enabled"])
         # 부서 설정: 사례를 끈 부서(규정 참조형)는 사례를 찾지 않는다. 규정까지 꺼져 있으면 사례가 유일한 근거라 켠 것으로 본다
@@ -45,7 +46,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         q_tokens = tokenizer.query_tokens(query, synonym_groups(ws["settings"]))
 
         # 질의 임베딩은 분류와 병렬로 시작 (openai 모드에서만 값이 있다. 분류가 규칙으로 즉시 끝나면 임베딩이 임계 경로)
-        q_vec_task = asyncio.create_task(asyncio.to_thread(embed.embed_one, prof, query))
+        q_vec_task = asyncio.create_task(_noop() if stale_vec else asyncio.to_thread(embed.embed_one, prof, query))
 
         # classify — 규칙으로 결정되면 LLM 호출 없음
         yield sse("stage", StageEvent(node="supervisor", status="start").model_dump())
@@ -53,7 +54,11 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         yield sse("intent", IntentEvent(intent=intent, mode=mode).model_dump())
         yield sse("stage", StageEvent(node="supervisor", status="done").model_dump())
 
-        q_vec = await q_vec_task
+        try:
+            q_vec = await q_vec_task
+        except Exception as e:  # noqa: BLE001 — 임베딩이 실패해도 어휘 검색으로 답한다
+            print(f"[pipeline] 질의 임베딩 실패, 어휘 검색만 쓴다: {type(e).__name__}", flush=True)
+            q_vec = None
 
         # workers (병렬. 한쪽 실패는 stage error 로 보고하고 계속)
         do_policy = policy_enabled and intent in ("policy", "both")
@@ -168,6 +173,22 @@ async def _noop():
     return None
 
 
+_warned_stale = False
+
+
+def _stale_vectors(conn, ws: dict) -> bool:
+    """저장된 벡터가 지금 임베딩 모델과 다른 모델로 만들어졌으면 벡터 검색을 쓰지 않는다(어휘 검색만). 재색인 전까지의 방어."""
+    global _warned_stale
+    if ai_mode() != "openai":
+        return False
+    model = load_profile(ws["settings"].get("llm_profile", "default")).embedding_model
+    stale = db.embedding_mismatch(conn, model)
+    if stale and not _warned_stale:
+        _warned_stale = True
+        print(f"[pipeline] 저장된 벡터가 {model} 로 만든 것이 아니다 — 어휘 검색만 쓴다. `python -m app.worker --reindex` 로 다시 만든다", flush=True)
+    return stale
+
+
 COMPANY_SLOTS = 2   # 근거 5건 중 회사 규정에 보장하는 자리 (후보 20건 안에 있을 때)
 
 
@@ -261,7 +282,8 @@ class CaseFloor(NamedTuple):
 
 
 # 벡터 거리 분포는 임베딩 모델마다 달라 보정한 모델에만 적용한다
-CASE_FLOOR = {"text-embedding-3-small": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.45)}
+CASE_FLOOR = {"text-embedding-3-small": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.45),
+              "text-embedding-3-large": CaseFloor(near=0.58, far=0.66, terms=2, sure=0.40)}   # 1536 차원으로 줄여 받은 벡터 기준
 JUDGE_TIMEOUT = 4.0
 
 

@@ -20,7 +20,7 @@ class LlmProfile:
     model_light: str
     model_answer: str
     embedding_model: str
-    embedding_dim: int = 1536
+    embedding_dim: int = 1536   # 스키마 vector(1536). text-embedding-3-* 는 이 차원으로 줄여 받는다
 
     @property
     def has_key(self) -> bool:
@@ -36,7 +36,7 @@ def profile(name: str = "default") -> LlmProfile:
         api_key=os.environ.get(p + "API_KEY", ""),
         model_light=os.environ.get(p + "MODEL_LIGHT") or "gpt-4o-mini",
         model_answer=os.environ.get(p + "MODEL_ANSWER") or "gpt-4o-mini",
-        embedding_model=os.environ.get(p + "EMBEDDING_MODEL") or "text-embedding-3-small",
+        embedding_model=os.environ.get(p + "EMBEDDING_MODEL") or "text-embedding-3-large",
     )
 
 
@@ -55,11 +55,6 @@ def answer_max_tokens() -> int | None:
     """답변 생성 하드 상한(max_tokens). 0 이면 상한 없음. 프롬프트의 분량 지시가 1차, 이 값은 폭주 방지용 2차(기본 400 ≈ 지시 준수 시 최대치의 2배)."""
     n = int(os.environ.get("ANSWER_MAX_TOKENS") or "400")
     return n if n > 0 else None
-
-
-def worker_embedded() -> bool:
-    """WORKER_EMBEDDED=1 이면 정제 워커를 AI 서비스 프로세스 안(별도 스레드·별도 이벤트 루프)에서 돈다 — kiwi 모델·런타임을 공유해 ≈500 MB 절감."""
-    return os.environ.get("WORKER_EMBEDDED", "0").lower() in ("1", "true", "yes")
 
 
 def worker_embedded() -> bool:

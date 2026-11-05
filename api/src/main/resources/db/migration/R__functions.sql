@@ -54,9 +54,10 @@ RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
       FROM cand WHERE p_vec IS NOT NULL AND embedding IS NOT NULL
     ) t WHERE r <= 20
   )
+  -- RRF 는 한쪽에서만 1위인 조문을 양쪽에서 중간 순위인 조문들 뒤로 민다. 벡터 상위 2건과 어휘 1위는 앞에 둔다
   SELECT id, SUM(1.0 / (60 + r))::double precision AS score
-  FROM (SELECT * FROM lex UNION ALL SELECT * FROM vec) u
-  GROUP BY id ORDER BY score DESC, id LIMIT p_k
+  FROM (SELECT id, r, r <= 1 AS lead FROM lex UNION ALL SELECT id, r, r <= 2 FROM vec) u
+  GROUP BY id ORDER BY bool_or(lead) DESC, score DESC, id LIMIT p_k
 $$;
 
 -- 로그 진입 노드 검색: error_code 정확 일치(+1.0) → keywords 겹침(+0.5, 겹친 수에 비례) → 어휘·벡터 RRF. active 노드, 자기 워크스페이스만.

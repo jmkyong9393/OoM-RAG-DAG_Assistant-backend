@@ -203,11 +203,23 @@ def chunks_without_tokens(conn, limit: int = 200) -> list[dict]:
                            WHERE c.tokens IS NULL ORDER BY c.id LIMIT %s""", (limit,)).fetchall()
 
 
-def reset_tokens(conn) -> None:
-    """토크나이저가 바뀌었을 때 전부 다시 만들게 tokens 를 비운다 (worker --reindex)."""
+def reset_tokens(conn, embedding_model: str | None = None) -> None:
+    """토크나이저가 바뀌었을 때 전부 다시 만들게 tokens 를 비운다 (worker --reindex).
+    embedding_model 을 주면 다른 모델로 만든 청크 벡터도 비워 다시 만들게 한다 (노드 벡터는 재색인 때 늘 다시 만든다)."""
     conn.execute("UPDATE policy_chunks SET tokens = NULL")
+    if embedding_model:
+        conn.execute("UPDATE policy_chunks SET embedding = NULL WHERE embedding IS NOT NULL AND meta->>'embedding_model' IS DISTINCT FROM %s",
+                     (embedding_model,))
     conn.execute("UPDATE log_nodes SET tokens = NULL WHERE refine_status <> 'pending'")
     conn.commit()
+
+
+def embedding_mismatch(conn, embedding_model: str) -> bool:
+    """저장된 벡터 중 지금 모델이 아닌 모델로 만든 것이 있는가. 모델이 다르면 거리가 뜻이 없다."""
+    return conn.execute("""
+        SELECT EXISTS (SELECT 1 FROM policy_chunks WHERE embedding IS NOT NULL AND meta->>'embedding_model' IS DISTINCT FROM %(m)s)
+            OR EXISTS (SELECT 1 FROM log_nodes WHERE embedding IS NOT NULL AND embedding_model IS DISTINCT FROM %(m)s) AS stale""",
+        {"m": embedding_model}).fetchone()["stale"]
 
 
 def set_chunk_tokens(conn, chunk_id: str, tokens: str, title_tokens: str, vec: list[float] | None, embedding_model: str | None) -> None:

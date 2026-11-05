@@ -25,7 +25,9 @@ def test_relevance_floor(hit, expected):
 
 def test_floor_only_for_calibrated_models():
     assert pipeline._relevant({"exact": False, "distance": 0.99, "lex_terms": 0}, None) is True
-    assert "text-embedding-3-small" in pipeline.CASE_FLOOR and pipeline.CASE_FLOOR.get("unknown-model") is None
+    assert {"text-embedding-3-small", "text-embedding-3-large"} <= set(pipeline.CASE_FLOOR) and pipeline.CASE_FLOOR.get("unknown-model") is None
+    for f in pipeline.CASE_FLOOR.values():
+        assert f.sure < f.near < f.far, "판정 생략 < 후보 < 단어 일치가 있을 때의 후보"
 
 
 @requires_db
