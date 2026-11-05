@@ -30,8 +30,11 @@ public class LogBulkService {
 
   private final LogRepository repo;
 
-  public LogBulkService(LogRepository repo) {
+  private final PolicyRefService policyRefs;
+
+  public LogBulkService(LogRepository repo, PolicyRefService policyRefs) {
     this.repo = repo;
+    this.policyRefs = policyRefs;
   }
 
   // ── suggest ────────────────────────────────────────────────────────────────
@@ -58,7 +61,8 @@ public class LogBulkService {
   // ── bulk ───────────────────────────────────────────────────────────────────
 
   public record Item(String ref, String type, String title, String body, String parentRef, List<String> parentRefs, String problemTitle, String source,
-                     String sourceRef, String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt) {}
+                     String sourceRef, String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt,
+                     List<PolicyRefService.RefInput> policyRefs) {}
   public record BulkRequest(List<Item> items) {}
   public record ItemResult(String ref, long id, String status) {}
   public record BulkResponse(int created, int existing, List<ItemResult> items) {}
@@ -99,6 +103,7 @@ public class LogBulkService {
         if (pid != null && !parentIds.contains(pid)) parentIds.add(pid);
       }
       long id;
+      var refs = policyRefs.normalize(ws, it.policyRefs());   // 잘못된 근거 조문은 여기서 400 → 전체 롤백
       String sourceRef = blank(it.sourceRef()) ? null : it.sourceRef().trim();
       // 해결 시각은 success 노드의 created_at(과거 로그를 적재할 때 대시보드 해결 시간이 "지금 - 7월" 로 왜곡되지 않게)
       OffsetDateTime resolvedAt = it.createdAt() != null ? it.createdAt() : OffsetDateTime.now();
@@ -125,6 +130,7 @@ public class LogBulkService {
         if ("success".equals(it.type()))
           for (Long parentId : parentIds) repo.setResolvedIfOpen(repo.rootIdOf(parentId), resolvedAt);
       }
+      policyRefs.write(id, refs);
       byRef.put(ref, id);
       out.add(new ItemResult(ref, id, "created"));
       created++;

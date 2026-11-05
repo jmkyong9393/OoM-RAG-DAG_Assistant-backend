@@ -47,6 +47,7 @@ oom:
     base-url: ${AI_BASE_URL:http://localhost:8000}
   cors:
     origins: ${CORS_ORIGINS:http://localhost:3000}
+  public-tenant: ${PUBLIC_TENANT:}                   # 로그인 전 GET /workspaces 에 부서를 보여 줄 데모 회사 slug. 비우면 로그인 전에는 빈 목록
   legal:
     privacy-policy-path: ${PRIVACY_POLICY_PATH:../data/legal/privacy_policy.md}   # GET /auth/privacy-policy 가 읽는 문안. 작업 폴더가 api/ 기준
   session:

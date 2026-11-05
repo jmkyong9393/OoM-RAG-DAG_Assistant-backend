@@ -61,7 +61,7 @@ def search_chunks(conn, ws: int, tokens: str | None, vec: list[float] | None, k:
         return []
     ids = [r["chunk_id"] for r in rows]
     detail = {r["id"]: r for r in conn.execute("""
-        SELECT c.id, c.doc_id, d.title AS doc_title, d.version, d.doc_type, c.article_label, c.page, c.text
+        SELECT c.id, c.doc_id, d.slug, d.title AS doc_title, d.version, d.doc_type, c.article_label, c.page, c.text
         FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id WHERE c.id = ANY(%s)""", (ids,))}
     return [{**detail[i], "score": s["score"]} for i, s in zip(ids, rows) if i in detail]
 
@@ -82,7 +82,7 @@ def search_case_entry(conn, ws: int, tokens: str | None, vec: list[float] | None
 def chain(conn, ws: int, entry: int, max_depth: int = 3, max_nodes: int = 30) -> dict:
     rows = conn.execute("""
         SELECT v.id, v.type, v.status, v.title, v.body, v.resolution_summary, v.error_code, v.author_name,
-               g.depth, v.path_label, v.last_confirmed_at, v.root_id
+               g.depth, v.path_label, v.last_confirmed_at, v.root_id, v.attributes->'policy_refs' AS policy_refs
         FROM get_chain(%s, %s, %s, %s) g JOIN v_log_nodes v ON v.id = g.node_id
         ORDER BY g.depth, v.id""", (ws, entry, max_depth, max_nodes)).fetchall()
     if not rows:
@@ -97,6 +97,43 @@ def chain(conn, ws: int, entry: int, max_depth: int = 3, max_nodes: int = 30) ->
 def root_of(conn, ws: int, node_id: int) -> int | None:
     row = conn.execute("SELECT root_id FROM v_log_nodes WHERE workspace_id = %s AND id = %s", (ws, node_id)).fetchone()
     return row["root_id"] if row else None
+
+
+def same_article(label: str, article: str) -> bool:
+    """청크 라벨('제12조 (접근 토큰과 서비스 계정)', '[별표 2] 배포 전 점검표')이 그 조문('제12조', '별표 2')인가."""
+    head = (label or "").strip().lstrip("[")
+    return head.startswith(article) and not head[len(article):len(article) + 1].isdigit()
+
+
+def policy_ref_chunks(conn, ws: int, keys: list[tuple[str, str]]) -> dict[tuple[str, str], dict]:
+    """(문서 slug, 조문) → 그 조문의 첫 청크. 이 부서에서 검색되는 활성 문서만."""
+    if not keys:
+        return {}
+    rows = conn.execute("""
+        SELECT c.id, c.doc_id, d.slug, d.title AS doc_title, d.version, d.doc_type, c.article_label, c.page, c.text
+        FROM policy_chunks c JOIN policy_documents d ON d.id = c.doc_id
+        WHERE d.status = 'active' AND d.slug = ANY(%s) AND c.workspace_id IN (SELECT workspace_ancestors(%s))
+        ORDER BY c.id""", ([k[0] for k in keys], ws)).fetchall()
+    out = {}
+    for slug, article in keys:
+        hit = next((r for r in rows if r["slug"] == slug and same_article(r["article_label"], article)), None)
+        if hit:
+            out[(slug, article)] = hit
+    return out
+
+
+def cases_linked_to(conn, ws: int, keys: list[tuple[str, str]], k: int = 3) -> list[int]:
+    """그 조문을 근거로 적어 둔 활성 사례. 규정과 달리 한 사례(exception)를 먼저, 그다음 최근 것."""
+    if not keys:
+        return []
+    rows = conn.execute("""
+        SELECT n.id, r->>'policy' AS policy, r->>'article' AS article, r->>'relation' AS relation
+        FROM log_nodes n CROSS JOIN LATERAL jsonb_array_elements(
+               CASE WHEN jsonb_typeof(n.attributes->'policy_refs') = 'array' THEN n.attributes->'policy_refs' ELSE '[]'::jsonb END) r
+        WHERE n.workspace_id = %s AND n.status = 'active' AND r->>'policy' = ANY(%s)
+        ORDER BY (r->>'relation' = 'exception') DESC, n.id DESC""", (ws, [k_[0] for k_ in keys])).fetchall()
+    want = set(keys)
+    return list(dict.fromkeys(r["id"] for r in rows if (r["policy"], r["article"]) in want))[:k]
 
 
 def case_briefs(conn, ws: int, node_ids: list[int]) -> dict[int, dict]:

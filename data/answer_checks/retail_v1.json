@@ -1,0 +1,22 @@
+[
+ {"workspace_id": 1, "query": "JVM 힙 비율은 얼마로 잡았어?", "note": "예외: 당시 75% 로 잡았다가 70% 로 낮춤. 현재 기준과 당시 값을 함께 말해야 한다",
+  "cite_chunks_any": ["retail-deploy-incident-2026-11-a10-1"], "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c5-heap-fix"}], "contains_all": ["75", "70"]},
+ {"workspace_id": 1, "query": "배포하고 에러율 0.6% 나왔는데 롤백해야 해?", "note": "예외: 기준(1%) 미달인데 담당자 판단으로 롤백한 사례가 있다",
+  "cite_chunks_any": ["retail-deploy-incident-2026-11-a5-1"], "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c6-deploy"}, {"log": "sw-dev_v1", "ref": "c6-rollback"}], "contains_all": ["1%"]},
+ {"workspace_id": 2, "query": "지운 메일 다시 살릴 수 있어?", "note": "예외: 당시 휴지통 보관 90일, 현재 30일",
+  "cite_chunks_any": ["retail-infosec-2026-11-a13-1"], "cite_nodes_any": [{"log": "hr-ga_v1", "ref": "h3-trash"}, {"log": "hr-ga_v1", "ref": "h3-trash-fix"}], "contains_all": ["30일"]},
+ {"workspace_id": 1, "query": "CDN 이 401 응답을 캐싱한 문제 어떻게 풀었어?", "note": "규정에 기준 없음",
+  "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c3-cdn"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+ {"workspace_id": 1, "query": "풀 크기 늘린 뒤에 DB 연결이 거부됐는데 왜 그랬어?", "note": "규정에 기준 없음(합산 상한)",
+  "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c2-max"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+ {"workspace_id": 2, "query": "결재자가 휴가 가서 결재가 멈췄을 때 어떻게 했어?", "note": "규정에 기준 없음(대결자 지정)",
+  "cite_nodes_any": [{"log": "hr-ga_v1", "ref": "h5-deputy"}, {"log": "hr-ga_v1", "ref": "h5-deputy-fix"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+ {"workspace_id": 1, "query": "커넥션풀 꽉찼을때 어케했어", "note": "따른 조치: 제9조(풀 20·대기 3초)",
+  "cite_chunks_any": ["retail-deploy-incident-2026-11-a9-1"], "cite_nodes_any": [{"log": "sw-dev_v1", "ref": "c2-size-fix"}], "contains_all": ["20"]},
+ {"workspace_id": 2, "query": "비번 틀려서 잠겼는데 어케 품", "note": "따른 조치: 제11조 셀프 잠금 해제",
+  "cite_chunks_any": ["retail-infosec-2026-11-a11-1", "retail-infosec-2026-11-a10-1"], "cite_nodes_any": [{"log": "hr-ga_v1", "ref": "h2-self"}]},
+ {"workspace_id": 1, "query": "사후분석은 장애 복구하고 며칠 안에 써야 돼?", "note": "규정 질의: 사례 없이 규정만으로 답한다",
+  "cite_chunks_any": ["retail-deploy-incident-2026-11-a16-1"], "contains_all": ["3영업일"]},
+ {"workspace_id": 3, "query": "얼린 고기 잘못 샀다고 물러달라는데 해줘도 되나요?", "note": "규정 질의: 회사 규정(제9조)이 고시보다 앞선다",
+  "cite_chunks_any": ["retail-refund-2026-11-a9-1"]}
+]
