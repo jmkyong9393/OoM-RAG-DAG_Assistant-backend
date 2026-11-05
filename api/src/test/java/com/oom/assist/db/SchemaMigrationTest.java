@@ -23,9 +23,10 @@ class SchemaMigrationTest extends AbstractDbTest {
   void functionsAndViewsExist() {
     List<String> fns = jdbc.sql("SELECT proname FROM pg_proc WHERE proname = ANY (?)")
         .param(new String[] {"workspace_ancestors", "or_tsquery", "hybrid_search_chunks", "hybrid_search_nodes", "search_case_entry",
-            "chain_at_depth", "get_chain", "would_create_cycle", "orphaned_descendants", "purge_document"})
+            "chain_at_depth", "get_chain", "would_create_cycle", "orphaned_descendants", "purge_document",
+            "policy_successor", "is_article", "resolve_policy_ref"})
         .query(String.class).list();
-    assertThat(fns).hasSize(10);
+    assertThat(fns).hasSize(13);
     List<String> views = jdbc.sql("SELECT table_name FROM information_schema.views WHERE table_name LIKE 'v\\_%'").query(String.class).list();
     assertThat(views).containsExactlyInAnyOrder("v_log_nodes", "v_policy_documents", "v_search_sessions");
   }

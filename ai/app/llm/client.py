@@ -182,33 +182,56 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
            "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않고, 사례가 없다거나 다루지 않는다는 말도 하지 않는다."]
     for n in live:
         for p in n.get("policy") or []:
-            if p["relation"] == "exception" and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
+            if p["relation"] == "exception" and p.get("ref") and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
                 out.append(f"[{n['ref']}] 은 당시 규정([{p['ref']}])과 달리 처리한 사례다. 당시에 어떻게 했는지와 지금의 기준을 함께 쓰고 [{n['ref']}][{p['ref']}] 를 붙인다."
                            + (f" ({p['note']})" if p.get("note") else ""))
+    # 규정이 개정된 사례(진입 사례와 같은 줄기만): 지금 기준과 다를 수 있다는 것을 빠뜨리면 옛 기준을 현재 기준처럼 답한다. 사례가 여럿이어도 한 줄로
+    line = [n for n in live if n.get("entry") or n.get("near")]
+    amended = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "amended"]
+    replaced = [(n, p) for n in line for p in n.get("policy") or [] if p.get("revision") == "replaced"]
+    if amended:
+        refs = " ".join(dict.fromkeys(f"[{p['ref']}]" for _, p in amended))
+        out.append(f"이 사례들은 규정이 개정되기 전({amended[0][1].get('from_version')} 판)에 처리한 것이다. 현재 기준은 지금 조문 {refs} 에 적힌 값으로 쓴다 — "
+                   "메모에 '현재 기준'이라고 적힌 값은 개정 전 기준이므로 '당시 기준'이라고 쓴다. 사례에서 쓴 값, 당시 기준, 지금 기준이 다르면 셋을 구분해 한 번씩만 밝힌다.")
+    if replaced:
+        n, p = next(((n, p) for n, p in replaced if n.get("entry")), replaced[0])
+        how = "과 달리 한" if p["relation"] == "exception" else "에 따른"
+        out.append(f"[{n['ref']}] 은 개정 전 규정({p.get('label')}){how} 처리다. 그 규정은 개정됐으니, 사례의 처리 방식이 지금 기준과 다를 수 있다고 알리고 "
+                   "지금 기준은 ## 규정 의 조문으로 답한다.")
     entry = next((n for n in live if n.get("entry")), None)
     for p in (entry or {}).get("policy") or []:
-        if p["relation"] == "gap":
+        if p["relation"] == "gap" and p.get("revision"):
+            out.append(f"[{entry['ref']}] 을 처리할 당시에는 이 부분({p.get('topic') or '이 조치'})을 정한 규정이 없었다. 그 뒤 규정이 개정됐으니 "
+                       "'규정에 기준이 없다'고 단정하지 말고, 지금 기준은 ## 규정 의 조문으로 답한다.")
+        elif p["relation"] == "gap":
             out.append(f"[{entry['ref']}] 이 다루는 부분({p.get('topic') or '이 조치'})은 회사 규정에 기준이 없다. "
                        f"'이 부분은 규정에 기준이 없다'는 문장을 답변에 넣고 [{entry['ref']}] 를 붙인다.")
         elif p["relation"] == "follows" and (entry["type"] == "success" or not fixes):
             out.append(f"[{entry['ref']}] 의 조치가 따른 규정 [{p['ref']}] 을 한 문장으로 밝힌다.")
     if entry and entry["type"] != "success" and fixes and case_required:
         # 해결 줄에 실제로 붙어 있는 표시에 맞춰 지시한다 — 근거가 없는 줄에 [P…] 를 붙이라고 하면 없는 마커를 지어낸다
-        marks = [p for n in live if n["ref"] in fixes for p in (n.get("policy") or [])]
+        marks = [p for n in live if n["ref"] in fixes for p in (n.get("policy") or []) if p.get("revision") != "replaced"]
         if any(p.get("ref") for p in marks):
             out.append("인용한 해결 줄 끝에 규정 관계가 적혀 있으면 그 규정을 한 문장으로 밝히고 그 [P…] 를 붙인다.")
         if any(p["relation"] == "gap" for p in marks):
             out.append("인용한 해결 줄이 규정에 기준이 없는 부분이라고 표시돼 있으면 '이 부분은 규정에 기준이 없다'고 알린다.")
-    return out[:5]
+    return out[:6]
 
 
 def _policy_note(p: dict) -> str:
     """사례 줄 끝에 붙는 근거 표시(모델에게 주는 자료). 답변에 그대로 옮기지 않게 지시문 (7)이 문장 형태를 정한다."""
+    if p["relation"] == "gap" and p.get("revision"):
+        return f" (규정 관계: 처리 당시에는 규정에 기준이 없었다 — {p.get('topic') or p.get('note') or ''}. 그 뒤 규정이 개정됐다)"
     if p["relation"] == "gap":
         return f" (규정 관계: 이 부분은 규정에 기준이 없다 — {p.get('topic') or p.get('note') or ''})"
     kind = "규정과 달리 처리한 예외" if p["relation"] == "exception" else "규정을 따른 조치"
     tail = f". {p['note']}" if p.get("note") else ""
-    return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail})"
+    if tail and p.get("revision"):   # 메모의 '현재 기준'은 개정 전의 것이다
+        tail = f". 개정 전에 적은 메모({p['note']})"
+    if p.get("revision") == "replaced":   # 근거로 실리지 않는다(마커 없음) — 개정 전 기준이었다는 사실만
+        return f" (규정 관계: 개정 전 규정 {p.get('label') or ''} 기준의 처리 — {kind}{tail}. 이 규정은 그 뒤 개정됐고 지금 대응하는 조문은 정해지지 않았다)"
+    rev = f". 이 조문은 그 뒤 개정됐다 — 사례는 {p.get('from_version')} 판 기준이다" if p.get("revision") == "amended" else ""
+    return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail}{rev})"
 
 
 def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:

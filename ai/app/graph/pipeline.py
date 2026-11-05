@@ -247,19 +247,28 @@ def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | Non
     with db.connect() as conn:
         chunks = db.policy_ref_chunks(conn, ws, keys)
     by_chunk = {p["chunk_id"]: p for p in policy_ctx}
+    # 체인이 가리키는 규정이 개정됐는가 — '기준 없음'은 문서를 적어 두지 않으므로, 같은 체인의 다른 근거로 판단한다
+    revised = any(c.get("status") in ("amended", "replaced", "retired") for c in chunks.values())
     wide = not policy_ctx
     added = 0
     for n, r in sorted(pairs, key=lambda x: (x[0]["id"] != entry, not x[0].get("near"), x[1].get("relation") != "exception",
                                              x[0]["type"] != "success", x[0]["depth"])):
         if r.get("relation") == "gap":
-            n.setdefault("policy", []).append({"relation": "gap", "topic": r.get("topic"), "note": r.get("note")})
+            n.setdefault("policy", []).append({"relation": "gap", "topic": r.get("topic"), "note": r.get("note"),
+                                               **({"revision": "replaced"} if revised else {})})   # 당시의 판단 — 개정판에는 기준이 생겼을 수 있다
             continue
         row = chunks.get((r.get("policy"), r.get("article")))
         if not row or r.get("relation") not in ("follows", "exception"):
             continue
+        if row.get("status") in ("replaced", "retired"):
+            # 규정이 개정돼 대응 조문이 정해지지 않았다 — 폐기된 조문을 근거로 싣지 않고, 개정 전 기준이었다는 사실만 붙인다
+            n.setdefault("policy", []).append({"relation": r["relation"], "ref": None, "label": f"{row['from_title']} {row['from_version']} {r['article']}",
+                                               "note": r.get("note"), "revision": "replaced", "from_version": row["from_version"]})
+            continue
+        amended = row.get("status") == "amended"
         p = by_chunk.get(row["id"])
         if p is None:
-            key_node = (wide or n["id"] == entry or n["depth"] == 0 or r["relation"] == "exception"
+            key_node = (wide or n["id"] == entry or n["depth"] == 0 or r["relation"] == "exception" or amended
                         or (n.get("near") and n["type"] == "success"))   # 답변이 인용할 해결 줄의 근거 — 지시(_must_include)와 맞춘다
             if not key_node or added >= MAX_LINKED:
                 continue
@@ -267,7 +276,8 @@ def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | Non
             policy_ctx.append(p)
             by_chunk[row["id"]] = p
             added += 1
-        n.setdefault("policy", []).append({"relation": r["relation"], "ref": p["ref"], "label": f"{p['doc_title']} {r['article']}", "note": r.get("note")})
+        n.setdefault("policy", []).append({"relation": r["relation"], "ref": p["ref"], "label": f"{p['doc_title']} {r['article']}", "note": r.get("note"),
+                                           **({"revision": "amended", "from_version": row["from_version"]} if amended else {})})
     if chain_event:
         marks = {n["id"]: n["policy"] for n in chain_ctx if n.get("policy")}
         for ev in chain_event.nodes:

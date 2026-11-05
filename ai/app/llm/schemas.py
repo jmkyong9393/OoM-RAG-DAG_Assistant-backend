@@ -49,10 +49,13 @@ class PolicyRef(BaseModel):
 class NodePolicy(BaseModel):
     """사례 노드의 근거 조문. follows = 규정을 따른 조치, exception = 규정과 달리 한 조치, gap = 규정에 기준이 없음."""
     relation: Literal["follows", "exception", "gap"]
-    ref: str | None = None      # policy 이벤트의 마커(P1…). gap 은 없음
+    ref: str | None = None      # policy 이벤트의 마커(P1…). gap 과 revision=replaced 는 없음
     label: str | None = None    # '배포·장애 대응 운영지침 제12조'
     note: str | None = None
     topic: str | None = None    # gap: 규정에 없는 기준
+    # 규정이 개정된 사례: amended = 그 조문의 내용이 바뀜(ref 는 지금 조문), replaced = 개정판에 대응 조문이 정해지지 않음(ref 없음, label 은 개정 전 조문)
+    revision: Literal["amended", "replaced"] | None = None
+    from_version: str | None = None   # 사례가 따른 판
 
 
 class ChainNode(BaseModel):

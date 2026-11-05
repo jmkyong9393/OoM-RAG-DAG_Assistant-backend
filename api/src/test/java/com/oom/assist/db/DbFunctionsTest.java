@@ -99,6 +99,44 @@ class DbFunctionsTest extends AbstractDbTest {
     assertThat(jdbc.sql("SELECT chunk_id FROM hybrid_search_chunks(?, '', NULL, 5)").param(ws).query(String.class).list()).isEmpty();
   }
 
+  // ── resolve_policy_ref ─────────────────────────────────────────────────
+
+  @Test
+  void policyRefFollowsRevisionChain() {
+    long old = document(ws, "ops-1", "운영지침", "v1", "retired");
+    chunk(old, "ops-1-a9-1", "제9조 (커넥션 풀)", "풀 최대 20", "풀", unitVector(0));
+    chunk(old, "ops-1-a10-1", "제10조 (컨테이너 자원)", "힙 70%", "힙", unitVector(1));
+    chunk(old, "ops-1-a11-1", "제11조 (로그 보관)", "90일 보관", "로그", unitVector(2));
+    long cur = document(ws, "ops-2", "운영지침", "v2", "active");
+    chunk(cur, "ops-2-a9-1", "제9조 (커넥션 풀)", "풀  최대 20", "풀", unitVector(0));          // 공백만 다르다 → 그대로
+    chunk(cur, "ops-2-a10-1", "제10조 (컨테이너 자원)", "힙 65%", "힙", unitVector(1));         // 내용이 바뀜
+    chunk(cur, "ops-2-a11-1", "제11조 (배포 창)", "화~목", "배포", unitVector(5));              // 같은 번호, 다른 조문
+    chunk(cur, "ops-2-a12-1", "제12조 (로그 보관 기간)", "180일 보관", "로그", unitVector(2));   // 옛 제11조와 내용이 가장 가깝다
+    jdbc.sql("UPDATE policy_documents SET superseded_by = ? WHERE id = ?").params(cur, old).update();
+
+    assertThat(jdbc.sql("SELECT policy_successor(?)").param(old).query(Long.class).single()).isEqualTo(cur);
+    assertThat(resolve("ops-2", "제9조")).containsEntry("status", "current").containsEntry("chunk_id", "ops-2-a9-1");
+    assertThat(resolve("ops-1", "제9조")).containsEntry("status", "same").containsEntry("chunk_id", "ops-2-a9-1").containsEntry("from_version", "v1");
+    assertThat(resolve("ops-1", "제10조")).containsEntry("status", "amended").containsEntry("chunk_id", "ops-2-a10-1").containsEntry("version", "v2");
+    Map<String, Object> gone = resolve("ops-1", "제11조");
+    assertThat(gone).containsEntry("status", "replaced").containsEntry("from_label", "제11조 (로그 보관)")
+        .containsEntry("suggested_label", "제12조 (로그 보관 기간)").containsEntry("slug", "ops-2");
+    assertThat(gone.get("chunk_id")).isNull();
+    // 원래 문서에 없는 조문은 행이 없다. '제1조' 는 '제10조' 에 걸리지 않는다
+    assertThat(jdbc.sql("SELECT count(*) FROM resolve_policy_ref(?, 'ops-1', '제1조')").param(ws).query(Long.class).single()).isZero();
+    // 대체 없이 폐기된 문서
+    long dead = document(ws, "dead-1", "폐지 지침", "v1", "retired");
+    chunk(dead, "dead-1-a1-1", "제1조 (목적)", "x", "x", null);
+    assertThat(resolve("dead-1", "제1조")).containsEntry("status", "retired");
+    // 다른 부서의 규정은 보이지 않는다
+    long sibling = workspace(tenant, company, "HR", true);
+    assertThat(jdbc.sql("SELECT status FROM resolve_policy_ref(?, 'ops-1', '제9조')").param(sibling).query(String.class).single()).isEqualTo("retired");
+  }
+
+  private Map<String, Object> resolve(String slug, String article) {
+    return jdbc.sql("SELECT * FROM resolve_policy_ref(?, ?, ?)").params(ws, slug, article).query().singleRow();
+  }
+
   // ── hybrid_search_nodes ────────────────────────────────────────────────
 
   @Test
