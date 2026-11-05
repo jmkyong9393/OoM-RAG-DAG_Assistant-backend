@@ -43,6 +43,16 @@ class PolicyRef(BaseModel):
     article_label: str
     page: int | None = None
     text: str
+    source: Literal["search", "case"] = "search"   # case = 검색이 아니라 체인의 사례가 따른 규정이라 실린 것
+
+
+class NodePolicy(BaseModel):
+    """사례 노드의 근거 조문. follows = 규정을 따른 조치, exception = 규정과 달리 한 조치, gap = 규정에 기준이 없음."""
+    relation: Literal["follows", "exception", "gap"]
+    ref: str | None = None      # policy 이벤트의 마커(P1…). gap 은 없음
+    label: str | None = None    # '배포·장애 대응 운영지침 제12조'
+    note: str | None = None
+    topic: str | None = None    # gap: 규정에 없는 기준
 
 
 class ChainNode(BaseModel):
@@ -54,6 +64,7 @@ class ChainNode(BaseModel):
     depth: int
     path_label: str | None = None
     last_confirmed_at: str | None = None
+    policy: list[NodePolicy] | None = None
 
 
 class ChainEdge(BaseModel):

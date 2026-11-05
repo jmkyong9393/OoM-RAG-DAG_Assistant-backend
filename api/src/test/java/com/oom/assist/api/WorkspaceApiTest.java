@@ -13,10 +13,21 @@ import org.junit.jupiter.api.Test;
 /** 워크스페이스 목록(로그인 전/후)·모드 토글·멤버십 없는 접근. 응답 키가 snake_case 인지도 여기서 확인한다. */
 class WorkspaceApiTest extends AbstractApiTest {
 
+  @org.springframework.beans.factory.annotation.Autowired com.oom.assist.workspace.WorkspaceController controller;
+
   @Test
   void workspacesListAnonymousShowsDeptsAndLoggedInShowsMemberships() throws Exception {
-    mvc.perform(get("/workspaces")).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)))
-        .andExpect(jsonPath("$[0].kind").value("dept")).andExpect(jsonPath("$[0].parent_id").value(company));
+    // 로그인 전: 데모 회사를 지정하지 않으면 빈 목록, 지정하면 그 회사의 부서만 (다른 회사 부서는 드러나지 않는다)
+    mvc.perform(get("/workspaces")).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+    long other = jdbc.sql("INSERT INTO tenants (slug, name) VALUES ('other', 'Other') RETURNING id").query(Long.class).single();
+    jdbc.sql("INSERT INTO workspaces (tenant_id, kind, name, policy_enabled) VALUES (?, 'dept', '남의 부서', true)").param(other).update();
+    org.springframework.test.util.ReflectionTestUtils.setField(controller, "publicTenant", "t");
+    try {
+      mvc.perform(get("/workspaces")).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)))
+          .andExpect(jsonPath("$[0].kind").value("dept")).andExpect(jsonPath("$[0].parent_id").value(company));
+    } finally {
+      org.springframework.test.util.ReflectionTestUtils.setField(controller, "publicTenant", "");
+    }
     mvc.perform(asUser(get("/workspaces"), userLead)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
         .andExpect(jsonPath("$[0].id").value(wsSw));
   }

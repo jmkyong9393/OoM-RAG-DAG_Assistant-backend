@@ -34,7 +34,8 @@ OBLIGATION_RE = re.compile(r"[가-힣]야\s?(?:해|하|돼|되|합|됩)|[가-힣
 EXPERIENCE_RE = re.compile(r"어떻게\s?(?:했|풀었|고쳤|해결했|처리했|막았)|어케|[가-힣]\s적\s?(?:있|없)|(?:만든|바꾼|고친|적용한|도입한)\s?(?:거|것|사례)"
                            r"|(?:했|잡았|풀었|고쳤|바꿨|막았|넣었|뺐|정했)(?:어|지|나|는지)(?:요)?\s*\??$")
 # 증상을 호소하는 표현: "자꾸 로그아웃돼요", "이미지를 못 받아와요", "상신이 안 돼요" — 조치를 정한 규정과 사례를 함께 본다(both)
-SYMPTOM_RE = re.compile(r"(?:자꾸|계속|갑자기|반복해서)\s?[^?]{0,20}(?:돼요|되요|돼|됨|겨요|져요|떠요|뜸|나요|남)|못\s?[가-힣]{1,6}(?:와요|해요|가요|옴|함)|안\s?(?:돼요|됩니다|되네)")
+SYMPTOM_RE = re.compile(r"(?:자꾸|계속|갑자기|반복해서)\s?[^?]{0,20}(?:돼요|되요|돼|됨|겨요|져요|떠요|뜸|나요|남)|못\s?[가-힣]{1,6}(?:와요|해요|가요|옴|함)|안\s?(?:돼요|됩니다|되네|잡혀|들어와|들어온|와요|나와요|떠요|열려|보여요)")
+CODE_NAME_RE = re.compile(r"\b[A-Z][A-Z0-9]+(?:_[A-Z0-9]+)+\b")   # 'CANCEL_PERIOD_EXPIRED' — 대문자 상수 모양의 오류 이름
 HTTP_STATUS_RE = re.compile(r"(?<!\d)[45]\d\d(?!\d)")   # '504', '429로', '403 떨어지는데' — 접두어 없는 HTTP 상태 코드
 
 
@@ -42,7 +43,8 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
     """힌트만으로 결정되면 IntentResult, 애매하면 None. 에러 코드는 troubleshoot 의 강한 신호."""
     q = query.lower()
     has_policy = any(h in q for h in POLICY_HINTS)
-    has_trouble = bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q)) or bool(EXPERIENCE_RE.search(q))
+    has_trouble = (bool(error_code) or any(h in q for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q)) or bool(EXPERIENCE_RE.search(q))
+                   or bool(CODE_NAME_RE.search(query)))
     symptom = bool(SYMPTOM_RE.search(q))
     weak_trouble = any(h in q for h in TROUBLE_WEAK_HINTS)
     weak_policy = any(h in q for h in POLICY_WEAK_HINTS) or bool(OBLIGATION_RE.search(q))
@@ -50,6 +52,8 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
         return IntentResult(intent="both", reason="rule: policy+trouble hints")
     if has_trouble and weak_policy:
         return IntentResult(intent="both", reason="rule: trouble + obligation/threshold hints")
+    if symptom and (has_policy or weak_policy) and not has_trouble:   # 증상을 호소하면서 기준을 묻는다 → 둘 다
+        return IntentResult(intent="both", reason="rule: symptom + policy hints")
     if has_policy:
         return IntentResult(intent="policy", reason="rule: policy hints")
     if weak_policy and not has_trouble and not weak_trouble:   # 장애 낌새 없이 의무·허용·기준값만 묻는다 → 규정이 답을 가진 질문
@@ -119,14 +123,19 @@ async def judge_case(profile: LlmProfile, query: str, case: dict, usage: Usage) 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.
 규칙: (1) 인용은 제공된 마커([P1], [N2] 등)만 쓴다. (2) 사실을 담은 모든 문장과 표의 모든 행 끝에 근거 마커를 붙인다. 컨텍스트에 없는 내용은 "근거 없음"이라고 말하고 일반 상식으로 채우지 않는다.
 (3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. 단, 해당 컨텍스트가 없는 절("규정"·"해결 사례")은 만들지 않는다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다.
-(6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내, 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다."""
+(6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내(규정과 사례를 함께 쓸 때는 6문장), 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다.
+(7) 사례 줄 끝의 "(규정 관계: …)"는 그 조치와 규정의 관계를 알려 주는 자료다. 괄호를 그대로 옮겨 적지 않는다. 사례로 답할 때는 사례 문장마다 [N…] 마커를 붙이고, 이어서 규정 관계를 한 문장으로 쓴다 — 따른 조치면 "이 조치는 ○○ 제○조 기준에 따른 것이다 [P…]", 예외면 "당시에는 규정과 달리 …했다 [N…][P…]", 기준이 없으면 "이 부분은 규정에 기준이 없다 [N…]".
+(8) 질문 뒤에 [답변에 꼭 담을 것]이 있으면 그 항목을 빠짐없이 답변에 담는다. 항목의 문장을 그대로 베끼지 말고 답변의 흐름에 맞게 쓴다."""
 
 
-async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage) -> AsyncIterator[str]:
+async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage,
+                   case_required: bool = True) -> AsyncIterator[str]:
     """policy_ctx: {ref, article_label, doc_title, text}, chain_ctx: {ref, type, status, title, resolution_summary, depth}"""
     if ai_mode() == "openai" and profile.has_key:
         context = _render_context(policy_ctx, chain_ctx)
-        async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}", usage,
+        must = _must_include(chain_ctx, case_required)
+        tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
+        async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
             yield piece
         return
@@ -156,6 +165,38 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     return [w + " " for w in text.split(" ") if w]
 
 
+def _must_include(chain_ctx: list[dict], case_required: bool = True) -> list[str]:
+    """사례가 있을 때 답변이 빠뜨리기 쉬운 것을 컨텍스트에서 뽑는다 — 규칙만 주면 규정 문장만 쓰고 사례·예외를 건너뛰는 일이 잦았다.
+    사례 인용, 규정과 달리 처리한 예외(체인 어디에 있든), 진입 사례의 '기준 없음', 진입 사례가 따른 규정."""
+    live = [n for n in chain_ctx if n["status"] == "active"]
+    if not live:
+        return []
+    # 규정을 물은 질문에 딸려 온 사례는 참고다 — 질문과 닿을 때만 쓰게 한다 (억지로 인용시키면 주제만 비슷한 사례가 답에 섞인다)
+    out = ["해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다." if case_required else
+           "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않는다."]
+    for n in live:
+        for p in n.get("policy") or []:
+            if p["relation"] == "exception":
+                out.append(f"[{n['ref']}] 은 당시 규정([{p['ref']}])과 달리 처리한 사례다. 당시에 어떻게 했는지와 지금의 기준을 함께 쓰고 [{n['ref']}][{p['ref']}] 를 붙인다."
+                           + (f" ({p['note']})" if p.get("note") else ""))
+    entry = next((n for n in live if n.get("entry")), None)
+    for p in (entry or {}).get("policy") or []:
+        if p["relation"] == "gap":
+            out.append(f"[{entry['ref']}] 이 다루는 부분은 규정에 기준이 없다고 알린다 — {p.get('topic') or ''}.")
+        elif p["relation"] == "follows":
+            out.append(f"[{entry['ref']}] 의 조치가 따른 규정 [{p['ref']}] 을 한 문장으로 밝힌다.")
+    return out[:5]
+
+
+def _policy_note(p: dict) -> str:
+    """사례 줄 끝에 붙는 근거 표시(모델에게 주는 자료). 답변에 그대로 옮기지 않게 지시문 (7)이 문장 형태를 정한다."""
+    if p["relation"] == "gap":
+        return f" (규정 관계: 이 부분은 규정에 기준이 없다 — {p.get('topic') or p.get('note') or ''})"
+    kind = "규정과 달리 처리한 예외" if p["relation"] == "exception" else "규정을 따른 조치"
+    tail = f". {p['note']}" if p.get("note") else ""
+    return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail})"
+
+
 def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
     lines = []
     if policy_ctx:
@@ -167,7 +208,8 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
         for n in chain_ctx:
             dep = "[폐기됨] " if n["status"] != "active" else ""
             indent = "  " * max(0, n["depth"])
-            lines.append(f"{indent}[{n['ref']}] ({n['type']}) {dep}{n['title']}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else ""))
+            lines.append(f"{indent}[{n['ref']}] ({n['type']}) {dep}{n['title']}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
+                         + "".join(_policy_note(p) for p in n.get("policy") or []))
     return "\n".join(lines)
 
 

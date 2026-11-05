@@ -67,6 +67,11 @@ def test_rules_never_contradict_evalset_kind(capsys):
     ("스테이징 배포가 이미지를 못 받아와요", None, "both"),
     ("전자결재 상신이 안 돼요", None, "both"),
     ("날짜 지난 물건이 들어 있었어요", None, None),           # 고객 불만을 옮긴 말 — 증상·경험 표현이 아니다
+    # 대문자 상수 모양의 오류 이름은 에러 코드처럼 사례 신호다
+    ("휴대폰 결제 취소 CANCEL_PERIOD_EXPIRED 뜨는 이유", None, "both"),
+    # 증상을 호소하면서 기준을 묻는 말 — 규정만 보지 않는다
+    ("매칭이 몇 분씩 안 잡혀요", None, "both"),
+    ("환불 신청한 지 일주일 넘었는데 안 들어온대요", None, "both"),
 ])
 def test_rule_examples(query, code, expected):
     r = rule_classify(query, code)
