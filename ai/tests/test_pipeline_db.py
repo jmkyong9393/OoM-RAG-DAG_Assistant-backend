@@ -7,7 +7,7 @@ from tests.conftest import collect, parse_blocks, requires_db
 
 pytestmark = requires_db
 
-WS_SW, WS_HR, WS_CS = 1, 2, 3  # 시드: SW개발(dag_only) · 인사총무(policy) · 고객지원(policy)
+WS_SW, WS_HR, WS_CS = 1, 2, 3  # 시드: SW개발(규정+사례) · 인사총무(규정+사례) · 고객지원(규정, 사례 없음)
 
 
 def names_of(blocks):
@@ -95,9 +95,15 @@ async def test_no_evidence_gate(fake_mode, backfilled):
         assert set(d["citations"]["verified"]) <= {r["ref"] for r in d.get("policy", [])} | {n["ref"] for n in d.get("chain", {}).get("nodes", [])}
 
 
-async def test_policy_enabled_null_falls_back_to_workspace_setting(fake_mode, backfilled):
+async def test_policy_enabled_null_falls_back_to_workspace_setting(fake_mode, backfilled, admin_conn):
     blocks = await collect(pipeline.run(WS_SW, None, "E-403"))
-    assert dict(blocks)["intent"]["mode"] == "dag_only"
+    assert dict(blocks)["intent"]["mode"] == "policy"
+    admin_conn.execute("UPDATE workspaces SET policy_enabled = false WHERE id = %s", (WS_SW,))
+    try:   # 부서 관리자가 규정 사용을 끄면 사례만
+        blocks = await collect(pipeline.run(WS_SW, None, "E-403"))
+        assert dict(blocks)["intent"] == {"intent": "troubleshoot", "mode": "dag_only"}
+    finally:
+        admin_conn.execute("UPDATE workspaces SET policy_enabled = true WHERE id = %s", (WS_SW,))
 
 
 async def test_http_endpoint_streams_pipeline(fake_mode, backfilled):
