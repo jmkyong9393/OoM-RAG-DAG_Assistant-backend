@@ -124,6 +124,18 @@
         "child_id": {
           "title": "Child Id",
           "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
         }
       },
       "required": [
@@ -206,6 +218,11 @@
           ],
           "default": null,
           "title": "Policy"
+        },
+        "resolves_root": {
+          "default": false,
+          "title": "Resolves Root",
+          "type": "boolean"
         }
       },
       "required": [

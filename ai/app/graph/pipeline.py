@@ -381,17 +381,23 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
         # 루트 기준 체인: 진입 노드의 루트에서 하향 (BE-HANDOFF-001 §4 ④)
         root = db.root_of(conn, ws, entry) or entry
         ch = db.chain(conn, ws, root, 4, 30)
+        resolving = db.resolved_nodes(conn, ws, root)
     nodes = sorted(ch["nodes"], key=lambda n: (n["depth"], n["id"]))  # 마커 번호 = depth 안정 정렬 순서
     near = _same_line(entry, ch["edges"])
+    via: dict[int, list[str]] = {}   # 기록 → 상위에 이어 붙인 이유
+    for e in ch["edges"]:
+        if e.get("reason"):
+            via.setdefault(e["child_id"], []).append(e["reason"])
     ctx, ev_nodes = [], []
     for i, n in enumerate(nodes):
         ref = f"N{i + 1}"
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
                     "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
-                    "entry": n["id"] == entry, "near": n["id"] in near})
+                    "entry": n["id"] == entry, "near": n["id"] in near, "resolves_root": n["id"] in resolving, "via": via.get(n["id"], [])})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
-                                  last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None))
+                                  last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None,
+                                  resolves_root=n["id"] in resolving))
     return ctx, ChainEvent(entry_id=entry, nodes=ev_nodes, edges=[ChainEdge(**e) for e in ch["edges"]])
 
 

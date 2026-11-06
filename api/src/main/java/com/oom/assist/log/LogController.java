@@ -111,13 +111,15 @@ public class LogController {
     return Map.of("orphaned", service.orphaned(ctx, id));
   }
 
-  public record PatchRequest(Boolean resolved, String note, String status, String reason, Boolean cascade) {}
+  public record PatchRequest(Boolean resolved, String note, List<Long> resolvedNodeIds, String status, String reason, Boolean cascade) {}
 
-  /** 두 가지 모양을 받는다: {resolved, note?} 또는 {status, reason?, cascade?}. 상태 변경은 affected 를 함께 돌려준다. */
+  /** 두 가지 모양을 받는다: {resolved, note?, resolved_node_ids?} 또는 {status, reason?, cascade?}. 완료는 resolved_node_ids, 상태 변경은 affected 를 함께 돌려준다. */
   @PatchMapping("/logs/{id}")
   public Map<String, Object> patch(@PathVariable long id, @RequestBody PatchRequest body, TenantContext ctx) {
     if (body.resolved() != null) {
-      return asMap(service.setResolved(ctx, id, body.resolved(), body.note()), null);
+      Map<String, Object> m = asMap(service.setResolved(ctx, id, body.resolved(), body.note(), body.resolvedNodeIds()), null);
+      m.put("resolved_node_ids", service.resolvedNodes(ctx, id));
+      return m;
     }
     if (body.status() != null) {
       LogService.StatusResult r = service.setStatus(ctx, id, body.status(), body.reason(), Boolean.TRUE.equals(body.cascade()));

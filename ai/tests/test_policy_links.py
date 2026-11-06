@@ -216,3 +216,29 @@ def test_case_is_optional_for_policy_questions():
     assert "한 문장 이상" in llm._must_include([node])[0]
     soft = llm._must_include([node], case_required=False)[0]
     assert "먼저 규정으로 답한다" in soft and "상황이 다르면" in soft
+
+
+def test_must_include_puts_recorded_resolutions_first():
+    def node(i, typ, entry=False, resolves=False, title="t"):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": title, "resolution_summary": None, "depth": 0, "policy": None,
+                "entry": entry, "near": True, "resolves_root": resolves}
+    must = llm._must_include([node(1, "fail", entry=True), node(2, "success", title="해결: 사후분석 작성"),
+                              node(3, "success", resolves=True), node(4, "success", resolves=True)])
+    assert "실제로 해결한 기록은 [N3] [N4]" in must[0] and "[N2] 은 해결로 기록되지 않은 조치" in must[0]
+    # 해결 기록이 없으면 지금처럼 해결 줄 전체에서 고르게 한다
+    plain = llm._must_include([node(1, "fail", entry=True), node(2, "success"), node(3, "success")])
+    assert "해결 줄([N2] [N3])" in plain[0] and "실제로 해결한" not in plain[0]
+
+
+def test_render_context_marks_resolution_and_edge_reason():
+    nodes = [{"ref": "N1", "id": 1, "type": "fail", "status": "active", "title": "포털 500", "resolution_summary": None, "depth": 0, "via": []},
+             {"ref": "N2", "id": 2, "type": "fail", "status": "active", "title": "원인: 캐시 동시 만료", "resolution_summary": None, "depth": 1,
+              "via": ["정시 직전 만료 시각이 같았다"]},
+             {"ref": "N3", "id": 3, "type": "success", "status": "active", "title": "해결: TTL 지터", "resolution_summary": None, "depth": 2,
+              "resolves_root": True},
+             {"ref": "N4", "id": 4, "type": "success", "status": "deprecated", "title": "해결(구): 예열 크론", "resolution_summary": None, "depth": 2,
+              "resolves_root": True}]
+    text = llm._render_context([], nodes)
+    assert "[N2] (fail) 원인: 캐시 동시 만료 (상위에 이은 이유: 정시 직전 만료 시각이 같았다)" in text
+    assert "[N3] (success) 해결: TTL 지터 (이 장애를 해결한 기록)" in text
+    assert "예열 크론 (이 장애를 해결한 기록)" not in text, "폐기된 기록은 해결 표시를 하지 않는다"

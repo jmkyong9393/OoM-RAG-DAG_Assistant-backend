@@ -15,7 +15,7 @@ public class GlobalExceptionHandler {
 
   private static final List<String> DB_CODES = List.of(
       "EDGE_CROSS_WORKSPACE", "EDGE_PARENT_TYPE", "WORKSPACE_SELF_PARENT", "WORKSPACE_CROSS_TENANT",
-      "CHUNK_WORKSPACE_MISMATCH", "NOT_RETIRED", "NOT_FOUND");
+      "CHUNK_WORKSPACE_MISMATCH", "NOT_RETIRED", "NOT_FOUND", "RESOLUTION_CROSS_WORKSPACE", "RESOLUTION_TYPE");
 
   @ExceptionHandler(ApiException.class)
   ResponseEntity<Map<String, String>> api(ApiException e) {

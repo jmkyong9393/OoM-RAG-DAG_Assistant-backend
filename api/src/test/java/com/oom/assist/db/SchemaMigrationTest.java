@@ -16,7 +16,8 @@ class SchemaMigrationTest extends AbstractDbTest {
         "tenants", "workspaces", "users", "workspace_members",
         "log_nodes", "log_edges", "policy_documents", "policy_chunks",
         "search_sessions", "answer_feedback", "workspace_terms", "eval_runs", "audit_log",
-        "spring_session", "spring_session_attributes");   // V4 세션 저장소
+        "spring_session", "spring_session_attributes",    // V4 세션 저장소
+        "log_resolutions");                                // V10 장애 건을 해결한 기록
   }
 
   @Test
@@ -24,9 +25,9 @@ class SchemaMigrationTest extends AbstractDbTest {
     List<String> fns = jdbc.sql("SELECT proname FROM pg_proc WHERE proname = ANY (?)")
         .param(new String[] {"workspace_ancestors", "or_tsquery", "hybrid_search_chunks", "hybrid_search_nodes", "search_case_entry",
             "chain_at_depth", "get_chain", "would_create_cycle", "orphaned_descendants", "purge_document",
-            "policy_successor", "is_article", "resolve_policy_ref"})
+            "policy_successor", "is_article", "resolve_policy_ref", "resolved_nodes"})
         .query(String.class).list();
-    assertThat(fns).hasSize(13);
+    assertThat(fns).hasSize(14);
     List<String> views = jdbc.sql("SELECT table_name FROM information_schema.views WHERE table_name LIKE 'v\\_%'").query(String.class).list();
     assertThat(views).containsExactlyInAnyOrder("v_log_nodes", "v_policy_documents", "v_search_sessions");
   }
@@ -57,6 +58,10 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tablePriv("oom_api", "log_nodes", "DELETE")).isFalse();
     assertThat(tablePriv("oom_api", "log_edges", "DELETE")).isTrue();
     assertThat(tablePriv("oom_api", "policy_documents", "DELETE")).isFalse();
+    // V10: 해결 기록은 Spring 만 쓰고 Python 은 읽기만
+    assertThat(tablePriv("oom_api", "log_resolutions", "INSERT")).isTrue();
+    assertThat(tablePriv("oom_ai", "log_resolutions", "SELECT")).isTrue();
+    assertThat(tablePriv("oom_ai", "log_resolutions", "INSERT")).isFalse();
     // R__ 로 나중에 만든 뷰·함수에도 기본 권한이 적용된다
     assertThat(tablePriv("oom_api", "v_log_nodes", "SELECT")).isTrue();
     assertThat(jdbc.sql("SELECT has_function_privilege('oom_ai', 'get_chain(bigint,bigint,int,int)', 'EXECUTE')").query(Boolean.class).single()).isTrue();

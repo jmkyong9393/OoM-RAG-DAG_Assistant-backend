@@ -214,6 +214,16 @@ BEGIN
 END $$;
 
 -- 문서 삭제는 이 함수만 (retired 상태 한정). 청크는 CASCADE, 파일은 Spring이 공유 볼륨에서 삭제.
+-- 장애 건을 해결한 기록 가운데 지금 유효한 것: 활성이고 그 루트의 자손인 success (log_resolutions, V10).
+-- 폐기되거나 연결이 끊긴 기록은 빠지고, 복원·재연결되면 다시 든다.
+CREATE OR REPLACE FUNCTION resolved_nodes(p_ws bigint, p_root bigint)
+RETURNS SETOF bigint LANGUAGE sql STABLE AS $$
+  SELECT r.node_id FROM log_resolutions r JOIN log_nodes n ON n.id = r.node_id
+  WHERE r.workspace_id = p_ws AND r.root_id = p_root AND n.status = 'active'
+    AND r.node_id IN (SELECT g.node_id FROM get_chain(p_ws, p_root, 32, 100000) g WHERE g.depth > 0)
+  ORDER BY r.node_id
+$$;
+
 CREATE OR REPLACE FUNCTION purge_document(p_doc bigint, p_actor text)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$
 DECLARE d policy_documents%ROWTYPE;
