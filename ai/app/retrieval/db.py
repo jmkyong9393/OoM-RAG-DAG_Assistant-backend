@@ -89,9 +89,14 @@ def chain(conn, ws: int, entry: int, max_depth: int = 3, max_nodes: int = 30) ->
         return {"entry_id": entry, "nodes": [], "edges": []}
     ids = [r["id"] for r in rows]
     edges = conn.execute(
-        "SELECT parent_id, child_id FROM log_edges WHERE parent_id = ANY(%s) AND child_id = ANY(%s) ORDER BY parent_id, child_id",
+        "SELECT parent_id, child_id, reason FROM log_edges WHERE parent_id = ANY(%s) AND child_id = ANY(%s) ORDER BY parent_id, child_id",
         (ids, ids)).fetchall()
     return {"entry_id": entry, "nodes": rows, "edges": edges}
+
+
+def resolved_nodes(conn, ws: int, root: int) -> set[int]:
+    """장애 건을 해결한 기록 가운데 지금 유효한 것(활성 · 그 루트의 자손). DB 함수 resolved_nodes() 가 판정한다."""
+    return {r["resolved_nodes"] for r in conn.execute("SELECT resolved_nodes(%s, %s)", (ws, root))}
 
 
 def root_of(conn, ws: int, node_id: int) -> int | None:

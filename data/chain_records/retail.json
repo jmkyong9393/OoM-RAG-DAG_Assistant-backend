@@ -1,0 +1,16 @@
+{
+ "tenant": "retail",
+ "description": "OoM 리테일 — 시연용 사례 체인 기록: 장애 건을 실제로 해결한 기록과 연결 사유. 해결 기록과 후속·보조 조치가 갈리는 체인만 적는다.",
+ "resolutions": [
+  {"log": "hr-ga_v1", "root": "h2-root", "resolved_by": ["h2-saved-fix", "h2-self"], "why": "두 원인(옛 비밀번호 자동 재시도·망각)을 각각 고친 조치. 안내문 통합(h2-guide)은 보조 조치"},
+  {"log": "cs_v1", "root": "s6-root", "resolved_by": ["s6-fix"], "why": "재민원을 정리한 조치. 특별관리고객 지정(s6-special)은 후속 조치"}
+ ],
+ "edge_reasons": [
+  {"log": "hr-ga_v1", "parent": "h2-saved", "child": "h2-saved-fix", "reason": "옛 비밀번호 자동 재시도를 변경 직후 기기별 안내와 3회 사전 경고로 막는다"},
+  {"log": "hr-ga_v1", "parent": "h2-forget", "child": "h2-self", "reason": "망각으로 잠긴 경우 보안팀 요청 없이 셀프 해제로 푼다"},
+  {"log": "hr-ga_v1", "parent": "h2-saved", "child": "h2-guide", "reason": "두 원인의 안내를 한곳에 모은 보조 조치"},
+  {"log": "hr-ga_v1", "parent": "h2-forget", "child": "h2-guide", "reason": "두 원인의 안내를 한곳에 모은 보조 조치"},
+  {"log": "cs_v1", "parent": "s6-root", "child": "s6-fix", "reason": "현행 스크립트 기준 2차 경고 뒤 종료라 정당 — 경위서 철회와 보호 조치"},
+  {"log": "cs_v1", "parent": "s6-root", "child": "s6-special", "reason": "같은 고객의 폭언이 3회 확인돼 특별관리고객으로 지정한 후속 조치"}
+ ]
+}

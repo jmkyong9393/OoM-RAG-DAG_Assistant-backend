@@ -216,3 +216,71 @@ def test_case_is_optional_for_policy_questions():
     assert "한 문장 이상" in llm._must_include([node])[0]
     soft = llm._must_include([node], case_required=False)[0]
     assert "먼저 규정으로 답한다" in soft and "상황이 다르면" in soft
+
+
+def test_must_include_puts_recorded_resolutions_first():
+    def node(i, typ, entry=False, resolves=False, title="t"):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": title, "resolution_summary": None, "depth": 0, "policy": None,
+                "entry": entry, "near": True, "resolves_root": resolves}
+    must = llm._must_include([node(1, "fail", entry=True), node(2, "success", title="해결: 사후분석 작성"),
+                              node(3, "success", resolves=True), node(4, "success", resolves=True)])
+    assert "실제로 해결한 기록은 [N3] [N4]" in must[0] and "[N2] 은 해결이 아닌 후속·보조 조치" in must[0]
+    # 줄별 규정 관계도 해결 기록 줄만 — 후속 조치의 규정을 늘어놓지 않는다
+    def withp(n, ref):
+        return {**n, "policy": [{"relation": "follows", "ref": ref, "label": "x"}]}
+    rel = llm._must_include([node(1, "fail", entry=True), withp(node(2, "success", title="해결: 안내문 통합"), "P3"),
+                             withp(node(3, "success", resolves=True, title="해결: 셀프 해제"), "P2")])
+    line = next(m for m in rel if "줄마다 다르다" in m)
+    assert "[N3] 셀프 해제 → [P2]" in line and "[N2]" not in line and "[P3]" not in line
+    # 해결 기록이 없으면 지금처럼 해결 줄 전체에서 고르게 한다
+    plain = llm._must_include([node(1, "fail", entry=True), node(2, "success"), node(3, "success")])
+    assert "해결 줄([N2] [N3])" in plain[0] and "실제로 해결한" not in plain[0]
+
+
+def test_render_context_marks_resolution_and_edge_reason():
+    nodes = [{"ref": "N1", "id": 1, "type": "fail", "status": "active", "title": "포털 500", "resolution_summary": None, "depth": 0, "via": []},
+             {"ref": "N2", "id": 2, "type": "fail", "status": "active", "title": "원인: 캐시 동시 만료", "resolution_summary": None, "depth": 1,
+              "via": ["정시 직전 만료 시각이 같았다"]},
+             {"ref": "N3", "id": 3, "type": "success", "status": "active", "title": "해결: TTL 지터", "resolution_summary": None, "depth": 2,
+              "resolves_root": True},
+             {"ref": "N4", "id": 4, "type": "success", "status": "deprecated", "title": "해결(구): 예열 크론", "resolution_summary": None, "depth": 2,
+              "resolves_root": True}]
+    text = llm._render_context([], nodes)
+    assert "[N2] (fail) 원인: 캐시 동시 만료 (상위에 이은 이유: 정시 직전 만료 시각이 같았다)" in text
+    assert "[N3] (success) 해결: TTL 지터 (이 장애를 해결한 기록)" in text
+    assert "예열 크론 (이 장애를 해결한 기록)" not in text, "폐기된 기록은 해결 표시를 하지 않는다"
+
+
+def test_load_chain_lists_each_edge_reason_once(monkeypatch):
+    """상위가 둘인 기록(예: 두 원인을 함께 닫는 사후분석)은 같은 이유가 두 간선에 적혀 있다 — 컨텍스트에는 한 번만."""
+    from contextlib import nullcontext
+    nodes = [{"id": i, "type": t, "status": "active", "title": f"n{i}", "depth": d, "path_label": None, "last_confirmed_at": None}
+             for i, t, d in ((1, "fail", 0), (2, "fail", 1), (3, "fail", 1), (4, "success", 2))]
+    edges = [{"parent_id": 1, "child_id": 2, "reason": None}, {"parent_id": 1, "child_id": 3, "reason": None},
+             {"parent_id": 2, "child_id": 4, "reason": "두 원인을 함께 정리"}, {"parent_id": 3, "child_id": 4, "reason": "두 원인을 함께 정리"}]
+    monkeypatch.setattr(pipeline.db, "connect", lambda: nullcontext())
+    monkeypatch.setattr(pipeline.db, "root_of", lambda conn, ws, e: 1)
+    monkeypatch.setattr(pipeline.db, "chain", lambda conn, ws, root, d, n: {"entry_id": root, "nodes": nodes, "edges": edges})
+    monkeypatch.setattr(pipeline.db, "resolved_nodes", lambda conn, ws, root: {4})
+    ctx, ev = pipeline._load_chain(1, 2)
+    fix = next(n for n in ctx if n["id"] == 4)
+    assert fix["via"] == ["두 원인을 함께 정리"] and fix["resolves_root"] is True
+    assert next(n for n in ev.nodes if n.id == 4).resolves_root and ev.edges[2].reason == "두 원인을 함께 정리"
+
+
+def test_link_policies_gives_slots_to_resolving_fixes_before_follow_ups(monkeypatch):
+    """후속 조치(사후분석 등)가 해결 기록보다 먼저 등록돼도 자리(MAX_LINKED)는 해결 기록의 조문에 먼저 준다."""
+    arts = {"제2조": "ops-a2-1", "제16조": "ops-a16-1", "제17조": "ops-a17-1", "제11조": "ops-a11-1"}
+    chunks = {("ops", a): _chunk(c, label=f"{a} (x)") for a, c in arts.items()}
+    monkeypatch.setattr(pipeline.db, "connect", lambda: __import__("contextlib").nullcontext())
+    monkeypatch.setattr(pipeline.db, "policy_ref_chunks", lambda conn, ws, keys: {k: chunks[k] for k in keys if k in chunks})
+    nodes = [_node(1, 0, [{"policy": "ops", "article": "제2조", "relation": "follows"}]),
+             _node(2, 1, [{"policy": "ops", "article": "제16조", "relation": "follows"}], type_="success"),   # 후속: 사후분석 (먼저 등록)
+             _node(3, 1, [{"policy": "ops", "article": "제17조", "relation": "follows"}], type_="success"),   # 후속: 공지
+             _node(4, 1, [{"policy": "ops", "article": "제11조", "relation": "follows"}], type_="success")]   # 실제 해결
+    for n in nodes:
+        n["near"] = True
+    nodes[3]["resolves_root"] = True
+    policy: list[dict] = []
+    assert pipeline._link_policies(1, nodes, _event(nodes, entry=1), policy) == pipeline.MAX_LINKED == 3
+    assert [p["chunk_id"] for p in policy] == ["ops-a2-1", "ops-a11-1", "ops-a16-1"], "진입 → 해결 기록 → 후속 순. 마지막 후속(제17조)은 자리가 없다"

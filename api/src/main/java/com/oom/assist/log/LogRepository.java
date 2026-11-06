@@ -110,8 +110,34 @@ public class LogRepository {
   }
 
   public void insertEdge(long ws, long parent, long child, long createdBy, String origin) {
-    jdbc.sql("INSERT INTO log_edges (workspace_id, parent_id, child_id, created_by, origin) VALUES (?, ?, ?, ?, ?)")
-        .params(ws, parent, child, createdBy, origin).update();
+    insertEdge(ws, parent, child, createdBy, origin, null);
+  }
+
+  /** reason = 이 기록을 그 상위에 이어 붙인 이유 한 줄(선택). */
+  public void insertEdge(long ws, long parent, long child, long createdBy, String origin, String reason) {
+    jdbc.sql("INSERT INTO log_edges (workspace_id, parent_id, child_id, created_by, origin, reason) VALUES (?, ?, ?, ?, ?, ?)")
+        .params(ws, parent, child, createdBy, origin, reason).update();
+  }
+
+  // ── 장애 건을 해결한 기록 (log_resolutions, V10) ──
+
+  public void addResolution(long ws, long root, long node, Long createdBy) {
+    jdbc.sql("INSERT INTO log_resolutions (workspace_id, root_id, node_id, created_by) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING")
+        .params(ws, root, node, createdBy).update();
+  }
+
+  public void clearResolutions(long root) {
+    jdbc.sql("DELETE FROM log_resolutions WHERE root_id = ?").param(root).update();
+  }
+
+  /** 지금 유효한 해결 기록(활성 · 그 루트의 자손). */
+  public List<Long> resolvedNodes(long ws, long root) {
+    return jdbc.sql("SELECT resolved_nodes(?, ?)").params(ws, root).query(Long.class).list();
+  }
+
+  public boolean isDescendant(long ws, long root, long node) {
+    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM get_chain(?, ?, 32, 100000) g WHERE g.depth > 0 AND g.node_id = ?)")
+        .params(ws, root, node).query(Boolean.class).single();
   }
 
   public int deleteEdge(long ws, long parent, long child) {

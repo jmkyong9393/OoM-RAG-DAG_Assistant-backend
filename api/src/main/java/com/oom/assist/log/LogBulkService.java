@@ -60,9 +60,10 @@ public class LogBulkService {
 
   // ── bulk ───────────────────────────────────────────────────────────────────
 
+  /** parentReason = 상위에 이어 붙인 이유(모든 상위 간선에 같이). resolves = 이 success 가 상위 장애 건(들)을 해결한 기록이다. */
   public record Item(String ref, String type, String title, String body, String parentRef, List<String> parentRefs, String problemTitle, String source,
                      String sourceRef, String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt,
-                     List<PolicyRefService.RefInput> policyRefs) {}
+                     List<PolicyRefService.RefInput> policyRefs, String parentReason, Boolean resolves) {}
   public record BulkRequest(List<Item> items) {}
   public record ItemResult(String ref, long id, String status) {}
   public record BulkResponse(int created, int existing, List<ItemResult> items) {}
@@ -103,6 +104,7 @@ public class LogBulkService {
         if (pid != null && !parentIds.contains(pid)) parentIds.add(pid);
       }
       long id;
+      String why = LogService.reason(it.parentReason());
       var refs = policyRefs.normalize(ws, it.policyRefs());   // 잘못된 근거 조문은 여기서 400 → 전체 롤백
       String sourceRef = blank(it.sourceRef()) ? null : it.sourceRef().trim();
       // 해결 시각은 success 노드의 created_at(과거 로그를 적재할 때 대시보드 해결 시간이 "지금 - 7월" 로 왜곡되지 않게)
@@ -113,8 +115,9 @@ public class LogBulkService {
         long root = repo.insertNodeFull(ws, "fail", it.problemTitle().trim(), it.problemTitle().trim(), ctx.userId(), source, null, null, null, null, it.createdAt());
         id = repo.insertNodeFull(ws, "success", it.title().trim(), it.body().trim(), ctx.userId(), source, sourceRef,
             it.errorCode(), it.keywords(), it.resolutionSummary(), it.createdAt());
-        repo.insertEdge(ws, root, id, ctx.userId(), "bulk");
+        repo.insertEdge(ws, root, id, ctx.userId(), "bulk", why);
         repo.setResolved(root, resolvedAt, null);
+        repo.addResolution(ws, root, id, ctx.userId());   // 한 번에 등록과 같은 의미: 이 success 가 그 장애 건을 해결했다
         repo.audit(ctx.tenantId(), ws, "log_nodes", String.valueOf(root), "resolved", ctx.userName(), null, it.problemTitle().trim());
       } else {
         for (Long parentId : parentIds) {
@@ -125,10 +128,16 @@ public class LogBulkService {
         }
         id = repo.insertNodeFull(ws, it.type(), it.title().trim(), it.body().trim(), ctx.userId(), source,
             sourceRef, it.errorCode(), it.keywords(), it.resolutionSummary(), it.createdAt());
-        for (Long parentId : parentIds) repo.insertEdge(ws, parentId, id, ctx.userId(), "bulk");
+        for (Long parentId : parentIds) repo.insertEdge(ws, parentId, id, ctx.userId(), "bulk", why);
         // 체인에 success 가 붙으면 그 체인의 루트(들)는 해결된 것 — 단건 등록(R3)과 같은 의미. 이미 해결된 루트는 그대로
+        // 해결 기록(log_resolutions)은 resolves 로 밝힌 것만 — success 가 붙었다고 그 건을 해결한 조치라고 단정하지 않는다
         if ("success".equals(it.type()))
-          for (Long parentId : parentIds) repo.setResolvedIfOpen(repo.rootIdOf(parentId), resolvedAt);
+          for (Long parentId : parentIds) {
+            long root = repo.rootIdOf(parentId);
+            repo.setResolvedIfOpen(root, resolvedAt);
+            if (Boolean.TRUE.equals(it.resolves()) && "fail".equals(repo.find(ws, root).map(LogNodeDto::type).orElse(null)))
+              repo.addResolution(ws, root, id, ctx.userId());
+          }
       }
       policyRefs.write(id, refs);
       byRef.put(ref, id);

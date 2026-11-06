@@ -152,7 +152,7 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     if chain_ctx:
         fails = [n for n in chain_ctx if n["type"] == "fail"]
         causes = [n for n in chain_ctx if n["type"] == "ref"]
-        fixes = [n for n in chain_ctx if n["type"] == "success" and n["status"] == "active"]
+        fixes = sorted((n for n in chain_ctx if n["type"] == "success" and n["status"] == "active"), key=lambda n: not n.get("resolves_root"))
         if fails:
             parts.append(f"유사 사례: {fails[0]['title']} [{fails[0]['ref']}]. ")
         if causes:
@@ -176,9 +176,17 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     if not live:
         return []
     # 규정을 물은 질문에 딸려 온 사례는 참고다 — 질문과 닿을 때만 쓰게 한다 (억지로 인용시키면 주제만 비슷한 사례가 답에 섞인다)
-    fixes = [n["ref"] for n in live if n["type"] == "success" and (n.get("entry") or n.get("near"))]
-    cite = (f"해결 사례를 한 문장 이상 쓴다. 해결 방법은 해결 줄({' '.join(f'[{r}]' for r in fixes[:4])}) 가운데 질문에 맞는 것에서 쓰고 그 줄의 마커를 붙인다."
-            if fixes else "해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다.")
+    # 장애 건을 실제로 해결한 기록이 남아 있으면 그 줄을 앞에 — 같은 줄기의 다른 해결(후속 절차·부분 조치)과 섞지 않게
+    fix_lines = sorted((n for n in live if n["type"] == "success" and (n.get("entry") or n.get("near"))), key=lambda n: not n.get("resolves_root"))
+    fixes = [n["ref"] for n in fix_lines]
+    solved = [n["ref"] for n in fix_lines if n.get("resolves_root")]
+    if solved:
+        others = [r for r in fixes if r not in solved]
+        cite = (f"해결 사례를 한 문장 이상 쓴다. 이 장애를 실제로 해결한 기록은 {' '.join(f'[{r}]' for r in solved[:4])} 이다 — 해결 방법은 이 줄에서 먼저 쓰고 그 줄의 마커를 붙인다."
+                + (f" {' '.join(f'[{r}]' for r in others[:3])} 은 해결이 아닌 후속·보조 조치다 — 질문이 그 조치를 묻지 않으면 쓰지 않는다." if others else ""))
+    else:
+        cite = (f"해결 사례를 한 문장 이상 쓴다. 해결 방법은 해결 줄({' '.join(f'[{r}]' for r in fixes[:4])}) 가운데 질문에 맞는 것에서 쓰고 그 줄의 마커를 붙인다."
+                if fixes else "해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다.")
     out = [cite if case_required else
            "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않고, 사례가 없다거나 다루지 않는다는 말도 하지 않는다."]
     for n in live:
@@ -212,7 +220,8 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
             out.append(f"[{entry['ref']}] 의 조치({_action(entry)})는 규정 [{p['ref']}] 을 따른 것이라고 한 문장으로 밝힌다. 규정의 기준 자체를 이 조치로 설명하지 않는다.")
     if entry and entry["type"] != "success" and fixes and case_required:
         # 해결 줄마다 규정 관계를 짚어 준다 — "규정 관계가 있으면 밝혀라"로만 쓰면 다른 줄의 [P…] 를 기준 없는 조치에 붙인다
-        line = _fix_relations([n for n in live if n["ref"] in fixes])
+        # 해결 기록이 있으면 그 줄의 관계만 — 후속·보조 조치의 규정까지 늘어놓으면 규정 문장을 뭉치고 [P…] 를 빠뜨린다
+        line = _fix_relations([n for n in live if n["ref"] in (solved or fixes)])
         if line:
             out.append(line)
     return out[:6]
@@ -298,6 +307,8 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
             dep = "[폐기됨] " if n["status"] != "active" else ""
             indent = "  " * max(0, n["depth"])
             lines.append(f"{indent}[{n['ref']}] ({n['type']}) {dep}{n['title']}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
+                         + (" (이 장애를 해결한 기록)" if n.get("resolves_root") and n["status"] == "active" else "")
+                         + "".join(f" (상위에 이은 이유: {r})" for r in n.get("via") or [])
                          + "".join(_policy_note(p) for p in n.get("policy") or []))
     return "\n".join(lines)
 

@@ -20,11 +20,12 @@ public class EdgeController {
     this.service = service;
   }
 
-  public record EdgeRequest(@NotNull Long parentId, @NotNull Long childId) {}
+  /** reason = 이 기록을 그 상위에 이어 붙인 이유 한 줄(선택, 300자). 해제(DELETE)에서는 쓰지 않는다. */
+  public record EdgeRequest(@NotNull Long parentId, @NotNull Long childId, String reason) {}
 
   @PostMapping("/edges")
   public ResponseEntity<Void> link(@Valid @RequestBody EdgeRequest body, TenantContext ctx) {
-    service.linkEdge(ctx, body.parentId(), body.childId());
+    service.linkEdge(ctx, body.parentId(), body.childId(), body.reason());
     return ResponseEntity.status(201).build();
   }
 

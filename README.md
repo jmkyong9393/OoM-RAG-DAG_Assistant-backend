@@ -35,7 +35,7 @@
 |---|---|---|
 | `api/` | Spring Boot 게이트웨이 (도메인 API · 사번 로그인·세션 · SSE 릴레이 · Flyway `db/migration` V1~V9 + R__functions/views) · `Dockerfile` | 장문경 · 신동준 |
 | `ai/` | Python AI 서비스 (파이프라인, kiwipiepy, OpenAI 호환 LLM, 정제 워커) · `Dockerfile` | 장문경 · 배종현(그래프·프롬프트) |
-| `data/` | 규정(`policies/`, 원문 `policies/src/<slug>/`, 개정판 `policies/revisions/`) · 합성 사례 로그(`logs/`) · 규정↔사례 대조표(`alignment/`) · 평가셋(`evalset/`) · 답변 점검표(`answer_checks/`) · 시드 · SSE 계약 스키마(`contracts/`) | 신동준(적재·평가셋) · 프론트팀(규정 집필) |
+| `data/` | 규정(`policies/`, 원문 `policies/src/<slug>/`, 개정판 `policies/revisions/`) · 합성 사례 로그(`logs/`) · 규정↔사례 대조표(`alignment/`) · 사례 체인 기록(`chain_records/` — 해결 기록·연결 사유) · 평가셋(`evalset/`) · 답변 점검표(`answer_checks/`) · 시드 · SSE 계약 스키마(`contracts/`) | 신동준(적재·평가셋) · 프론트팀(규정 집필) |
 | `scripts/` | 원문 → 청크 JSON(`hwpx_to_md.py`, `build_policy_json.py`, `pdf_locate.py`), 적재(`index_policy.py`, `load_logs.py`, `load_alignment.py`), 검사기(`validate_policy_pack.py`, `validate_logs.py`, `check_alignment.py`), 평가셋 생성, 시드, LLM 스모크 | 신동준 · 장문경 |
 | `eval/` | `hit_at_k.py`(검색 hit@k·MRR, 대시보드 기록) · `answer_checks.py`(실제 답변 점검) · `answer_quality.py`(충실도·관련성 채점, 대시보드 기록) | 신동준 · 장문경 |
 | `deploy/` | `docker-compose.yml`(로컬: postgres만) · `docker-compose.prod.yml`(단일 호스트 운영) · `Caddyfile` · `docker-compose.smoke.yml` + `smoke.sh`(운영 compose 로컬 검증) · `.env.example` | 장문경 |
@@ -88,6 +88,7 @@ make ai                               # Python AI :8000   (AI_MODE=auto: 키 있
 make load-logs                        # data/logs/*_v1.json 합성 사례 적재 (api 가 떠 있어야 한다)
 make worker ARGS=--once               # 토큰 백필 + pending 로그 정제(키워드·요약·임베딩). 상시는 ARGS 없이
 make link-policies                    # data/alignment/*.json → 사례의 근거 조문 연결
+make link-chains                      # data/chain_records/*.json → 장애 건을 해결한 기록 · 간선 연결 사유
 ```
 
 `make` 가 없으면 `Makefile` 의 명령을 그대로 복사해 쓴다. 시드 로그인: 유통 `OOM0001~0005`, IT `OIT0001~0005` / 비밀번호 `Oom!demo-2026`(`SEED_PASSWORD`). `OOM0001`·`OIT0001` 이 회사 관리자다.
@@ -120,6 +121,8 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 **사례 로그** — `data/logs/<세트>_v1.json`(형식은 `data/logs/README.md`) → `python scripts/validate_logs.py` → `make load-logs` → `make worker ARGS=--once`.
 
 **규정↔사례 대조표** — `data/alignment/<회사>.json` 에 사례마다 관계(따름 `follows` · 예외 `exception` · 기준 없음 `gap`)를 적는다 → `python scripts/check_alignment.py` → `make link-policies`. 화면에서는 `PUT /logs/{id}/policy-refs` 로 넣는다.
+
+**사례 체인 기록** — 간선마다 상위에 이어 붙인 이유(`log_edges.reason`), 장애 건마다 실제로 해결한 기록(`log_resolutions`, 여러 개)을 남긴다. 화면·API 는 `POST /logs` 의 `edge_reason`, `POST /edges` 의 `reason`, `PATCH /logs/{id}` 의 `resolved_node_ids`. 유효한 해결 기록(활성 · 그 장애 건의 자손)은 DB 함수 `resolved_nodes()` 가 정하고, 답변은 그 줄을 먼저 인용하며 사후분석 같은 후속 조치와 구분한다. 시연용 기록은 `data/chain_records/<회사>.json` → `make link-chains` — 합성 사례 전체에 자동으로 채우지 않는다(어느 조치가 해결했는지 지어내지 않기 위해).
 
 **부서별 추천 질문** — `data/seed/workspaces.json` 의 `settings.suggestions`. 넣은 질문은 `data/answer_checks/suggestions_v1.json` 에도 있어야 한다(테스트가 확인) — 근거가 붙는 답이 나오는 질문만 첫 화면에 낸다.
 

@@ -31,10 +31,14 @@ public class ChainController {
     this.policyRefs = policyRefs;
   }
 
-  /** policyRefs = 그 기록이 따른(또는 벗어난) 규정 조문. 없으면 null. 어시스턴트의 체인과 같은 표시를 타임라인에서도 하게 한다. */
+  /**
+   * policyRefs = 그 기록이 따른(또는 벗어난) 규정 조문. 없으면 null. 어시스턴트의 체인과 같은 표시를 타임라인에서도 하게 한다.
+   * resolvesRoot = 이 success 가 장애 건을 실제로 해결한 기록으로 남아 있다(지금 유효한 것만 — resolved_nodes()).
+   */
   public record ChainNode(long id, String type, String status, String title, int depth, String pathLabel, String note, OffsetDateTime lastConfirmedAt,
-                          List<PolicyRefService.RefView> policyRefs) {}
-  public record Edge(long parentId, long childId) {}
+                          List<PolicyRefService.RefView> policyRefs, boolean resolvesRoot) {}
+  /** reason = 이 기록을 그 상위에 이어 붙인 이유. 없으면 null. */
+  public record Edge(long parentId, long childId, String reason) {}
   public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary) {}
 
   @GetMapping("/chains/{entryId}")
@@ -49,12 +53,16 @@ public class ChainController {
 
     List<Long> ids = rows.stream().map(r -> num(r, "id")).toList();
     Map<Long, List<PolicyRefService.RefView>> refs = policyRefs.readMany(ws, ids);
+    // 체인에 든 장애 건(루트)들의 해결 기록
+    Long[] roots = rows.stream().map(r -> (Long) r.get("root_id")).filter(java.util.Objects::nonNull).distinct().toArray(Long[]::new);
+    java.util.Set<Long> resolving = new java.util.HashSet<>(jdbc.sql("SELECT DISTINCT x FROM unnest(?::bigint[]) AS rt(root), resolved_nodes(?, rt.root) AS x")
+        .params(roots, ws).query(Long.class).list());
     List<ChainNode> nodes = rows.stream().map(r -> new ChainNode(num(r, "id"), (String) r.get("type"), (String) r.get("status"), (String) r.get("title"),
         ((Number) r.get("depth")).intValue(), (String) r.get("path_label"), (String) r.get("resolution_summary"),
-        Times.offset(r.get("last_confirmed_at")), refs.get(num(r, "id")))).toList();
-    List<Edge> edges = jdbc.sql("SELECT parent_id, child_id FROM log_edges WHERE parent_id = ANY (?) AND child_id = ANY (?) ORDER BY parent_id, child_id")
+        Times.offset(r.get("last_confirmed_at")), refs.get(num(r, "id")), resolving.contains(num(r, "id")))).toList();
+    List<Edge> edges = jdbc.sql("SELECT parent_id, child_id, reason FROM log_edges WHERE parent_id = ANY (?) AND child_id = ANY (?) ORDER BY parent_id, child_id")
         .params(ids.toArray(Long[]::new), ids.toArray(Long[]::new))
-        .query((rs, i) -> new Edge(rs.getLong("parent_id"), rs.getLong("child_id"))).list();
+        .query((rs, i) -> new Edge(rs.getLong("parent_id"), rs.getLong("child_id"), rs.getString("reason"))).list();
 
     Long rootId = rows.stream().filter(r -> num(r, "id") == entryId).map(r -> (Long) r.get("root_id")).findFirst().orElse(null);
     return new Chain(entryId, nodes, edges, summary(ws, rootId));

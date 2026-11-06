@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
  *  R4  완료는 루트만. ref 루트는 대상 아님. 활성 success 자손이 없으면 note 필수.
  *  R5  폐기는 사유 필수. cascade 면 이 노드를 거치지 않고는 활성 조상에 닿을 수 없는 자손도 함께. 복원은 deprecated_via 로 연동.
  *  R12 success 의 부모는 fail/ref 만.
+ *  R13 장애 건을 해결한 기록(log_resolutions)은 그 루트의 활성 success 자손만. 완료를 되돌리면 비운다.
  * 간선 삽입은 워크스페이스 단위 advisory lock 으로 직렬화하고 would_create_cycle() 로 사이클을 막는다.
  */
 @Service
@@ -29,8 +30,9 @@ public class LogService {
     this.repo = repo;
   }
 
+  /** edgeReason = 상위에 이어 붙인 이유(선택). resolveRoot = 이 success 가 장애 건을 해결했다 → 루트를 완료하고 해결 기록으로 남긴다. */
   public record CreateRequest(String type, String title, String body, Long parentId, Boolean resolveRoot, String problemTitle, Integer composeMs,
-                              List<PolicyRefService.RefInput> policyRefs) {}
+                              List<PolicyRefService.RefInput> policyRefs, String edgeReason) {}
 
   @Transactional
   public LogNodeDto create(TenantContext ctx, CreateRequest req) {
@@ -38,6 +40,7 @@ public class LogService {
     if (type == null || !TYPES.contains(type)) throw ApiException.badRequest("INVALID_TYPE", "type must be fail|success|ref");
     if (blank(req.title()) || blank(req.body())) throw ApiException.badRequest("VALIDATION", "title and body are required");
     long ws = ctx.workspaceId();
+    String edgeReason = reason(req.edgeReason());
     repo.lockWorkspace(ws);
 
     Long parentId = req.parentId();
@@ -46,8 +49,9 @@ public class LogService {
       if (blank(req.problemTitle())) throw ApiException.badRequest("PROBLEM_TITLE_REQUIRED", "success without parent needs problem_title");
       long root = repo.insertNode(ws, "fail", req.problemTitle().trim(), req.problemTitle().trim(), ctx.userId(), null, "ui");
       long id = repo.insertNode(ws, "success", req.title().trim(), req.body().trim(), ctx.userId(), req.composeMs(), "ui");
-      repo.insertEdge(ws, root, id, ctx.userId(), "manual");
+      repo.insertEdge(ws, root, id, ctx.userId(), "manual", edgeReason);
       resolve(ctx, root, null, true);
+      repo.addResolution(ws, root, id, ctx.userId());   // 한 번에 등록: 이 success 가 그 장애 건을 해결한 기록이다
       return repo.find(ws, id).orElseThrow();
     }
 
@@ -60,25 +64,42 @@ public class LogService {
 
     long id = repo.insertNode(ws, type, req.title().trim(), req.body().trim(), ctx.userId(), req.composeMs(), "ui");
     if (parentId != null) {
-      repo.insertEdge(ws, parentId, id, ctx.userId(), "manual");
+      repo.insertEdge(ws, parentId, id, ctx.userId(), "manual", edgeReason);
       if (Boolean.TRUE.equals(req.resolveRoot()) && "success".equals(type)) {
         Long root = repo.find(ws, id).map(LogNodeDto::rootId).orElse(null);
-        if (root != null) resolve(ctx, root, null, true);
+        if (root != null && "fail".equals(repo.find(ws, root).map(LogNodeDto::type).orElse(null))) {
+          resolve(ctx, root, null, true);
+          repo.addResolution(ws, root, id, ctx.userId());
+        }
       }
     }
     return repo.find(ws, id).orElseThrow();
   }
 
-  /** R4. note 는 활성 success 자손이 없을 때만 필수이며 그때만 저장한다. */
+  /**
+   * R4 · R13. note 는 활성 success 자손이 없을 때만 필수이며 그때만 저장한다.
+   * resolvedNodeIds: 이 장애 건을 해결한 기록. null 이면 지금 기록을 그대로 두고, 목록이면 통째로 바꾼다([] 는 비움).
+   */
   @Transactional
-  public LogNodeDto setResolved(TenantContext ctx, long id, boolean resolved, String note) {
+  public LogNodeDto setResolved(TenantContext ctx, long id, boolean resolved, String note, List<Long> resolvedNodeIds) {
     LogNodeDto node = get(ctx, id);
     if (!repo.isRoot(id)) throw ApiException.conflict("NOT_ROOT", "only a root (장애 건) can be resolved");
     if ("ref".equals(node.type())) throw ApiException.conflict("REF_ROOT", "ref root cannot be resolved");
     if (!resolved) {
       repo.setResolved(id, null, null);
+      repo.clearResolutions(id);
       repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), "unresolved", ctx.userName(), null, node.title());
       return get(ctx, id);
+    }
+    if (resolvedNodeIds != null) {
+      List<Long> ids = resolvedNodeIds.stream().distinct().toList();
+      for (Long nid : ids) {
+        LogNodeDto n = nid == null ? null : repo.find(ctx.workspaceId(), nid).orElse(null);
+        if (n == null || !"success".equals(n.type()) || !"active".equals(n.status()) || !repo.isDescendant(ctx.workspaceId(), id, nid))
+          throw ApiException.badRequest("RESOLVED_NODE_INVALID", "resolved_node_ids must be active success logs under this root: " + nid);
+      }
+      repo.clearResolutions(id);
+      for (Long nid : ids) repo.addResolution(ctx.workspaceId(), id, nid, ctx.userId());
     }
     boolean hasSuccess = repo.hasActiveSuccessDescendant(ctx.workspaceId(), id);
     if (!hasSuccess && blank(note)) throw ApiException.conflict("NOTE_REQUIRED", "no success log under this root; note required");
@@ -132,8 +153,9 @@ public class LogService {
   }
 
   @Transactional
-  public void linkEdge(TenantContext ctx, long parentId, long childId) {
+  public void linkEdge(TenantContext ctx, long parentId, long childId, String edgeReason) {
     long ws = ctx.workspaceId();
+    String why = reason(edgeReason);
     repo.lockWorkspace(ws);
     LogNodeDto parent = repo.find(ws, parentId).orElseThrow(() -> ApiException.conflict("PARENT_NOT_FOUND", "parent not in this workspace"));
     LogNodeDto child = repo.find(ws, childId).orElseThrow(() -> ApiException.notFound("child"));
@@ -141,7 +163,20 @@ public class LogService {
     if ("success".equals(child.type()) && !Set.of("fail", "ref").contains(parent.type()))
       throw ApiException.conflict("EDGE_PARENT_TYPE", "success can only follow fail/ref");
     if (repo.wouldCreateCycle(parentId, childId)) throw ApiException.conflict("CYCLE", "edge would create a cycle");
-    repo.insertEdge(ws, parentId, childId, ctx.userId(), "manual");
+    repo.insertEdge(ws, parentId, childId, ctx.userId(), "manual", why);
+  }
+
+  /** 지금 유효한 해결 기록. 장애 건이 아니면 빈 목록. */
+  public List<Long> resolvedNodes(TenantContext ctx, long rootId) {
+    return repo.resolvedNodes(ctx.workspaceId(), rootId);
+  }
+
+  /** 연결 사유: 앞뒤 공백을 떼고 빈 값은 null, 300자 넘으면 400. */
+  static String reason(String s) {
+    if (s == null || s.isBlank()) return null;
+    String t = s.strip();
+    if (t.length() > 300) throw ApiException.badRequest("VALIDATION", "edge reason must be 300 characters or fewer");
+    return t;
   }
 
   @Transactional

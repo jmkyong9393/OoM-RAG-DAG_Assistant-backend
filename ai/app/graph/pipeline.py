@@ -236,7 +236,7 @@ def _article_keys(policies: list[dict]) -> list[tuple[str, str]]:
 def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | None, policy_ctx: list[dict]) -> int:
     """체인 노드의 근거 조문(attributes.policy_refs)을 근거 목록에 더하고, 노드마다 어느 근거인지 붙인다.
     규정 검색 결과가 이미 있으면 새로 더하는 조문은 진입 노드·체인 루트·예외 사례·진입 노드와 같은 줄기의 해결 노드가 가리키는 것만 — 질문과 먼 조문이
-    섞이지 않게. 자리(MAX_LINKED)는 진입 노드, 같은 줄기, 예외, 해결 순으로 준다.
+    섞이지 않게. 자리(MAX_LINKED)는 진입 노드, 같은 줄기, 예외, 해결 기록, 해결 순으로 준다.
     검색 결과가 없으면(사례만 찾은 질의) 체인의 조문을 진입 노드·예외·해결 노드 순으로 MAX_LINKED 개까지 싣는다.
     그 밖의 노드는 이미 실린 근거와 일치할 때만 표시한다. policy_ctx·chain_ctx·chain_event 를 고쳐 쓴다. 더한 근거 수를 돌려준다."""
     entry = chain_event.entry_id if chain_event else None
@@ -251,8 +251,9 @@ def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | Non
     revised = any(c.get("status") in ("amended", "replaced", "retired") for c in chunks.values())
     wide = not policy_ctx
     added = 0
+    # 자리 순서: 진입 → 같은 줄기 → 예외 → 장애 건을 해결한 기록 → 그 밖의 해결 → 깊이. 해결 기록을 등록 순서에 기대지 않고 앞에 둔다
     for n, r in sorted(pairs, key=lambda x: (x[0]["id"] != entry, not x[0].get("near"), x[1].get("relation") != "exception",
-                                             x[0]["type"] != "success", x[0]["depth"])):
+                                             not x[0].get("resolves_root"), x[0]["type"] != "success", x[0]["depth"])):
         if r.get("relation") == "gap":
             n.setdefault("policy", []).append({"relation": "gap", "topic": r.get("topic"), "note": r.get("note"),
                                                **({"revision": "replaced"} if revised else {})})   # 당시의 판단 — 개정판에는 기준이 생겼을 수 있다
@@ -381,17 +382,23 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
         # 루트 기준 체인: 진입 노드의 루트에서 하향 (BE-HANDOFF-001 §4 ④)
         root = db.root_of(conn, ws, entry) or entry
         ch = db.chain(conn, ws, root, 4, 30)
+        resolving = db.resolved_nodes(conn, ws, root)
     nodes = sorted(ch["nodes"], key=lambda n: (n["depth"], n["id"]))  # 마커 번호 = depth 안정 정렬 순서
     near = _same_line(entry, ch["edges"])
+    via: dict[int, list[str]] = {}   # 기록 → 상위에 이어 붙인 이유
+    for e in ch["edges"]:   # 상위가 여럿이면 이유도 여럿 — 같은 문장은 한 번만
+        if e.get("reason") and e["reason"] not in via.setdefault(e["child_id"], []):
+            via[e["child_id"]].append(e["reason"])
     ctx, ev_nodes = [], []
     for i, n in enumerate(nodes):
         ref = f"N{i + 1}"
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
                     "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
-                    "entry": n["id"] == entry, "near": n["id"] in near})
+                    "entry": n["id"] == entry, "near": n["id"] in near, "resolves_root": n["id"] in resolving, "via": via.get(n["id"], [])})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
-                                  last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None))
+                                  last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None,
+                                  resolves_root=n["id"] in resolving))
     return ctx, ChainEvent(entry_id=entry, nodes=ev_nodes, edges=[ChainEdge(**e) for e in ch["edges"]])
 
 

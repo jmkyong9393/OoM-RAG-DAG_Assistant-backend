@@ -68,11 +68,13 @@ class ChainNode(BaseModel):
     path_label: str | None = None
     last_confirmed_at: str | None = None
     policy: list[NodePolicy] | None = None
+    resolves_root: bool = False   # 이 success 가 장애 건을 실제로 해결한 기록으로 남아 있다
 
 
 class ChainEdge(BaseModel):
     parent_id: int
     child_id: int
+    reason: str | None = None     # 이 기록을 그 상위에 이어 붙인 이유
 
 
 class ChainEvent(BaseModel):
