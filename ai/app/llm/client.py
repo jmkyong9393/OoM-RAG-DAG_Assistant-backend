@@ -135,7 +135,8 @@ async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chai
     if ai_mode() == "openai" and profile.has_key:
         context = _render_context(policy_ctx, chain_ctx)
         # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
-        must = _must_include(chain_ctx, case_required, {p["ref"] for p in [x for x in policy_ctx if x.get("source") == "search"][:2]})
+        searched = [x for x in policy_ctx if x.get("source") == "search"]
+        must = _must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}) + _wording_notes(searched[:3])
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -208,15 +209,58 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
             out.append(f"[{entry['ref']}] 이 다루는 부분({p.get('topic') or '이 조치'})은 회사 규정에 기준이 없다. "
                        f"'이 부분은 규정에 기준이 없다'는 문장을 답변에 넣고 [{entry['ref']}] 를 붙인다.")
         elif p["relation"] == "follows" and p.get("ref") and (entry["type"] == "success" or not fixes):
-            out.append(f"[{entry['ref']}] 의 조치가 따른 규정 [{p['ref']}] 을 한 문장으로 밝힌다.")
+            out.append(f"[{entry['ref']}] 의 조치({_action(entry)})는 규정 [{p['ref']}] 을 따른 것이라고 한 문장으로 밝힌다. 규정의 기준 자체를 이 조치로 설명하지 않는다.")
     if entry and entry["type"] != "success" and fixes and case_required:
-        # 해결 줄에 실제로 붙어 있는 표시에 맞춰 지시한다 — 근거가 없는 줄에 [P…] 를 붙이라고 하면 없는 마커를 지어낸다
-        marks = [p for n in live if n["ref"] in fixes for p in (n.get("policy") or []) if p.get("revision") != "replaced"]
-        if any(p.get("ref") for p in marks):
-            out.append("인용한 해결 줄 끝에 규정 관계가 적혀 있으면 그 규정을 한 문장으로 밝히고 그 [P…] 를 붙인다.")
-        if any(p["relation"] == "gap" for p in marks):
-            out.append("인용한 해결 줄이 규정에 기준이 없는 부분이라고 표시돼 있으면 '이 부분은 규정에 기준이 없다'고 알린다.")
+        # 해결 줄마다 규정 관계를 짚어 준다 — "규정 관계가 있으면 밝혀라"로만 쓰면 다른 줄의 [P…] 를 기준 없는 조치에 붙인다
+        line = _fix_relations([n for n in live if n["ref"] in fixes])
+        if line:
+            out.append(line)
     return out[:6]
+
+
+def _action(n: dict) -> str:
+    """사례 줄의 조치 이름: 제목에서 '해결:' 같은 머리를 뗀다."""
+    t = n.get("title") or ""
+    for head in ("해결(구):", "해결:", "원인:", "참고:"):
+        if t.startswith(head):
+            t = t[len(head):]
+    t = t.strip()
+    return t if len(t) <= 40 else t[:40] + "…"
+
+
+def _fix_relations(fixes: list[dict]) -> str:
+    """해결 줄별 규정 관계 한 줄. 표시가 없는 줄은 뺀다(근거 없는 줄에 [P…] 를 붙이라고 하면 없는 마커를 지어낸다)."""
+    parts = []
+    for n in fixes[:4]:
+        rel = []
+        for p in n.get("policy") or []:
+            if p.get("revision") == "replaced":
+                continue
+            if p["relation"] == "gap":
+                rel.append("규정에 기준이 없다")
+            elif p.get("ref"):
+                rel.append(f"[{p['ref']}] 을 따른 조치" if p["relation"] == "follows" else f"[{p['ref']}] 과 달리 처리")
+        if rel:
+            parts.append(f"[{n['ref']}] {_action(n)} → {' · '.join(dict.fromkeys(rel))}")
+    if not parts:
+        return ""
+    return ("해결 줄의 규정 관계는 줄마다 다르다 — " + " / ".join(parts)
+            + ". 답변에 쓴 해결 줄의 관계만 그 줄의 마커와 함께 한 문장으로 밝히고, 다른 줄의 규정을 이 조치에 붙이지 않는다.")
+
+
+# 조문이 의무가 아니라 목표·노력·권장으로 정한 표현. 모델이 질문의 "…해야 해?"에 끌려 의무로 바꿔 쓴다
+SOFT_WORDING = (("목표로", "목표"), ("노력한다", "노력"), ("노력하여야", "노력"), ("권장한다", "권장"), ("권고한다", "권고"))
+
+
+def _wording_notes(policies: list[dict]) -> list[str]:
+    """질문이 겨냥한 조문(검색 상위)이 기준을 목표·노력·권장으로 정했으면, 의무로 바꿔 쓰지 말라고 짚는다."""
+    out = []
+    for p in policies:
+        found = [w for k, w in SOFT_WORDING if k in (p.get("text") or "")]
+        if found:
+            w = found[0]
+            out.append(f"[{p['ref']}] 은 이 기준을 의무가 아니라 '{w}'(으)로 정했다. '…해야 한다'로 바꾸지 말고 '{w}'라는 말을 그대로 쓴다.")
+    return out[:2]
 
 
 def _note_text(p: dict) -> str:
