@@ -154,11 +154,11 @@ def test_must_include_lists_cases_exceptions_and_entry_relation():
         node(5, [{"relation": "exception", "ref": "P3", "label": "운영지침 제17조"}]),
         node(6, [{"relation": "exception", "ref": "P4", "label": "운영지침 제23조"}])], searched={"P4"})
     assert must[0].startswith("해결 사례를 한 문장 이상")
-    assert any("[N1]" in m and "[P2]" in m and "따른 규정" in m for m in must), "해결 줄이 없으면 진입 사례가 따른 규정을 밝힌다"
+    assert any("[N1]" in m and "[P2]" in m and "따른 것" in m for m in must), "해결 줄이 없으면 진입 사례가 따른 규정을 밝힌다"
     assert any("[N2]" in m and "[P1]" in m and "당시 75%" in m for m in must), "진입 사례와 같은 줄기의 예외"
     assert any("[N6]" in m and "[P4]" in m for m in must), "질문으로 검색된 조문을 벗어난 예외"
     assert not any("N5" in m for m in must), "다른 가지의 예외는 강제하지 않는다"
-    assert any("[N1]" in m and "[P2]" in m and "따른 규정" in m for m in must), "진입 사례가 따른 규정"
+    assert any("[N1]" in m and "[P2]" in m and "따른 것" in m for m in must), "진입 사례가 따른 규정"
     assert not any("N3" in m or "N4" in m for m in must), "진입 노드가 아닌 '기준 없음'과 폐기 노드는 넣지 않는다"
     gap = llm._must_include([node(1, [{"relation": "gap", "topic": "합산 상한"}], entry=True)])
     assert any("규정에 기준이 없다" in m and "합산 상한" in m for m in gap)
@@ -173,8 +173,8 @@ def test_must_include_points_at_fix_lines_when_entry_is_a_problem():
         node(2, "success", [{"relation": "follows", "ref": "P2", "label": "제11조"}]),
         node(3, "success", near=False)])
     assert "[N2]" in must[0] and "N3" not in must[0], "진입 사례와 같은 줄기의 해결 줄만 지목한다"
-    assert not any("[N1]" in m and "따른 규정" in m for m in must), "문제 줄이 따른 규정 대신"
-    assert any("인용한 해결 줄" in m for m in must), "인용한 해결 줄의 규정을 밝히게 한다"
+    assert not any(m.startswith("[N1]") and "따른 것" in m for m in must), "문제 줄이 따른 규정 대신"
+    assert any("[N2]" in m and "[P2] 을 따른 조치" in m and "줄마다 다르다" in m for m in must), "해결 줄마다 규정 관계를 짚는다"
 
 
 def test_must_include_asks_for_policy_marker_only_when_fix_lines_have_one():
@@ -182,11 +182,25 @@ def test_must_include_asks_for_policy_marker_only_when_fix_lines_have_one():
         return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": "t", "resolution_summary": None, "depth": 0, "policy": policy,
                 "entry": entry, "near": True}
     bare = llm._must_include([node(1, "fail", entry=True), node(2, "success")])
-    assert not any("[P…]" in m for m in bare), "해결 줄에 근거 조문이 없으면 [P…] 를 붙이라고 하지 않는다"
+    assert not any("줄마다 다르다" in m for m in bare), "해결 줄에 규정 표시가 없으면 관계를 지시하지 않는다"
     gap = llm._must_include([node(1, "fail", entry=True), node(2, "success", [{"relation": "gap", "topic": "합산 상한"}])])
-    assert not any("[P…]" in m for m in gap) and any("기준이 없다" in m for m in gap), "기준 없음만 붙은 해결 줄"
+    assert any("[N2]" in m and "기준이 없다" in m and "[P" not in m.split("—")[1].split(".")[0] for m in gap), "기준 없음만 붙은 해결 줄"
     both = llm._must_include([node(1, "fail", entry=True), node(2, "success", [{"relation": "follows", "ref": "P2", "label": "제11조"}])])
-    assert any("[P…]" in m for m in both)
+    assert any("[N2]" in m and "[P2] 을 따른 조치" in m for m in both)
+    # 기준 없는 해결과 규정을 따른 해결이 함께 있으면 줄마다 따로 짚는다 (다른 줄의 규정을 붙이던 문제)
+    mixed = llm._must_include([node(1, "fail", entry=True),
+                               {**node(5, "success", [{"relation": "gap", "topic": "캐시 만료 분산"}]), "title": "해결: TTL 지터 ±10%와 재생성 잠금"},
+                               {**node(8, "success", [{"relation": "follows", "ref": "P1", "label": "제16조"}]), "title": "해결: 수동 발견이라 사후분석 작성"}])
+    line = next(m for m in mixed if "줄마다 다르다" in m)
+    assert "[N5] TTL 지터 ±10%와 재생성 잠금 → 규정에 기준이 없다" in line and "[N8] 수동 발견이라 사후분석 작성 → [P1] 을 따른 조치" in line
+
+
+def test_wording_notes_keep_soft_obligations():
+    p = {"ref": "P1", "text": "② 서류는 결과를 영업일 7일 이내에 알리는 것을 목표로 하며, 보통 2~3주 걸린다."}
+    notes = llm._wording_notes([p, {"ref": "P2", "text": "회사는 14일 안에 서류를 돌려준다."}])
+    assert notes == ["[P1] 은 이 기준을 의무가 아니라 '목표'(으)로 정했다. '…해야 한다'로 바꾸지 말고 '목표'라는 말을 그대로 쓴다."]
+    assert llm._wording_notes([{"ref": "P3", "text": "개선에 노력한다."}])[0].startswith("[P3]") and "'노력'" in llm._wording_notes([{"ref": "P3", "text": "개선에 노력한다."}])[0]
+    assert llm._action({"title": "해결: " + "가" * 50}).endswith("…") and llm._action({"title": "원인: 풀 고갈"}) == "풀 고갈"
 
 
 def test_same_line_is_entry_with_ancestors_and_descendants():
