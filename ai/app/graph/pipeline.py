@@ -385,9 +385,9 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     nodes = sorted(ch["nodes"], key=lambda n: (n["depth"], n["id"]))  # 마커 번호 = depth 안정 정렬 순서
     near = _same_line(entry, ch["edges"])
     via: dict[int, list[str]] = {}   # 기록 → 상위에 이어 붙인 이유
-    for e in ch["edges"]:
-        if e.get("reason"):
-            via.setdefault(e["child_id"], []).append(e["reason"])
+    for e in ch["edges"]:   # 상위가 여럿이면 이유도 여럿 — 같은 문장은 한 번만
+        if e.get("reason") and e["reason"] not in via.setdefault(e["child_id"], []):
+            via[e["child_id"]].append(e["reason"])
     ctx, ev_nodes = [], []
     for i, n in enumerate(nodes):
         ref = f"N{i + 1}"

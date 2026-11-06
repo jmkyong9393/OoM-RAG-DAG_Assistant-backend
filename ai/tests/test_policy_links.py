@@ -242,3 +242,20 @@ def test_render_context_marks_resolution_and_edge_reason():
     assert "[N2] (fail) 원인: 캐시 동시 만료 (상위에 이은 이유: 정시 직전 만료 시각이 같았다)" in text
     assert "[N3] (success) 해결: TTL 지터 (이 장애를 해결한 기록)" in text
     assert "예열 크론 (이 장애를 해결한 기록)" not in text, "폐기된 기록은 해결 표시를 하지 않는다"
+
+
+def test_load_chain_lists_each_edge_reason_once(monkeypatch):
+    """상위가 둘인 기록(예: 두 원인을 함께 닫는 사후분석)은 같은 이유가 두 간선에 적혀 있다 — 컨텍스트에는 한 번만."""
+    from contextlib import nullcontext
+    nodes = [{"id": i, "type": t, "status": "active", "title": f"n{i}", "depth": d, "path_label": None, "last_confirmed_at": None}
+             for i, t, d in ((1, "fail", 0), (2, "fail", 1), (3, "fail", 1), (4, "success", 2))]
+    edges = [{"parent_id": 1, "child_id": 2, "reason": None}, {"parent_id": 1, "child_id": 3, "reason": None},
+             {"parent_id": 2, "child_id": 4, "reason": "두 원인을 함께 정리"}, {"parent_id": 3, "child_id": 4, "reason": "두 원인을 함께 정리"}]
+    monkeypatch.setattr(pipeline.db, "connect", lambda: nullcontext())
+    monkeypatch.setattr(pipeline.db, "root_of", lambda conn, ws, e: 1)
+    monkeypatch.setattr(pipeline.db, "chain", lambda conn, ws, root, d, n: {"entry_id": root, "nodes": nodes, "edges": edges})
+    monkeypatch.setattr(pipeline.db, "resolved_nodes", lambda conn, ws, root: {4})
+    ctx, ev = pipeline._load_chain(1, 2)
+    fix = next(n for n in ctx if n["id"] == 4)
+    assert fix["via"] == ["두 원인을 함께 정리"] and fix["resolves_root"] is True
+    assert next(n for n in ev.nodes if n.id == 4).resolves_root and ev.edges[2].reason == "두 원인을 함께 정리"
