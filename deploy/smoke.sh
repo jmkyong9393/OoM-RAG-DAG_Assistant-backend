@@ -29,7 +29,7 @@ step "로그인 (Caddy 경유, 쿠키 저장)"
 rm -f ./.smoke.jar
 code=$(curl -s -o ./.smoke-login.json -w "%{http_code}" -c ./.smoke.jar -H "Content-Type: application/json" \
   -d "{\"employee_no\":\"OOM0002\",\"password\":\"$(grep ^SEED_PASSWORD= .env.smoke | cut -d= -f2)\"}" http://localhost/api/v1/auth/login)
-echo "login: $code  $(head -c 160 ./.smoke-login.json)"
+echo "login: $code"   # 응답 원문은 이름·이메일이 있어 출력하지 않는다
 grep -c OOMSESSION ./.smoke.jar | sed 's/^/OOMSESSION cookies: /'
 step "로그 목록 (세션 쿠키 + X-Workspace-Id)"
 curl -s -b ./.smoke.jar -H "X-Workspace-Id: 1" "http://localhost/api/v1/logs?type=all" | head -c 200; echo
