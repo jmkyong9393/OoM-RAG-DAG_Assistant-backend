@@ -224,7 +224,14 @@ def test_must_include_puts_recorded_resolutions_first():
                 "entry": entry, "near": True, "resolves_root": resolves}
     must = llm._must_include([node(1, "fail", entry=True), node(2, "success", title="해결: 사후분석 작성"),
                               node(3, "success", resolves=True), node(4, "success", resolves=True)])
-    assert "실제로 해결한 기록은 [N3] [N4]" in must[0] and "[N2] 은 해결로 기록되지 않은 조치" in must[0]
+    assert "실제로 해결한 기록은 [N3] [N4]" in must[0] and "[N2] 은 해결이 아닌 후속·보조 조치" in must[0]
+    # 줄별 규정 관계도 해결 기록 줄만 — 후속 조치의 규정을 늘어놓지 않는다
+    def withp(n, ref):
+        return {**n, "policy": [{"relation": "follows", "ref": ref, "label": "x"}]}
+    rel = llm._must_include([node(1, "fail", entry=True), withp(node(2, "success", title="해결: 안내문 통합"), "P3"),
+                             withp(node(3, "success", resolves=True, title="해결: 셀프 해제"), "P2")])
+    line = next(m for m in rel if "줄마다 다르다" in m)
+    assert "[N3] 셀프 해제 → [P2]" in line and "[N2]" not in line and "[P3]" not in line
     # 해결 기록이 없으면 지금처럼 해결 줄 전체에서 고르게 한다
     plain = llm._must_include([node(1, "fail", entry=True), node(2, "success"), node(3, "success")])
     assert "해결 줄([N2] [N3])" in plain[0] and "실제로 해결한" not in plain[0]

@@ -183,7 +183,7 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     if solved:
         others = [r for r in fixes if r not in solved]
         cite = (f"해결 사례를 한 문장 이상 쓴다. 이 장애를 실제로 해결한 기록은 {' '.join(f'[{r}]' for r in solved[:4])} 이다 — 해결 방법은 이 줄에서 먼저 쓰고 그 줄의 마커를 붙인다."
-                + (f" {' '.join(f'[{r}]' for r in others[:3])} 은 해결로 기록되지 않은 조치이니 쓰려면 후속·보조 조치로 구분한다." if others else ""))
+                + (f" {' '.join(f'[{r}]' for r in others[:3])} 은 해결이 아닌 후속·보조 조치다 — 질문이 그 조치를 묻지 않으면 쓰지 않는다." if others else ""))
     else:
         cite = (f"해결 사례를 한 문장 이상 쓴다. 해결 방법은 해결 줄({' '.join(f'[{r}]' for r in fixes[:4])}) 가운데 질문에 맞는 것에서 쓰고 그 줄의 마커를 붙인다."
                 if fixes else "해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다.")
@@ -220,7 +220,8 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
             out.append(f"[{entry['ref']}] 의 조치({_action(entry)})는 규정 [{p['ref']}] 을 따른 것이라고 한 문장으로 밝힌다. 규정의 기준 자체를 이 조치로 설명하지 않는다.")
     if entry and entry["type"] != "success" and fixes and case_required:
         # 해결 줄마다 규정 관계를 짚어 준다 — "규정 관계가 있으면 밝혀라"로만 쓰면 다른 줄의 [P…] 를 기준 없는 조치에 붙인다
-        line = _fix_relations([n for n in live if n["ref"] in fixes])
+        # 해결 기록이 있으면 그 줄의 관계만 — 후속·보조 조치의 규정까지 늘어놓으면 규정 문장을 뭉치고 [P…] 를 빠뜨린다
+        line = _fix_relations([n for n in live if n["ref"] in (solved or fixes)])
         if line:
             out.append(line)
     return out[:6]
