@@ -154,6 +154,7 @@ bash bootstrap.sh                         # postgres → api(Flyway) → bootstr
 
 - 데이터 적재는 compose 네트워크 안의 일회성 `bootstrap` 컨테이너(AI 이미지 + `scripts/`·`data/` 읽기 전용 마운트)가 한다. postgres 포트를 호스트에 열지 않고, 사례는 API(`POST /logs/bulk`)로 넣어 도메인 규칙 검사를 같이 받는다.
 - 모든 단계가 멱등이다. 데이터만 고쳤으면 `bash bootstrap.sh data` — 규정이 그대로면 재색인 없이 수 초, 바뀌었으면 재색인(그동안 1~2분 어휘 검색이 빈다).
+- 시연용 개정판은 `bash bootstrap.sh revision:<slug>` (`make index-revision` 과 같다 — 구판 폐기, 영향받는 사례 수 출력).
 - 첫 적재는 약 4분(규정 860청크 임베딩 + 사례 284건 정제, OpenAI 호출 있음). 끝에 적재 수(활성 규정 21 · 청크 860 · 사례 284 · 근거 연결 256 · 해결 기록 9 · 연결 사유 19)를 출력한다.
 
 이후 이미지 갱신은 `docker compose -f docker-compose.prod.yml --env-file .env pull && up -d`. `SITE_ADDRESS` 에 도메인을 넣으면 HTTPS 자동. 임베딩 모델을 바꿔 배포했으면 이어서 재색인한다(`docker compose … exec ai uv run --no-sync python -m app.worker --reindex`).
