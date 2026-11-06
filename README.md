@@ -38,12 +38,12 @@
 | `data/` | 규정(`policies/`, 원문 `policies/src/<slug>/`, 개정판 `policies/revisions/`) · 합성 사례 로그(`logs/`) · 규정↔사례 대조표(`alignment/`) · 사례 체인 기록(`chain_records/` — 해결 기록·연결 사유) · 평가셋(`evalset/`) · 답변 점검표(`answer_checks/`) · 시드 · SSE 계약 스키마(`contracts/`) | 신동준(적재·평가셋) · 프론트팀(규정 집필) |
 | `scripts/` | 원문 → 청크 JSON(`hwpx_to_md.py`, `build_policy_json.py`, `pdf_locate.py`), 적재(`index_policy.py`, `load_logs.py`, `load_alignment.py`), 검사기(`validate_policy_pack.py`, `validate_logs.py`, `check_alignment.py`), 평가셋 생성, 시드, LLM 스모크 | 신동준 · 장문경 |
 | `eval/` | `hit_at_k.py`(검색 hit@k·MRR, 대시보드 기록) · `answer_checks.py`(실제 답변 점검) · `answer_quality.py`(충실도·관련성 채점, 대시보드 기록) | 신동준 · 장문경 |
-| `deploy/` | `docker-compose.yml`(로컬: postgres만) · `docker-compose.prod.yml`(단일 호스트 운영) · `Caddyfile` · `docker-compose.smoke.yml` + `smoke.sh`(운영 compose 로컬 검증) · `.env.example` | 장문경 |
+| `deploy/` | `docker-compose.yml`(로컬: postgres만) · `docker-compose.prod.yml`(단일 호스트 운영) · `Caddyfile` · `bootstrap.sh` + `bootstrap-data.sh`(빈 DB 데이터 적재) · `docker-compose.smoke.yml` + `smoke.sh`(운영 compose 로컬 검증) · `.env.example` | 장문경 |
 | `.github/workflows/` | `ci.yml`(가드·Python·Spring·규정 변환 점검) · `deploy.yml`(2단계 자리표시) | 장문경 |
 
 경계 원칙 세 가지. **DB 쓰기는 `api/`만**(Python 은 정제 컬럼·규정 적재만, `oom_ai` 역할), **검색·체인 SQL은 DB 함수로 공유**, **토크나이징·임베딩·LLM은 `ai/`만.**
 
-## 현재 상태 (2026-11-06)
+## 현재 상태 (2026-11-07)
 
 **데이터** — 가상의 두 회사. 실존 기업·서비스 이름은 쓰지 않는다.
 
@@ -71,9 +71,9 @@
 
 **API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 문서 상태, 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 111, Python 155(DB 통합 포함).
+**테스트** — Spring 117, Python 161(DB 통합 포함).
 
-**배포** — 운영 compose 로컬 스모크 통과. Lightsail 기동은 아직.
+**배포** — 운영 compose 로컬 스모크 통과(빈 DB → `bootstrap.sh` 데이터 적재 → Caddy 경유 로그인·SSE). Lightsail 기동은 아직.
 
 ## 시작하기 (로컬 개발)
 
@@ -138,12 +138,25 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 
 `deploy/docker-compose.prod.yml` + `deploy/Caddyfile`. Caddy 가 `/api/v1/*` → api(SSE `flush_interval -1`), 나머지 → web. api 는 `oom_api` 역할로 접속하고 내장 Flyway 가 관리자 계정으로 마이그레이션한다. 정제 워커는 ai 프로세스 안에서 돈다(`WORKER_EMBEDDED=1`). 개인정보 처리방침 문안(`data/legal/`)은 api 컨테이너에 마운트한다. 필요한 변수는 `.env.example` 의 운영 절(`SITE_ADDRESS`·`SITE_ORIGIN`·`WEB_IMAGE` …).
 
+로컬 검증:
+
 ```bash
 cd deploy && cp .env.example .env.smoke   # 값 채우기 (WEB_IMAGE 는 프론트 레포 Dockerfile 로 만든 이미지)
-bash smoke.sh                             # 로컬에서 운영 compose 전체를 띄워 마이그레이션 → 시드 → Caddy 경유 로그인·SSE 까지 확인 후 내림 (--keep 이면 유지)
+bash smoke.sh                             # 운영 compose 전체: 마이그레이션 → 데이터 적재(bootstrap.sh) → Caddy 경유 로그인·SSE 확인 후 내림 (--keep 유지 · --quick 시드만)
 ```
 
-Lightsail 에서는 `docker compose -f docker-compose.prod.yml --env-file .env pull && up -d`. `SITE_ADDRESS` 에 도메인을 넣으면 HTTPS 자동. 임베딩 모델을 바꿔 배포했으면 이어서 재색인한다(`docker compose … exec ai uv run --no-sync python -m app.worker --reindex`).
+박스 첫 기동 (빈 DB):
+
+```bash
+cd deploy && cp .env.example .env         # 운영 값. 레지스트리 이미지를 쓰면 먼저 docker compose -f docker-compose.prod.yml --env-file .env pull
+bash bootstrap.sh                         # postgres → api(Flyway) → bootstrap 컨테이너(시드 · 규정 색인 · 사례 · 근거 연결 · 체인 기록) → ai · web · caddy
+```
+
+- 데이터 적재는 compose 네트워크 안의 일회성 `bootstrap` 컨테이너(AI 이미지 + `scripts/`·`data/` 읽기 전용 마운트)가 한다. postgres 포트를 호스트에 열지 않고, 사례는 API(`POST /logs/bulk`)로 넣어 도메인 규칙 검사를 같이 받는다.
+- 모든 단계가 멱등이다. 데이터만 고쳤으면 `bash bootstrap.sh data` — 규정이 그대로면 재색인 없이 수 초, 바뀌었으면 재색인(그동안 1~2분 어휘 검색이 빈다).
+- 첫 적재는 약 4분(규정 860청크 임베딩 + 사례 284건 정제, OpenAI 호출 있음). 끝에 적재 수(활성 규정 21 · 청크 860 · 사례 284 · 근거 연결 256 · 해결 기록 9 · 연결 사유 19)를 출력한다.
+
+이후 이미지 갱신은 `docker compose -f docker-compose.prod.yml --env-file .env pull && up -d`. `SITE_ADDRESS` 에 도메인을 넣으면 HTTPS 자동. 임베딩 모델을 바꿔 배포했으면 이어서 재색인한다(`docker compose … exec ai uv run --no-sync python -m app.worker --reindex`).
 
 ## 문서
 

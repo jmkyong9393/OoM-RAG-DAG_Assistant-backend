@@ -13,7 +13,8 @@ services:
     volumes:
       - oom-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oom} -d ${POSTGRES_DB:-oom}"]
+      # TCP 로 검사 — 첫 기동의 초기화용 임시 서버는 소켓만 열어 소켓 검사로는 healthy 가 먼저 뜬다(Flyway 연결 거부)
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-oom} -d ${POSTGRES_DB:-oom}"]
       interval: 5s
       timeout: 3s
       retries: 20

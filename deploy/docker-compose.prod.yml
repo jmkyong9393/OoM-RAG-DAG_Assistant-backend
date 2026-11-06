@@ -4,6 +4,19 @@
 # 로컬 검증(이미지 직접 빌드): docker compose -f docker-compose.prod.yml --env-file .env build && up -d
 # 프로젝트 이름을 고정한다 — 개발용 docker-compose.yml 과 같은 폴더라 기본 이름(deploy)이 겹치면 `down -v` 가 개발 postgres 컨테이너까지 지운다(실제로 겪음)
 name: oom-prod
+
+# ai 와 bootstrap(데이터 적재)이 같이 쓰는 AI 서비스 환경
+x-ai-env: &ai-env
+  AI_DB_URL: postgresql://oom_ai:${OOM_AI_PASSWORD}@postgres:5432/${POSTGRES_DB:-oom}
+  AI_MODE: ${AI_MODE:-openai}
+  LLM_PROFILE_DEFAULT_BASE_URL: ${LLM_PROFILE_DEFAULT_BASE_URL:-https://api.openai.com/v1}
+  LLM_PROFILE_DEFAULT_API_KEY: ${LLM_PROFILE_DEFAULT_API_KEY}
+  LLM_PROFILE_DEFAULT_MODEL_LIGHT: ${LLM_PROFILE_DEFAULT_MODEL_LIGHT:-}
+  LLM_PROFILE_DEFAULT_MODEL_ANSWER: ${LLM_PROFILE_DEFAULT_MODEL_ANSWER:-}
+  LLM_PROFILE_DEFAULT_EMBEDDING_MODEL: ${LLM_PROFILE_DEFAULT_EMBEDDING_MODEL:-text-embedding-3-large}
+  ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-400}
+  WORKER_POLL_SEC: ${WORKER_POLL_SEC:-5}
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -15,7 +28,8 @@ services:
     volumes:
       - oom-prod-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oom} -d ${POSTGRES_DB:-oom}"]
+      # TCP 로 검사 — 첫 기동의 초기화용 임시 서버는 소켓만 열어 소켓 검사로는 healthy 가 먼저 뜬다(Flyway 연결 거부)
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-oom} -d ${POSTGRES_DB:-oom}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -74,15 +88,7 @@ services:
     image: ${AI_IMAGE:-oom-ai:local}
     build: ../ai
     environment:
-      AI_DB_URL: postgresql://oom_ai:${OOM_AI_PASSWORD}@postgres:5432/${POSTGRES_DB:-oom}
-      AI_MODE: ${AI_MODE:-openai}
-      LLM_PROFILE_DEFAULT_BASE_URL: ${LLM_PROFILE_DEFAULT_BASE_URL:-https://api.openai.com/v1}
-      LLM_PROFILE_DEFAULT_API_KEY: ${LLM_PROFILE_DEFAULT_API_KEY}
-      LLM_PROFILE_DEFAULT_MODEL_LIGHT: ${LLM_PROFILE_DEFAULT_MODEL_LIGHT:-}
-      LLM_PROFILE_DEFAULT_MODEL_ANSWER: ${LLM_PROFILE_DEFAULT_MODEL_ANSWER:-}
-      LLM_PROFILE_DEFAULT_EMBEDDING_MODEL: ${LLM_PROFILE_DEFAULT_EMBEDDING_MODEL:-text-embedding-3-large}
-      ANSWER_MAX_TOKENS: ${ANSWER_MAX_TOKENS:-400}
-      WORKER_POLL_SEC: ${WORKER_POLL_SEC:-5}
+      <<: *ai-env
       WORKER_EMBEDDED: "1"                   # 정제 워커를 같은 프로세스(스레드)에서 — kiwi 모델 공유로 ≈500 MB 절감
     depends_on:
       postgres:
@@ -95,6 +101,26 @@ services:
       start_period: 30s
     restart: unless-stopped
     mem_limit: 1536m        # 워커 내장분 포함
+
+  # 일회성 데이터 적재(시드 · 규정 색인 · 사례 · 근거 연결 · 체인 기록). 호스트에서 bash bootstrap.sh — 멱등
+  bootstrap:
+    image: ${AI_IMAGE:-oom-ai:local}
+    build: ../ai
+    profiles: ["bootstrap"]
+    environment:
+      <<: *ai-env
+      DATABASE_URL: postgresql://${POSTGRES_USER:-oom}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-oom}   # 시드·연결 스크립트는 스키마 소유 계정
+      SEED_PASSWORD: ${SEED_PASSWORD:-Oom!demo-2026}
+      API_BASE: http://api:8080/api/v1   # 사례는 API(POST /logs/bulk)로 넣는다 — 도메인 규칙 검사를 같이 받는다
+    volumes:
+      - ../scripts:/src/scripts:ro
+      - ../data:/src/data:ro
+      - ./bootstrap-data.sh:/src/bootstrap-data.sh:ro
+    entrypoint: ["sh", "/src/bootstrap-data.sh"]
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 1g
 
   web:
     image: ${WEB_IMAGE:?set WEB_IMAGE (프론트 레포 Dockerfile 로 빌드한 이미지)}
