@@ -24,9 +24,9 @@ import org.springframework.session.web.http.DefaultCookieSerializer;
 import com.oom.assist.common.config.AppProps;
 
 /**
- * 세션 쿠키 로그인 (03 안건 G, 방식 A). 세션은 Spring Session JDBC 가 Postgres 에 둔다.
- * CSRF 토큰은 쓰지 않는다: 쿠키 SameSite=Lax + 상태 변경 엔드포인트는 전부 커스텀 헤더(X-Workspace-Id, JSON 본문)를 요구해
- * 교차 사이트 폼 전송이 성립하지 않는다. 인증 실패는 401 {code:UNAUTHORIZED}, 권한 부족은 403 — 기존 에러 형식 그대로.
+ * 세션 쿠키 로그인(Spring Session JDBC). 인증 실패는 401 {code:UNAUTHORIZED}, 권한 부족은 403.
+ * CSRF 는 토큰 대신 쿠키의 SameSite=Lax 로 막는다 — 다른 사이트의 POST·PUT·PATCH·DELETE 에는 세션 쿠키가 실리지 않는다
+ * (헤더도 JSON 본문도 없는 /auth/logout · /auth/consent 도 이것으로 막힌다). 제약: SESSION_SAME_SITE=None 이면 이 전제가 깨진다.
  */
 @Configuration
 @EnableWebSecurity
