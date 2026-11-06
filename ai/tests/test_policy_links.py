@@ -266,3 +266,21 @@ def test_load_chain_lists_each_edge_reason_once(monkeypatch):
     fix = next(n for n in ctx if n["id"] == 4)
     assert fix["via"] == ["두 원인을 함께 정리"] and fix["resolves_root"] is True
     assert next(n for n in ev.nodes if n.id == 4).resolves_root and ev.edges[2].reason == "두 원인을 함께 정리"
+
+
+def test_link_policies_gives_slots_to_resolving_fixes_before_follow_ups(monkeypatch):
+    """후속 조치(사후분석 등)가 해결 기록보다 먼저 등록돼도 자리(MAX_LINKED)는 해결 기록의 조문에 먼저 준다."""
+    arts = {"제2조": "ops-a2-1", "제16조": "ops-a16-1", "제17조": "ops-a17-1", "제11조": "ops-a11-1"}
+    chunks = {("ops", a): _chunk(c, label=f"{a} (x)") for a, c in arts.items()}
+    monkeypatch.setattr(pipeline.db, "connect", lambda: __import__("contextlib").nullcontext())
+    monkeypatch.setattr(pipeline.db, "policy_ref_chunks", lambda conn, ws, keys: {k: chunks[k] for k in keys if k in chunks})
+    nodes = [_node(1, 0, [{"policy": "ops", "article": "제2조", "relation": "follows"}]),
+             _node(2, 1, [{"policy": "ops", "article": "제16조", "relation": "follows"}], type_="success"),   # 후속: 사후분석 (먼저 등록)
+             _node(3, 1, [{"policy": "ops", "article": "제17조", "relation": "follows"}], type_="success"),   # 후속: 공지
+             _node(4, 1, [{"policy": "ops", "article": "제11조", "relation": "follows"}], type_="success")]   # 실제 해결
+    for n in nodes:
+        n["near"] = True
+    nodes[3]["resolves_root"] = True
+    policy: list[dict] = []
+    assert pipeline._link_policies(1, nodes, _event(nodes, entry=1), policy) == pipeline.MAX_LINKED == 3
+    assert [p["chunk_id"] for p in policy] == ["ops-a2-1", "ops-a11-1", "ops-a16-1"], "진입 → 해결 기록 → 후속 순. 마지막 후속(제17조)은 자리가 없다"

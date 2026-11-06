@@ -236,7 +236,7 @@ def _article_keys(policies: list[dict]) -> list[tuple[str, str]]:
 def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | None, policy_ctx: list[dict]) -> int:
     """체인 노드의 근거 조문(attributes.policy_refs)을 근거 목록에 더하고, 노드마다 어느 근거인지 붙인다.
     규정 검색 결과가 이미 있으면 새로 더하는 조문은 진입 노드·체인 루트·예외 사례·진입 노드와 같은 줄기의 해결 노드가 가리키는 것만 — 질문과 먼 조문이
-    섞이지 않게. 자리(MAX_LINKED)는 진입 노드, 같은 줄기, 예외, 해결 순으로 준다.
+    섞이지 않게. 자리(MAX_LINKED)는 진입 노드, 같은 줄기, 예외, 해결 기록, 해결 순으로 준다.
     검색 결과가 없으면(사례만 찾은 질의) 체인의 조문을 진입 노드·예외·해결 노드 순으로 MAX_LINKED 개까지 싣는다.
     그 밖의 노드는 이미 실린 근거와 일치할 때만 표시한다. policy_ctx·chain_ctx·chain_event 를 고쳐 쓴다. 더한 근거 수를 돌려준다."""
     entry = chain_event.entry_id if chain_event else None
@@ -251,8 +251,9 @@ def _link_policies(ws: int, chain_ctx: list[dict], chain_event: ChainEvent | Non
     revised = any(c.get("status") in ("amended", "replaced", "retired") for c in chunks.values())
     wide = not policy_ctx
     added = 0
+    # 자리 순서: 진입 → 같은 줄기 → 예외 → 장애 건을 해결한 기록 → 그 밖의 해결 → 깊이. 해결 기록을 등록 순서에 기대지 않고 앞에 둔다
     for n, r in sorted(pairs, key=lambda x: (x[0]["id"] != entry, not x[0].get("near"), x[1].get("relation") != "exception",
-                                             x[0]["type"] != "success", x[0]["depth"])):
+                                             not x[0].get("resolves_root"), x[0]["type"] != "success", x[0]["depth"])):
         if r.get("relation") == "gap":
             n.setdefault("policy", []).append({"relation": "gap", "topic": r.get("topic"), "note": r.get("note"),
                                                **({"revision": "replaced"} if revised else {})})   # 당시의 판단 — 개정판에는 기준이 생겼을 수 있다
