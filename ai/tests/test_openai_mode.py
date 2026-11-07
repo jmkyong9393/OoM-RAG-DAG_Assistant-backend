@@ -61,12 +61,22 @@ async def test_pipeline_openai_streams_and_marks_unverified(openai_mode, backfil
     assert done["unverified_ids"] == ["N99"] and len(done["verified_ids"]) == 2
     paths = [c["path"] for c in openai_mode.calls]
     assert paths.count("/v1/embeddings") == 1, "질의 임베딩은 한 번만"
-    assert paths.count("/v1/chat/completions") == 1, "생성 1 (분류는 '에러'+'규정' 힌트로 규칙 처리, LLM 호출 없음)"
+    assert paths.count("/v1/chat/completions") == 2, "규정 재순위 1 + 생성 1 (분류는 '에러'+'규정' 힌트로 규칙 처리, LLM 호출 없음)"
+    rr = [c["body"] for c in openai_mode.calls if c["path"] == "/v1/chat/completions" and not c["body"].get("stream")]
+    assert len(rr) == 1 and rr[0]["model"] == "stub-light" and "re-rank" in rr[0]["messages"][0]["content"]
     gen = [c for c in openai_mode.calls if c["body"].get("stream")][0]["body"]
     assert gen["stream_options"] == {"include_usage": True}
     assert gen["max_tokens"] == 400 and done["truncated"] is False, "기본 상한 400 이 요청에 실리고, 스텁 답변(어절 10여 개)은 잘리지 않는다"
     assert "## 규정" in gen["messages"][1]["content"] and "## 해결 사례 체인" in gen["messages"][1]["content"]
     assert all(c["auth"] == "Bearer sk-test" for c in openai_mode.calls)
+
+
+async def test_pipeline_without_rerank_calls_only_generation(openai_mode, backfilled, monkeypatch):
+    """POLICY_RERANK=0 이면 재순위 호출 없이 검색 순서로 답한다."""
+    monkeypatch.setenv("POLICY_RERANK", "0")
+    blocks = await collect(pipeline.run(2, True, "VPN E-403 에러가 나는데 규정상 어떻게 조치해야 해?"))
+    assert [b[0] for b in blocks][-1] == "done"
+    assert [c["path"] for c in openai_mode.calls].count("/v1/chat/completions") == 1
 
 
 async def test_pipeline_skips_vector_search_when_stored_vectors_are_from_another_model(openai_mode, backfilled, monkeypatch):
