@@ -111,9 +111,12 @@ public class LogController {
     return Map.of("orphaned", service.orphaned(ctx, id));
   }
 
-  public record PatchRequest(Boolean resolved, String note, List<Long> resolvedNodeIds, String status, String reason, Boolean cascade) {}
+  public record PatchRequest(Boolean resolved, String note, List<Long> resolvedNodeIds, String status, String reason, Boolean cascade, String category) {}
 
-  /** 두 가지 모양을 받는다: {resolved, note?, resolved_node_ids?} 또는 {status, reason?, cascade?}. 완료는 resolved_node_ids, 상태 변경은 affected 를 함께 돌려준다. */
+  /**
+   * 세 가지 모양을 받는다: {resolved, note?, resolved_node_ids?} · {status, reason?, cascade?} · {category}("cause" 표시, "" 지움).
+   * 완료는 resolved_node_ids, 상태 변경은 affected 를 함께 돌려준다.
+   */
   @PatchMapping("/logs/{id}")
   public Map<String, Object> patch(@PathVariable long id, @RequestBody PatchRequest body, TenantContext ctx) {
     if (body.resolved() != null) {
@@ -125,7 +128,8 @@ public class LogController {
       LogService.StatusResult r = service.setStatus(ctx, id, body.status(), body.reason(), Boolean.TRUE.equals(body.cascade()));
       return asMap(r.node(), r.affected());
     }
-    throw ApiException.badRequest("VALIDATION", "resolved or status is required");
+    if (body.category() != null) return asMap(service.setCategory(ctx, id, body.category()), null);
+    throw ApiException.badRequest("VALIDATION", "resolved, status or category is required");
   }
 
   /** LogNode 필드 + affected. 레코드를 그대로 쓰면 affected 를 끼울 수 없어 Map 으로 편다 (키는 snake_case). */

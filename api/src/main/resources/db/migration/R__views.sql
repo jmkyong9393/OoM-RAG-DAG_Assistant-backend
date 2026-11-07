@@ -1,5 +1,8 @@
 -- 읽기 모델 뷰. 파생 필드(작성자명·루트·깊이·경로·청크 수·피드백)를 DB 한 곳에서 계산한다 (33 §5-1).
 -- 무거운 컬럼(tokens·tsv·embedding)은 뷰에서 뺀다.
+-- 다시 적용할 때마다 지우고 만든다: d.* · s.* 는 테이블에 컬럼이 늘면 순서가 바뀌어 CREATE OR REPLACE 가 실패한다.
+-- 권한은 V2 의 기본 권한(ALTER DEFAULT PRIVILEGES)으로 다시 붙는다.
+DROP VIEW IF EXISTS v_log_nodes, v_policy_documents, v_search_sessions;
 
 CREATE OR REPLACE VIEW v_log_nodes AS
 WITH RECURSIVE t AS (
@@ -21,7 +24,9 @@ SELECT n.id, n.workspace_id, n.type, n.status, n.title, n.body, n.author_id, u.n
        n.last_confirmed_at, n.deprecated_at, n.deprecated_via, n.deprecate_reason,
        n.resolved_at, n.resolve_note, n.source, n.source_ref, n.compose_ms,
        n.created_at, n.updated_at,
-       f.root_id, f.depth, f.path_label
+       f.root_id, f.depth, f.path_label,
+       -- 장애 건의 원인: 원인으로 표시했고 지금 상위가 있는 기록 (연결이 끊겨 루트가 되면 원인이 아니다)
+       coalesce(n.category = 'cause' AND f.depth > 0, false) AS is_cause
 FROM log_nodes n
 JOIN users u ON u.id = n.author_id
 LEFT JOIN first_path f ON f.id = n.id;

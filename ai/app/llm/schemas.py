@@ -69,6 +69,7 @@ class ChainNode(BaseModel):
     last_confirmed_at: str | None = None
     policy: list[NodePolicy] | None = None
     resolves_root: bool = False   # 이 success 가 장애 건을 실제로 해결한 기록으로 남아 있다
+    is_cause: bool = False        # 장애 건의 원인으로 표시한 기록(상위가 있을 때만)
 
 
 class ChainEdge(BaseModel):

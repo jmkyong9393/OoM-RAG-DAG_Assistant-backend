@@ -389,16 +389,26 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     for e in ch["edges"]:   # 상위가 여럿이면 이유도 여럿 — 같은 문장은 한 번만
         if e.get("reason") and e["reason"] not in via.setdefault(e["child_id"], []):
             via[e["child_id"]].append(e["reason"])
+    refs = {n["id"]: f"N{i + 1}" for i, n in enumerate(nodes)}
+    parents: dict[int, list[str]] = {}   # 기록 → 체인 안의 바로 위 기록 마커 (깊이순 나열이라 들여쓰기만으로는 어느 원인 아래인지 안 보인다)
+    for e in ch["edges"]:
+        if e["parent_id"] in refs:
+            parents.setdefault(e["child_id"], []).append(refs[e["parent_id"]])
+    # 갈라지는 체인(깊이 2 이상 기록의 상위가 둘 이상)일 때만 표시한다 — 한 줄기 체인에 표시를 더하면 답변에 뜻 없는 문장이 늘었다
+    depth = {n["id"]: n["depth"] for n in nodes}
+    if len({r for c, ps in parents.items() if depth.get(c, 0) >= 2 for r in ps}) < 2:
+        parents = {}
     ctx, ev_nodes = [], []
-    for i, n in enumerate(nodes):
-        ref = f"N{i + 1}"
+    for n in nodes:
+        ref, cause = refs[n["id"]], bool(n.get("is_cause"))
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
                     "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
-                    "entry": n["id"] == entry, "near": n["id"] in near, "resolves_root": n["id"] in resolving, "via": via.get(n["id"], [])})
+                    "entry": n["id"] == entry, "near": n["id"] in near, "resolves_root": n["id"] in resolving, "via": via.get(n["id"], []),
+                    "cause": cause, "parents": sorted(parents.get(n["id"], []), key=lambda r: int(r[1:]))})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
                                   last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None,
-                                  resolves_root=n["id"] in resolving))
+                                  resolves_root=n["id"] in resolving, is_cause=cause))
     return ctx, ChainEvent(entry_id=entry, nodes=ev_nodes, edges=[ChainEdge(**e) for e in ch["edges"]])
 
 
