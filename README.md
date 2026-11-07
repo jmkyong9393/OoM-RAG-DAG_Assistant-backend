@@ -122,7 +122,7 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 
 **규정↔사례 대조표** — `data/alignment/<회사>.json` 에 사례마다 관계(따름 `follows` · 예외 `exception` · 기준 없음 `gap`)를 적는다 → `python scripts/check_alignment.py` → `make link-policies`. 화면에서는 `PUT /logs/{id}/policy-refs` 로 넣는다.
 
-**사례 체인 기록** — 간선마다 상위에 이어 붙인 이유(`log_edges.reason`), 장애 건마다 실제로 해결한 기록(`log_resolutions`, 여러 개)을 남긴다. 화면·API 는 `POST /logs` 의 `edge_reason`, `POST /edges` 의 `reason`, `PATCH /logs/{id}` 의 `resolved_node_ids`. 유효한 해결 기록(활성 · 그 장애 건의 자손)은 DB 함수 `resolved_nodes()` 가 정하고, 답변은 그 줄을 먼저 인용하며 사후분석 같은 후속 조치와 구분한다. 시연용 기록은 `data/chain_records/<회사>.json` → `make link-chains` — 합성 사례 전체에 자동으로 채우지 않는다(어느 조치가 해결했는지 지어내지 않기 위해).
+**사례 체인 기록** — 간선마다 상위에 이어 붙인 이유(`log_edges.reason`), 장애 건마다 실제로 해결한 기록(`log_resolutions`, 여러 개)을 남긴다. 화면·API 는 `POST /logs` 의 `edge_reason`, `POST /edges` 의 `reason`, `PATCH /logs/{id}` 의 `resolved_node_ids`. 유효한 해결 기록(활성 · 그 장애 건의 자손)은 DB 함수 `resolved_nodes()` 가 정하고, 답변은 그 줄을 먼저 인용하며 사후분석 같은 후속 조치와 구분한다. 시연용 기록은 `data/chain_records/<회사>.json` → `make link-chains` — 합성 사례 전체에 자동으로 채우지 않는다(어느 조치가 해결했는지 지어내지 않기 위해). 장애 건의 **원인**은 실패 기록의 `category='cause'`(상위가 있을 때만 `is_cause`)로 표시한다 — `POST /logs` 의 `category` · 한 번에 등록의 `cause_title`, `PATCH /logs/{id}` 의 `category`. 합성 사례는 제목이 '원인:' 인 55건에 표시했다. 원인을 묻는 질문에서 원인이 여럿이면 답변이 원인마다 그 해결을 짝지어 쓴다.
 
 **부서별 추천 질문** — `data/seed/workspaces.json` 의 `settings.suggestions`. 넣은 질문은 `data/answer_checks/suggestions_v1.json` 에도 있어야 한다(테스트가 확인) — 근거가 붙는 답이 나오는 질문만 첫 화면에 낸다.
 
