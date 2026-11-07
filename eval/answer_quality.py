@@ -25,6 +25,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ai"))
+sys.path.insert(0, str(ROOT / "scripts"))   # load_eval_runs.insert
 
 from app.config import ai_mode, profile  # noqa: E402
 from app.graph import pipeline  # noqa: E402
@@ -138,22 +139,27 @@ async def run_one(item: dict, prof, judge: str, seen: dict, emb_prof) -> dict:
     return row
 
 
-def record(rows: list[dict], judge: str, prof, emb_model: str, baseline: float | None, version: str) -> int:
-    """eval_runs 에 부서별 행과 전체(workspace_id NULL) 행을 넣는다. 넣은 행 수를 돌려준다."""
-    import psycopg
-    from psycopg.types.json import Jsonb
+def eval_rows(rows: list[dict], judge: str, answer_model: str, emb_model: str, baseline: float | None, version: str) -> list[dict]:
+    """eval_runs 에 넣을 부서별 행과 전체(workspace_id NULL) 행."""
     groups: dict[int | None, list[dict]] = {None: rows}
     for r in rows:
         groups.setdefault(r["workspace_id"], []).append(r)
+    out = []
+    for ws, rs in groups.items():
+        s = summarize(rs)
+        out.append({"workspace_id": ws, "dataset_version": version, "mode": "hybrid", "faithfulness": s["faithfulness"],
+                    "answer_relevance": s["answer_relevance"], "n_samples": s["n"],
+                    "meta": {**s["meta"], "judge_model": judge, "answer_model": answer_model, "relevance_embedding": emb_model,
+                             "relevance_baseline": baseline}})
+    return out
+
+
+def record(rows: list[dict], judge: str, prof, emb_model: str, baseline: float | None, version: str) -> int:
+    """eval_runs 에 부서별 행과 전체 행을 넣는다. 넣은 행 수를 돌려준다."""
+    import psycopg
+    from load_eval_runs import insert
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        for ws, rs in groups.items():
-            s = summarize(rs)
-            conn.execute("""INSERT INTO eval_runs (workspace_id, dataset_version, mode, is_sample, faithfulness, answer_relevance, n_samples, meta)
-                            VALUES (%s, %s, 'hybrid', false, %s, %s, %s, %s)""",
-                         (ws, version, s["faithfulness"], s["answer_relevance"], s["n"],
-                          Jsonb({**s["meta"], "judge_model": judge, "answer_model": prof.model_answer, "relevance_embedding": emb_model,
-                                 "relevance_baseline": baseline})))
-    return len(groups)
+        return insert(conn, eval_rows(rows, judge, prof.model_answer, emb_model, baseline, version))
 
 
 async def main() -> int:
@@ -199,7 +205,7 @@ async def main() -> int:
         print(f"eval_runs 에 {record(rows, judge, prof, emb_prof.embedding_model, base, 'answer_checks v1')}행 기록 (부서별 + 전체)")
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
-        a.json.write_text(json.dumps({"summary": s, "judge_model": judge, "relevance_embedding": emb_prof.embedding_model, "relevance_baseline": base, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+        a.json.write_text(json.dumps({"summary": s, "judge_model": judge, "answer_model": prof.model_answer, "relevance_embedding": emb_prof.embedding_model, "relevance_baseline": base, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"wrote {a.json}")
     return 0
 

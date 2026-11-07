@@ -1,0 +1,513 @@
+[
+ {
+  "workspace_id": null,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 0.9889,
+  "n_samples": 452,
+  "meta": {
+   "k": 5,
+   "mrr": 0.8969,
+   "by_kind": {
+    "policy": {
+     "hit": 313,
+     "n": 317
+    },
+    "troubleshoot": {
+     "hit": 134,
+     "n": 135
+    }
+   },
+   "search_ms_p50": 49.0,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 3,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 0.9794,
+  "n_samples": 97,
+  "meta": {
+   "k": 5,
+   "mrr": 0.8838,
+   "by_kind": {
+    "policy": {
+     "hit": 65,
+     "n": 67
+    },
+    "troubleshoot": {
+     "hit": 30,
+     "n": 30
+    }
+   },
+   "search_ms_p50": 54.6,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 21,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 1.0,
+  "n_samples": 35,
+  "meta": {
+   "k": 5,
+   "mrr": 0.8952,
+   "by_kind": {
+    "policy": {
+     "hit": 15,
+     "n": 15
+    },
+    "troubleshoot": {
+     "hit": 20,
+     "n": 20
+    }
+   },
+   "search_ms_p50": 44.7,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 20,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 1.0,
+  "n_samples": 30,
+  "meta": {
+   "k": 5,
+   "mrr": 0.9067,
+   "by_kind": {
+    "policy": {
+     "hit": 30,
+     "n": 30
+    }
+   },
+   "search_ms_p50": 48.0,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 22,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 1.0,
+  "n_samples": 45,
+  "meta": {
+   "k": 5,
+   "mrr": 0.9185,
+   "by_kind": {
+    "policy": {
+     "hit": 15,
+     "n": 15
+    },
+    "troubleshoot": {
+     "hit": 30,
+     "n": 30
+    }
+   },
+   "search_ms_p50": 44.4,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 23,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 0.975,
+  "n_samples": 40,
+  "meta": {
+   "k": 5,
+   "mrr": 0.8967,
+   "by_kind": {
+    "policy": {
+     "hit": 29,
+     "n": 30
+    },
+    "troubleshoot": {
+     "hit": 10,
+     "n": 10
+    }
+   },
+   "search_ms_p50": 48.5,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 1,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 0.9868,
+  "n_samples": 76,
+  "meta": {
+   "k": 5,
+   "mrr": 0.8761,
+   "by_kind": {
+    "policy": {
+     "hit": 45,
+     "n": 45
+    },
+    "troubleshoot": {
+     "hit": 30,
+     "n": 31
+    }
+   },
+   "search_ms_p50": 49.3,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 10,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 0.9833,
+  "n_samples": 60,
+  "meta": {
+   "k": 5,
+   "mrr": 0.8478,
+   "by_kind": {
+    "policy": {
+     "hit": 59,
+     "n": 60
+    }
+   },
+   "search_ms_p50": 49.5,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": 2,
+  "dataset_version": "evalset v1",
+  "mode": "rerank",
+  "hit_at_5": 1.0,
+  "n_samples": 69,
+  "meta": {
+   "k": 5,
+   "mrr": 0.9638,
+   "by_kind": {
+    "policy": {
+     "hit": 55,
+     "n": 55
+    },
+    "troubleshoot": {
+     "hit": 14,
+     "n": 14
+    }
+   },
+   "search_ms_p50": 49.3,
+   "embedding_model": "text-embedding-3-large",
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_규정검색_재순위/v4_최종/1_hit_rerank.json"
+  },
+  "run_at": "2026-11-07T02:50:15+00:00"
+ },
+ {
+  "workspace_id": null,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9495,
+  "answer_relevance": 0.6605,
+  "n_samples": 48,
+  "meta": {
+   "faithfulness_n": 48,
+   "statements": 178,
+   "supported": 170,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": 2,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9333,
+  "answer_relevance": 0.6518,
+  "n_samples": 8,
+  "meta": {
+   "faithfulness_n": 8,
+   "statements": 27,
+   "supported": 25,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": 23,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 1.0,
+  "answer_relevance": 0.6818,
+  "n_samples": 8,
+  "meta": {
+   "faithfulness_n": 8,
+   "statements": 27,
+   "supported": 27,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": 3,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9762,
+  "answer_relevance": 0.6697,
+  "n_samples": 7,
+  "meta": {
+   "faithfulness_n": 7,
+   "statements": 30,
+   "supported": 29,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": 21,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9857,
+  "answer_relevance": 0.6641,
+  "n_samples": 10,
+  "meta": {
+   "faithfulness_n": 10,
+   "statements": 39,
+   "supported": 38,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": 1,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.947,
+  "answer_relevance": 0.6467,
+  "n_samples": 11,
+  "meta": {
+   "faithfulness_n": 11,
+   "statements": 44,
+   "supported": 42,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": 22,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.75,
+  "answer_relevance": 0.6481,
+  "n_samples": 4,
+  "meta": {
+   "faithfulness_n": 4,
+   "statements": 11,
+   "supported": 9,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2674,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run1.json"
+  },
+  "run_at": "2026-11-07T10:24:47+00:00"
+ },
+ {
+  "workspace_id": null,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9427,
+  "answer_relevance": 0.651,
+  "n_samples": 48,
+  "meta": {
+   "faithfulness_n": 48,
+   "statements": 177,
+   "supported": 166,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ },
+ {
+  "workspace_id": 2,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9333,
+  "answer_relevance": 0.6582,
+  "n_samples": 8,
+  "meta": {
+   "faithfulness_n": 8,
+   "statements": 28,
+   "supported": 26,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ },
+ {
+  "workspace_id": 23,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 1.0,
+  "answer_relevance": 0.6867,
+  "n_samples": 8,
+  "meta": {
+   "faithfulness_n": 8,
+   "statements": 26,
+   "supported": 26,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ },
+ {
+  "workspace_id": 3,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9524,
+  "answer_relevance": 0.6625,
+  "n_samples": 7,
+  "meta": {
+   "faithfulness_n": 7,
+   "statements": 31,
+   "supported": 29,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ },
+ {
+  "workspace_id": 21,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9714,
+  "answer_relevance": 0.654,
+  "n_samples": 10,
+  "meta": {
+   "faithfulness_n": 10,
+   "statements": 39,
+   "supported": 37,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ },
+ {
+  "workspace_id": 1,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.9636,
+  "answer_relevance": 0.618,
+  "n_samples": 11,
+  "meta": {
+   "faithfulness_n": 11,
+   "statements": 41,
+   "supported": 39,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ },
+ {
+  "workspace_id": 22,
+  "dataset_version": "answer_checks v1",
+  "mode": "hybrid",
+  "faithfulness": 0.7,
+  "answer_relevance": 0.6281,
+  "n_samples": 4,
+  "meta": {
+   "faithfulness_n": 4,
+   "statements": 12,
+   "supported": 9,
+   "noncommittal": 0,
+   "no_answer": 0,
+   "judge_model": "gpt-4.1",
+   "answer_model": "gpt-4o-mini",
+   "relevance_embedding": "text-embedding-3-large",
+   "relevance_baseline": 0.2632,
+   "source": "로컬 실측(main 6b70f34 과 같은 검색·답변) · 2026-11-07_통합검증_원인표시_재순위/main_6b70f34/3_answer_quality_48_run2.json"
+  },
+  "run_at": "2026-11-07T10:30:10+00:00"
+ }
+]

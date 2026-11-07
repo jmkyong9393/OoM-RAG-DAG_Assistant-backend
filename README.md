@@ -71,7 +71,7 @@
 
 **API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 문서 상태, 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 117, Python 161(DB 통합 포함).
+**테스트** — Spring 123, Python 179(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과(빈 DB → `bootstrap.sh` 데이터 적재 → Caddy 경유 로그인·SSE). Lightsail 기동은 아직.
 
@@ -133,6 +133,7 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 - 검색 품질: `cd ai && uv run python ../eval/hit_at_k.py` (평가셋 `data/evalset/*.json`, 어휘/벡터/하이브리드 hit@k·MRR, 두 문서에 걸친 질의의 동시 적중). `--record` 를 붙이면 결과를 `eval_runs` 에 남겨 대시보드(`GET /dashboard/summary` 의 `retrieval`)에 실측값이 나온다.
 - 답변 점검: `cd ai && uv run python ../eval/answer_checks.py --runs 2` (점검표 `data/answer_checks/*.json`, 실제 답변 생성 — LLM 호출 있음). 지시문이나 모델을 바꾼 뒤에는 이것을 돌린다.
 - 답변 품질: `cd ai && uv run python ../eval/answer_quality.py --judge-model <채점 모델>` — 같은 점검표의 질문으로 답변을 만들고, 채점 모델이 충실도(답변 문장 중 컨텍스트로 뒷받침되는 비율)와 관련성(답변에서 되짚어 만든 질문과 원래 질문의 임베딩 유사도)을 낸다. 정의는 RAGAS 를 따른다. `--record` 를 붙이면 `eval_runs` 에 남아 대시보드(`eval`)에 나온다. 관련성은 임베딩 모델마다 척도가 달라, 무관한 질문끼리의 유사도(기준선)를 함께 출력한다.
+- 저장된 결과 → 대시보드: `eval/export_eval_runs.py` 가 두 도구의 `--json` 결과를 `--record` 와 같은 행(+ 측정 시각)으로 바꿔 `data/eval/eval_runs.json` 에 쓰고, `make load-eval`(운영은 `bootstrap.sh` 의 `eval` 단계)이 넣는다. LLM 호출 없이 멱등 — 서버에서 평가를 다시 돌리지 않고 로컬 실측을 옮겨, 운영 대시보드가 "측정 전"으로 뜨지 않는다.
 
 ## 운영 배포 (단일 호스트)
 
@@ -142,17 +143,18 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 
 ```bash
 cd deploy && cp .env.example .env.smoke   # 값 채우기 (WEB_IMAGE 는 프론트 레포 Dockerfile 로 만든 이미지)
-bash smoke.sh                             # 운영 compose 전체: 마이그레이션 → 데이터 적재(bootstrap.sh) → Caddy 경유 로그인·SSE 확인 후 내림 (--keep 유지 · --quick 시드만)
+bash smoke.sh                             # 운영 compose 전체: 마이그레이션 → 데이터 적재(bootstrap.sh) → Caddy 경유 로그인·SSE 확인 후 내림 (--keep 유지 · --quick 시드 + 평가 결과만)
 ```
 
 박스 첫 기동 (빈 DB):
 
 ```bash
 cd deploy && cp .env.example .env         # 운영 값. 레지스트리 이미지를 쓰면 먼저 docker compose -f docker-compose.prod.yml --env-file .env pull
-bash bootstrap.sh                         # postgres → api(Flyway) → bootstrap 컨테이너(시드 · 규정 색인 · 사례 · 근거 연결 · 체인 기록) → ai · web · caddy
+bash bootstrap.sh                         # postgres → api(Flyway) → bootstrap 컨테이너(시드 · 규정 색인 · 사례 · 근거 연결 · 체인 기록 · 평가 결과) → ai · web · caddy
 ```
 
 - 데이터 적재는 compose 네트워크 안의 일회성 `bootstrap` 컨테이너(AI 이미지 + `scripts/`·`data/` 읽기 전용 마운트)가 한다. postgres 포트를 호스트에 열지 않고, 사례는 API(`POST /logs/bulk`)로 넣어 도메인 규칙 검사를 같이 받는다.
+- 박스의 레포 체크아웃과 api · ai 이미지는 같은 커밋이어야 한다. Flyway·`bootstrap` 은 레포의 마이그레이션·데이터를 쓰고 api 는 이미지 안의 것을 쓰므로, 레포가 더 새로우면 api 기동 때 뷰 재적용이 실패한다(`cannot drop columns from view`). 레포를 올렸으면 이미지도 같은 커밋으로 pull 한다.
 - 모든 단계가 멱등이다. 데이터만 고쳤으면 `bash bootstrap.sh data` — 규정이 그대로면 재색인 없이 수 초, 바뀌었으면 재색인(그동안 1~2분 어휘 검색이 빈다).
 - 시연용 개정판은 `bash bootstrap.sh revision:<slug>` (`make index-revision` 과 같다 — 구판 폐기, 영향받는 사례 수 출력).
 - 첫 적재는 약 4분(규정 860청크 임베딩 + 사례 284건 정제, OpenAI 호출 있음). 끝에 적재 수(활성 규정 21 · 청크 860 · 사례 284 · 근거 연결 256 · 해결 기록 9 · 연결 사유 19)를 출력한다.
