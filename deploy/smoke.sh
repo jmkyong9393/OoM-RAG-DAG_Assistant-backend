@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 운영 compose 를 로컬에서 끝까지 돌려보는 스모크: postgres → flyway → bootstrap.sh(api → 데이터 적재 → ai·web(스텁)·caddy) → Caddy 경유로 health·로그인·로그 목록·SSE.
+# 운영 compose 를 로컬에서 끝까지 돌려보는 스모크: 이미지 빌드 → postgres → flyway → bootstrap.sh(api → 데이터 적재 → ai·web(스텁)·caddy) → Caddy 경유로 health·로그인·로그 목록·SSE.
 # 사용: deploy/ 에서  bash smoke.sh [--keep] [--quick]   (.env.smoke 필요 — .env.example 의 운영 절 참고)
 #   --keep: 끝나고 내리지 않음 · --quick: 데이터는 시드 + 평가 결과만(규정 색인·사례 정제의 임베딩·LLM 호출 없이)
 set -euo pipefail
@@ -11,6 +11,8 @@ C="docker compose $COMPOSE_FILES --env-file $ENV_FILE"
 t0=$(date +%s)
 step() { echo; echo "== [$(( $(date +%s) - t0 ))s] $*"; }
 
+step "이미지 빌드 (api · ai — 지금 작업 트리. 남아 있던 옛 이미지로 검사하지 않게)"
+$C build api ai
 step "postgres"
 $C up -d postgres
 step "flyway migrate"
@@ -40,13 +42,14 @@ ts=$(date +%s%N)
 printf '{"query":"VPN 접속 시 E-403 오류가 계속 나는데 예전에 어떻게 해결했어?"}' > ./.smoke-q.json   # 한글은 파일로 — Git Bash curl -d 는 인코딩이 깨져 400
 curl -sN -b ./.smoke.jar -H "X-Workspace-Id: 1" -H "Content-Type: application/json; charset=utf-8" -H "Accept: text/event-stream" \
   --data-binary @./.smoke-q.json http://localhost/api/v1/chat \
-  | while IFS= read -r line; do
+  | { while IFS= read -r line; do
       case "$line" in
         event:token) tok=$(( ${tok:-0} + 1 )); [ "$tok" = 1 ] && echo "  +$(( ($(date +%s%N) - ts) / 1000000 ))ms  event:token (first)";;
         event:*) echo "  +$(( ($(date +%s%N) - ts) / 1000000 ))ms  $line";;
       esac
-      [ "$line" = "event:done" ] && break
-    done
+      if [ "$line" = "event:done" ]; then break; fi
+    done; } | tee ./.smoke-sse.txt
+grep -q "event:done" ./.smoke-sse.txt || { echo "SSE 가 done 없이 끝났다 (api·ai 로그 확인)"; exit 1; }
 step "web 스텁 (/)"
 curl -s http://localhost/ | head -c 80; echo
 step "컨테이너 메모리"
@@ -54,6 +57,6 @@ docker stats --no-stream --format "  {{.Name}}\t{{.MemUsage}}" | grep -E "oom-pr
 if [ "$KEEP" = 0 ]; then
   step "정리 (볼륨 포함)"
   $C down -v
-  rm -f ./.smoke.jar ./.smoke-login.json ./.smoke-q.json
+  rm -f ./.smoke.jar ./.smoke-login.json ./.smoke-q.json ./.smoke-sse.txt
 fi
 echo; echo "done in $(( $(date +%s) - t0 ))s"

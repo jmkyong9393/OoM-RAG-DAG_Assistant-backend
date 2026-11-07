@@ -13,8 +13,8 @@ step "postgres · api (healthy 까지 대기)"
 $C up -d --wait postgres api
 step "bootstrap ${*:-seed data eval}"
 $C --profile bootstrap run --rm bootstrap "$@"
-step "ai(워커 내장) · web · caddy"
-$C up -d ai web caddy
+step "ai(워커 내장) · web · caddy (healthy 까지 대기 — 뜨는 중인 ai 로 첫 질문이 가지 않게)"
+$C up -d --wait ai web caddy
 step "적재 결과"
 $C exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA -F " | "' <<'SQL'
 SELECT 'policy_documents active', count(*) FROM policy_documents WHERE status = 'active'
