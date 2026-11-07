@@ -38,7 +38,7 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
                            (root, root, ws)).fetchone()
         if not row or row[0] != "fail" or not row[2]:
             warn.append(f"장애 건(fail 루트)이 아니다: {r['log']}/{r['root']}"); continue
-        under = {x for (x,) in conn.execute("""SELECT g.node_id FROM get_chain(%s, %s, 32, 100000) g JOIN log_nodes n ON n.id = g.node_id
+        under = {x for (x,) in conn.execute("""SELECT g.node_id FROM bfs_levels(%s, ARRAY[%s]::bigint[], true) g JOIN log_nodes n ON n.id = g.node_id
                                                WHERE g.depth > 0 AND n.type = 'success' AND n.status = 'active'""", (ws, root))}
         bad = [x for x, i in zip(r["resolved_by"], nodes) if i not in under]
         if bad:

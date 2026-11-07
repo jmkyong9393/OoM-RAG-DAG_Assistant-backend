@@ -394,9 +394,9 @@ def _same_line(entry: int, edges: list[dict]) -> set[int]:
 
 def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     with db.connect() as conn:
-        # 루트 기준 체인: 진입 노드의 루트에서 하향 (BE-HANDOFF-001 §4 ④)
+        # 루트 기준 체인: 진입 노드의 루트에서 하향, 깊이 제한 없이 30개까지 — 넘치면 진입 · 해결 · 원인 경로 먼저
         root = db.root_of(conn, ws, entry) or entry
-        ch = db.chain(conn, ws, root, 4, 30)
+        ch = db.chain(conn, ws, root, None, 30, focus=entry)
         resolving = db.resolved_nodes(conn, ws, root)
     nodes = sorted(ch["nodes"], key=lambda n: (n["depth"], n["id"]))  # 마커 번호 = depth 안정 정렬 순서
     near = _same_line(entry, ch["edges"])

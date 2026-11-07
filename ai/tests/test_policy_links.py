@@ -260,7 +260,7 @@ def test_load_chain_lists_each_edge_reason_once(monkeypatch):
              {"parent_id": 2, "child_id": 4, "reason": "두 원인을 함께 정리"}, {"parent_id": 3, "child_id": 4, "reason": "두 원인을 함께 정리"}]
     monkeypatch.setattr(pipeline.db, "connect", lambda: nullcontext())
     monkeypatch.setattr(pipeline.db, "root_of", lambda conn, ws, e: 1)
-    monkeypatch.setattr(pipeline.db, "chain", lambda conn, ws, root, d, n: {"entry_id": root, "nodes": nodes, "edges": edges})
+    monkeypatch.setattr(pipeline.db, "chain", lambda conn, ws, root, d, n, focus=None: {"entry_id": root, "nodes": nodes, "edges": edges})
     monkeypatch.setattr(pipeline.db, "resolved_nodes", lambda conn, ws, root: {4})
     ctx, ev = pipeline._load_chain(1, 2)
     fix = next(n for n in ctx if n["id"] == 4)

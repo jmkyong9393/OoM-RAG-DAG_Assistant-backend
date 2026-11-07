@@ -147,48 +147,88 @@ RETURNS TABLE(node_id bigint, score double precision, exact boolean, lex_terms i
   ORDER BY t.score DESC, t.id
 $$;
 
+-- 단계 동기 BFS: 시작 노드들에서 하향(p_down) 또는 상향으로 닿는 노드와 최소 거리(시작=0).
+-- 한 단계를 한 행(frontier · seen 배열)으로 들고 가 노드마다 한 번만 펼친다 — 재귀 CTE 는 이전 단계 행만 보므로 경로별 전개가 지수로 는다.
+CREATE OR REPLACE FUNCTION bfs_levels(p_ws bigint, p_start bigint[], p_down boolean, p_max_depth int DEFAULT NULL)
+RETURNS TABLE(node_id bigint, depth int) LANGUAGE sql STABLE AS $$
+  WITH RECURSIVE lv(depth, frontier, seen) AS (
+    SELECT 0, s.a, s.a FROM (SELECT array_agg(DISTINCT n.id) AS a FROM log_nodes n WHERE n.id = ANY (p_start) AND n.workspace_id = p_ws) s
+    WHERE s.a IS NOT NULL
+    UNION ALL
+    SELECT lv.depth + 1, nx.f, lv.seen || nx.f FROM lv,
+      LATERAL (SELECT array_agg(c) AS f FROM (
+        SELECT e.child_id AS c FROM log_edges e WHERE p_down AND e.parent_id = ANY (lv.frontier)
+        UNION
+        SELECT e.parent_id FROM log_edges e WHERE NOT p_down AND e.child_id = ANY (lv.frontier)
+        EXCEPT
+        SELECT unnest(lv.seen)) s) nx
+    WHERE nx.f IS NOT NULL AND (p_max_depth IS NULL OR lv.depth < p_max_depth)
+  )
+  SELECT x, lv.depth FROM lv, unnest(lv.frontier) AS x
+$$;
+
 -- 진입 노드 기준 상향(음수 depth)·하향(양수 depth) 체인. 고정 깊이 버전.
 CREATE OR REPLACE FUNCTION chain_at_depth(p_entry bigint, p_depth int)
 RETURNS TABLE(node_id bigint, depth int) LANGUAGE sql STABLE AS $$
-  WITH RECURSIVE up AS (
-    SELECT p_entry AS id, 0 AS depth
-    UNION
-    SELECT e.parent_id, u.depth - 1 FROM log_edges e JOIN up u ON e.child_id = u.id WHERE u.depth > -p_depth
-  ),
-  down AS (
-    SELECT p_entry AS id, 0 AS depth
-    UNION
-    SELECT e.child_id, dn.depth + 1 FROM log_edges e JOIN down dn ON e.parent_id = dn.id WHERE dn.depth < p_depth
-  )
-  SELECT id, max(depth) FROM up GROUP BY id
+  SELECT b.node_id, -b.depth FROM log_nodes n, bfs_levels(n.workspace_id, ARRAY[p_entry], false, p_depth) b WHERE n.id = p_entry
   UNION ALL
-  SELECT id, min(depth) FROM down WHERE id <> p_entry GROUP BY id
+  SELECT b.node_id, b.depth FROM log_nodes n, bfs_levels(n.workspace_id, ARRAY[p_entry], true, p_depth) b WHERE n.id = p_entry AND b.depth > 0
 $$;
 
--- 노드 수 상한을 넘으면 깊이를 1씩 줄여 재시도 (02 v3 §1-3).
-CREATE OR REPLACE FUNCTION get_chain(p_ws bigint, p_entry bigint, p_max_depth int DEFAULT 3, p_max_nodes int DEFAULT 30)
-RETURNS TABLE(node_id bigint, depth int) LANGUAGE plpgsql STABLE AS $$
-DECLARE d int := greatest(p_max_depth, 1); n int;
+-- 체인 노드 고르기. 후보 = 진입의 모든 조상(음수 depth)과 자손(양수). 상한을 넘으면 깊이를 깎지 않고 순서대로 채운다:
+-- ① 초점(검색으로 찾은 기록)과 그 위 경로 ② 장애 건을 해결한 기록까지의 경로 ③ 원인까지의 경로 ④ 나머지를 가까운 순(p_max_depth 안).
+-- ②③ 은 경로 단위로 통째로 넣고, 다 못 들어가는 경로는 건너뛴다. total = 후보 수(잘렸는지 판정용).
+CREATE OR REPLACE FUNCTION get_chain(p_ws bigint, p_entry bigint, p_max_depth int, p_max_nodes int, p_focus bigint)
+RETURNS TABLE(node_id bigint, depth int, total int) LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  cap int := greatest(p_max_nodes, 1); ids bigint[]; deps int[]; tot int; sel bigint[]; grp bigint[]; a bigint;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM log_nodes WHERE id = p_entry AND workspace_id = p_ws) THEN RETURN; END IF;
+  SELECT array_agg(c.node_id ORDER BY abs(c.depth), c.node_id), array_agg(c.depth ORDER BY abs(c.depth), c.node_id) INTO ids, deps
+  FROM (SELECT b.node_id, -b.depth AS depth FROM bfs_levels(p_ws, ARRAY[p_entry], false) b WHERE b.depth > 0
+        UNION ALL SELECT b.node_id, b.depth FROM bfs_levels(p_ws, ARRAY[p_entry], true) b) c;
+  tot := cardinality(ids);
+  IF tot <= cap AND p_max_depth IS NULL THEN
+    RETURN QUERY SELECT x, d, tot FROM unnest(ids, deps) AS t(x, d);
+    RETURN;
+  END IF;
+  -- ① 초점과 그 위 경로(후보 안) — 초점에서 가까운 순
+  SELECT array_agg(u.node_id ORDER BY u.depth, u.node_id) INTO sel
+  FROM bfs_levels(p_ws, ARRAY[coalesce(p_focus, p_entry)], false) u WHERE u.node_id = ANY (ids);
+  sel := coalesce(sel[1:cap], ARRAY[p_entry]);
+  IF NOT p_entry = ANY (sel) THEN sel := sel[1:cap - 1] || p_entry; END IF;
+  -- ②③ 해결 기록, 원인 — 가까운 순으로 경로째
+  FOR a IN
+    SELECT x FROM unnest(ids, deps) WITH ORDINALITY AS t(x, d, o)
+    WHERE x <> ALL (sel) AND (
+      x IN (SELECT r FROM unnest(ids) AS rt(root), resolved_nodes(p_ws, rt.root) AS r
+            WHERE NOT EXISTS (SELECT 1 FROM log_edges e WHERE e.child_id = rt.root))
+      OR x IN (SELECT n.id FROM log_nodes n WHERE n.id = ANY (ids) AND n.category = 'cause'
+               AND EXISTS (SELECT 1 FROM log_edges e WHERE e.child_id = n.id)))
+    ORDER BY (x IN (SELECT n.id FROM log_nodes n WHERE n.id = ANY (ids) AND n.category = 'cause')), o
   LOOP
-    SELECT count(*) INTO n FROM chain_at_depth(p_entry, d);
-    EXIT WHEN n <= p_max_nodes OR d <= 1;
-    d := d - 1;
+    CONTINUE WHEN a = ANY (sel);
+    SELECT array_agg(u.node_id) INTO grp FROM bfs_levels(p_ws, ARRAY[a], false) u WHERE u.node_id = ANY (ids) AND u.node_id <> ALL (sel);
+    IF cardinality(sel) + cardinality(grp) <= cap THEN sel := sel || grp; END IF;
   END LOOP;
-  RETURN QUERY SELECT * FROM chain_at_depth(p_entry, d);
+  -- ④ 나머지를 가까운 순으로
+  sel := sel || coalesce((SELECT array_agg(x ORDER BY o) FROM unnest(ids, deps) WITH ORDINALITY AS t(x, d, o)
+                          WHERE x <> ALL (sel) AND (p_max_depth IS NULL OR abs(d) <= p_max_depth)), '{}');
+  sel := sel[1:cap];
+  RETURN QUERY SELECT x, d, tot FROM unnest(ids, deps) AS t(x, d) WHERE x = ANY (sel);
 END $$;
 
--- 간선 (p → c)를 넣으면 사이클이 생기는가: c = p 이거나 c에서 하향으로 p에 닿으면 true.
+-- 진입이 곧 초점인 체인 (화면 · 이전 호출 호환).
+CREATE OR REPLACE FUNCTION get_chain(p_ws bigint, p_entry bigint, p_max_depth int DEFAULT 3, p_max_nodes int DEFAULT 30)
+RETURNS TABLE(node_id bigint, depth int) LANGUAGE sql STABLE AS $$
+  SELECT g.node_id, g.depth FROM get_chain(p_ws, p_entry, p_max_depth, p_max_nodes, p_entry) g
+$$;
+
+-- 간선 (p → c)를 넣으면 사이클이 생기는가: c = p 이거나 c에서 하향으로 p에 닿으면 true. 깊이 상한 없음.
 CREATE OR REPLACE FUNCTION would_create_cycle(p_parent bigint, p_child bigint)
 RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT p_parent = p_child OR EXISTS (
-    WITH RECURSIVE dn AS (
-      SELECT p_child AS id, 0 AS d
-      UNION
-      SELECT e.child_id, dn.d + 1 FROM log_edges e JOIN dn ON e.parent_id = dn.id WHERE dn.d < 64
-    )
-    SELECT 1 FROM dn WHERE id = p_parent
+    SELECT 1 FROM log_nodes c, bfs_levels(c.workspace_id, ARRAY[p_child], true) b WHERE c.id = p_child AND b.node_id = p_parent
   )
 $$;
 
@@ -220,7 +260,7 @@ CREATE OR REPLACE FUNCTION resolved_nodes(p_ws bigint, p_root bigint)
 RETURNS SETOF bigint LANGUAGE sql STABLE AS $$
   SELECT r.node_id FROM log_resolutions r JOIN log_nodes n ON n.id = r.node_id
   WHERE r.workspace_id = p_ws AND r.root_id = p_root AND n.status = 'active'
-    AND r.node_id IN (SELECT g.node_id FROM get_chain(p_ws, p_root, 32, 100000) g WHERE g.depth > 0)
+    AND r.node_id IN (SELECT b.node_id FROM bfs_levels(p_ws, ARRAY[p_root], true) b WHERE b.depth > 0)
   ORDER BY r.node_id
 $$;
 
