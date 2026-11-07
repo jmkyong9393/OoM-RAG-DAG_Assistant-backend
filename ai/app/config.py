@@ -57,6 +57,11 @@ def answer_max_tokens() -> int | None:
     return n if n > 0 else None
 
 
+def policy_rerank() -> bool:
+    """POLICY_RERANK=0 이면 규정 검색 재순위를 끈다(기본 켬). 재순위는 질문마다 가벼운 모델을 1회 부른다."""
+    return os.environ.get("POLICY_RERANK", "1").lower() not in ("0", "false", "no")
+
+
 def worker_embedded() -> bool:
     """WORKER_EMBEDDED=1 이면 정제 워커를 AI 서비스 프로세스 안(별도 스레드·별도 이벤트 루프)에서 돈다 — kiwi 모델·런타임을 공유해 ≈500 MB 절감."""
     return os.environ.get("WORKER_EMBEDDED", "0").lower() in ("1", "true", "yes")

@@ -5,12 +5,14 @@
 hit@k = expect 중 하나라도 상위 k 에 있으면 1. 벡터 열은 임베딩이 있을 때만(키 없으면 '-').
 expect_also 는 두 문서에 걸친 질의의 둘째 문서 정답 — 둘 다 상위 k 에 있는 수를 따로 낸다(hit@k 에는 넣지 않는다).
 
-실행: set -a; . deploy/.env; set +a; cd ai && uv run python ../eval/hit_at_k.py [--k 5] [--json 결과경로] [--record]
+실행: set -a; . deploy/.env; set +a; cd ai && uv run python ../eval/hit_at_k.py [--k 5] [--json 결과경로] [--record] [--rerank]
       --record: 결과를 eval_runs 에 남긴다(부서별 + 전체 1행, 대시보드의 '검색 품질'). k=5 · 전체 평가셋일 때만. DATABASE_URL(관리자 접속) 필요
+      --rerank: 규정 질의에 재순위 열을 더한다(하이브리드 상위 20 → 가벼운 모델이 다시 고름, 질의마다 LLM 1회). 사례 질의는 하이브리드와 같다
 """
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import statistics
@@ -22,7 +24,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ai"))
 
 from app.config import ai_mode, profile  # noqa: E402
-from app.retrieval import db, embed  # noqa: E402
+from app.llm.client import Usage  # noqa: E402
+from app.retrieval import db, embed, rerank  # noqa: E402
 from app.retrieval.tokenize import Tokenizer, extract_error_code, synonym_groups  # noqa: E402
 
 
@@ -71,6 +74,7 @@ def main() -> int:
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--record", action="store_true")
+    ap.add_argument("--rerank", action="store_true")
     ap.add_argument("files", nargs="*", type=Path)
     a = ap.parse_args()
     files = a.files or sorted((ROOT / "data" / "evalset").glob("*.json"))
@@ -81,6 +85,9 @@ def main() -> int:
     use_vec = ai_mode() == "openai" and prof.has_key
     toks: dict[int, Tokenizer] = {}   # 워크스페이스별 사용자 사전 — 파이프라인과 같은 토크나이저
     modes = ["lex", "vec", "hybrid"] if use_vec else ["lex"]
+    if a.rerank and use_vec:
+        modes.append("rerank")
+    usage = Usage()
     rows, hits = [], {m: {"policy": [0, 0], "troubleshoot": [0, 0]} for m in modes}
     syn: dict[int, list[list[str]]] = {}
     with db.connect() as conn:
@@ -95,8 +102,16 @@ def main() -> int:
             row = {"query": it["query"], "workspace_id": ws, "kind": it.get("kind", "policy"), "expect": it["expect"], "expect_absent": absent}
             for m in modes:
                 t0 = time.perf_counter()
-                got = search(conn, it, m, tokens, vec, a.k)
-                if m == modes[-1]:
+                if m == "rerank" and row["kind"] == "policy":
+                    pool = db.search_chunks(conn, ws, tokens, vec, rerank.POOL)
+                    t1 = time.perf_counter()
+                    order = [f"c:{r['id']}" for r in asyncio.run(rerank.rerank(prof, it["query"], pool, usage))]
+                    row["rerank_ms"] = (time.perf_counter() - t1) * 1000
+                    row["pool"], row["rerank_order"] = [f"c:{r['id']}" for r in pool], order   # 고정 자리 규칙을 LLM 없이 다시 계산할 수 있게
+                    got = order[:a.k]
+                else:
+                    got = search(conn, it, "hybrid" if m == "rerank" else m, tokens, vec, a.k)
+                if m == ("hybrid" if use_vec else "lex"):
                     row["search_ms"] = (time.perf_counter() - t0) * 1000   # DB 검색만(임베딩 제외)
                 hit = (any(e in got for e in it["expect"]) if it["expect"] else True) and not any(x in got for x in absent)
                 rank = next((i + 1 for i, g in enumerate(got) if g in it["expect"]), None)
@@ -118,6 +133,16 @@ def main() -> int:
     best = modes[-1]
     total = summarize(rows, best, a.k)
     print(f"{best} MRR@{a.k} {total['meta']['mrr']} · DB 검색 p50 {total['meta']['search_ms_p50']} ms")
+    if "rerank" in modes:
+        ms = sorted(r["rerank_ms"] for r in rows if "rerank_ms" in r)
+        gain = [r["query"] for r in rows if r["kind"] == "policy" and r["rerank"]["hit"] and not r["hybrid"]["hit"]]
+        loss = [r["query"] for r in rows if r["kind"] == "policy" and r["hybrid"]["hit"] and not r["rerank"]["hit"]]
+        print(f"재순위: 얻음 {len(gain)} · 잃음 {len(loss)} · 시간 p50 {ms[len(ms) // 2]:.0f} ms · p95 {ms[int(len(ms) * 0.95)]:.0f} ms"
+              f" · 토큰 {usage.prompt_tokens}+{usage.completion_tokens}")
+        for q in gain:
+            print("  + " + q)
+        for q in loss:
+            print("  - " + q)
     if a.record:
         if a.k != 5 or a.files:
             print("--record 는 k=5 · 전체 평가셋일 때만 쓴다 (eval_runs.hit_at_5)"); return 1

@@ -9,11 +9,11 @@ import re
 import time
 from typing import AsyncIterator, NamedTuple
 
-from app.config import ai_mode, profile as load_profile
+from app.config import ai_mode, policy_rerank, profile as load_profile
 from app.llm import client as llm
 from app.llm.schemas import (ChainEdge, ChainEvent, ChainNode, NodePolicy, CitationsEvent, DoneEvent, ErrorEvent, IntentEvent, Latency,
                              PolicyRef, StageEvent, TokenEvent)
-from app.retrieval import db, embed
+from app.retrieval import db, embed, rerank
 from app.retrieval.tokenize import Tokenizer, extract_error_code, synonym_groups
 from app.sse import sse
 
@@ -72,19 +72,20 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         if do_graph:
             yield sse("stage", StageEvent(node="graph_search", status="start").model_dump())
         if do_policy and do_graph:
-            # 규정을 먼저 찾아, 그 조문을 근거로 적어 둔 사례를 사례 후보에 더한다 (규정 검색은 수십 ms, 사례 쪽은 판정이 더 길다)
+            # 규정 후보를 먼저 찾아, 상위 조문을 근거로 적어 둔 사례를 사례 후보에 더한다 (규정 검색은 수십 ms, 사례 쪽은 판정이 더 길다).
+            # 재순위는 검색 상위 2건을 최종 근거에 남기므로 그 2건으로 사례 쪽을 바로 출발시키고, 재순위와 사례 판정을 함께 돈다
             try:
-                pol = await asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec)
+                rows = await asyncio.to_thread(_policy_candidates, workspace_id, q_tokens, q_vec)
+                linked_to = _article_keys(_with_company_rules(rows)[:LINK_TOP])
             except Exception as e:  # noqa: BLE001
-                pol = e
-            linked_to = [] if isinstance(pol, Exception) else _article_keys(pol[:LINK_TOP])
-            try:
-                gra = await _graph_search(workspace_id, q_tokens, q_vec, error_code, floor, prof, query, usage, linked_to)
-            except Exception as e:  # noqa: BLE001
-                gra = e
+                rows, linked_to = e, []
+            pol, gra = await asyncio.gather(
+                _policy_rank(prof, query, rows, usage) if not isinstance(rows, Exception) else _raise(rows),
+                _graph_search(workspace_id, q_tokens, q_vec, error_code, floor, prof, query, usage, linked_to),
+                return_exceptions=True)
         else:
             pol, gra = await asyncio.gather(
-                asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec) if do_policy else _noop(),
+                _policy_rag(workspace_id, q_tokens, q_vec, prof, query, usage) if do_policy else _noop(),
                 _graph_search(workspace_id, q_tokens, q_vec, error_code, floor, prof, query, usage) if do_graph else _noop(),
                 return_exceptions=True)
         chain_event = None
@@ -122,7 +123,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         if do_graph and not do_policy and policy_enabled and not chain_ctx:
             yield sse("stage", StageEvent(node="policy_rag", status="start", detail="fallback").model_dump())
             try:
-                policy_ctx = await asyncio.to_thread(_policy_rag, workspace_id, q_tokens, q_vec)
+                policy_ctx = await _policy_rag(workspace_id, q_tokens, q_vec, prof, query, usage)
                 yield sse("policy", [PolicyRef(**p).model_dump() for p in policy_ctx])
                 yield sse("stage", StageEvent(node="policy_rag", status="done").model_dump())
                 retrieved += [f"c:{p['chunk_id']}" for p in policy_ctx]
@@ -207,10 +208,24 @@ def _with_company_rules(rows: list[dict], k: int = 5, slots: int = COMPANY_SLOTS
     return top
 
 
-def _policy_rag(ws: int, q_tokens: str, q_vec: list[float] | None) -> list[dict]:
+def _policy_candidates(ws: int, q_tokens: str, q_vec: list[float] | None) -> list[dict]:
     with db.connect() as conn:
-        rows = _with_company_rules(db.search_chunks(conn, ws, q_tokens, q_vec, 20))
-    return [_policy_entry(i + 1, r, "search") for i, r in enumerate(rows)]
+        return db.search_chunks(conn, ws, q_tokens, q_vec, rerank.POOL)
+
+
+async def _policy_rank(prof, query: str, rows: list[dict], usage: llm.Usage) -> list[dict]:
+    """후보 → (재순위) → 상위 5(회사 규정 자리 보장) → 근거 항목."""
+    if policy_rerank():
+        rows = await rerank.rerank(prof, query, rows, usage)
+    return [_policy_entry(i + 1, r, "search") for i, r in enumerate(_with_company_rules(rows))]
+
+
+async def _policy_rag(ws: int, q_tokens: str, q_vec: list[float] | None, prof, query: str, usage: llm.Usage) -> list[dict]:
+    return await _policy_rank(prof, query, await asyncio.to_thread(_policy_candidates, ws, q_tokens, q_vec), usage)
+
+
+async def _raise(e: Exception):
+    raise e
 
 
 def _policy_entry(n: int, r: dict, source: str) -> dict:
