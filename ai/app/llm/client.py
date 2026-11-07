@@ -151,7 +151,7 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     parts: list[str] = []
     if chain_ctx:
         fails = [n for n in chain_ctx if n["type"] == "fail"]
-        causes = [n for n in chain_ctx if n["type"] == "ref"]
+        causes = [n for n in chain_ctx if n.get("cause") and n["status"] == "active"]
         fixes = sorted((n for n in chain_ctx if n["type"] == "success" and n["status"] == "active"), key=lambda n: not n.get("resolves_root"))
         if fails:
             parts.append(f"유사 사례: {fails[0]['title']} [{fails[0]['ref']}]. ")
@@ -189,6 +189,9 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
                 if fixes else "해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다.")
     out = [cite if case_required else
            "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않고, 사례가 없다거나 다루지 않는다는 말도 하지 않는다."]
+    pairs = _cause_pairs(live, solved or fixes) if case_required else ""
+    if pairs:
+        out.append(pairs)
     for n in live:
         for p in n.get("policy") or []:
             if p["relation"] == "exception" and p.get("ref") and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
@@ -225,6 +228,21 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
         if line:
             out.append(line)
     return out[:6]
+
+
+def _cause_pairs(live: list[dict], fix_refs: list[str]) -> str:
+    """해결 줄이 어느 원인을 해결했는지 한 줄. 원인 아래에 붙은 해결만 — 원인 표시가 없으면 짝을 짓지 않는다."""
+    causes = {n["ref"] for n in live if n.get("cause")}
+    pairs = []
+    for n in live:
+        if n["ref"] in fix_refs[:4]:
+            for c in n.get("parents") or []:
+                if c in causes:
+                    pairs.append(f"원인 [{c}] → 해결 [{n['ref']}]")
+    if not pairs:
+        return ""
+    return ("원인과 해결을 짝지어 쓴다: " + ", ".join(pairs) + ". 각 해결은 자기 원인과 함께 쓰고 다른 원인의 해결과 섞지 않는다. "
+            "질문이 특정 원인(상황)을 말하면 그 원인의 해결만 쓴다.")
 
 
 def _action(n: dict) -> str:
@@ -302,11 +320,13 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
         for p in policy_ctx:
             lines.append(f"[{p['ref']}] {p['doc_title']} {p['article_label']}: {p['text']}")
     if chain_ctx:
-        lines.append("## 해결 사례 체인 (들여쓰기 = 상하 관계)")
+        lines.append("## 해결 사례 체인 (들여쓰기 = 깊이, '상위:' = 바로 위 기록)")
         for n in chain_ctx:
             dep = "[폐기됨] " if n["status"] != "active" else ""
             indent = "  " * max(0, n["depth"])
-            lines.append(f"{indent}[{n['ref']}] ({n['type']}) {dep}{n['title']}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
+            kind = n["type"] + (", 원인" if n.get("cause") else "")
+            up = f" (상위: {' '.join(f'[{r}]' for r in n['parents'])})" if n.get("parents") and n["depth"] >= 2 else ""
+            lines.append(f"{indent}[{n['ref']}] ({kind}) {dep}{n['title']}{up}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
                          + (" (이 장애를 해결한 기록)" if n.get("resolves_root") and n["status"] == "active" else "")
                          + "".join(f" (상위에 이은 이유: {r})" for r in n.get("via") or [])
                          + "".join(_policy_note(p) for p in n.get("policy") or []))

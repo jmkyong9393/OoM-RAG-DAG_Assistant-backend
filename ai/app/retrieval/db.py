@@ -82,7 +82,7 @@ def search_case_entry(conn, ws: int, tokens: str | None, vec: list[float] | None
 def chain(conn, ws: int, entry: int, max_depth: int = 3, max_nodes: int = 30) -> dict:
     rows = conn.execute("""
         SELECT v.id, v.type, v.status, v.title, v.body, v.resolution_summary, v.error_code, v.author_name,
-               g.depth, v.path_label, v.last_confirmed_at, v.root_id, v.attributes->'policy_refs' AS policy_refs
+               g.depth, v.path_label, v.last_confirmed_at, v.root_id, v.attributes->'policy_refs' AS policy_refs, v.is_cause
         FROM get_chain(%s, %s, %s, %s) g JOIN v_log_nodes v ON v.id = g.node_id
         ORDER BY g.depth, v.id""", (ws, entry, max_depth, max_nodes)).fetchall()
     if not rows:

@@ -223,6 +223,11 @@
           "default": false,
           "title": "Resolves Root",
           "type": "boolean"
+        },
+        "is_cause": {
+          "default": false,
+          "title": "Is Cause",
+          "type": "boolean"
         }
       },
       "required": [

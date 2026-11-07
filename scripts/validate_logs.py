@@ -41,6 +41,8 @@ def check_file(path: pathlib.Path):
             if p not in by_ref: errors.append(f"{tag}: parent '{p}' 가 앞에 없음 (bulk 는 앞 항목만 참조)")
             elif it["type"] == "success" and by_ref[p]["type"] == "success": errors.append(f"{tag}: R12 success 의 부모가 success")
         if it["type"] == "success" and not parents and not it.get("problem_title"): errors.append(f"{tag}: R2 success 루트")
+        if it.get("category") is not None and (it["category"] != "cause" or it["type"] != "fail" or not parents):
+            errors.append(f"{tag}: R14 category 는 'cause' 이고 상위가 있는 fail 만")
         if it["type"] == "success" and parents:
             root = parents[0]
             while by_ref[root].get("parent_ref"): root = by_ref[root]["parent_ref"]

@@ -17,12 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
  *  R5  폐기는 사유 필수. cascade 면 이 노드를 거치지 않고는 활성 조상에 닿을 수 없는 자손도 함께. 복원은 deprecated_via 로 연동.
  *  R12 success 의 부모는 fail/ref 만.
  *  R13 장애 건을 해결한 기록(log_resolutions)은 그 루트의 활성 success 자손만. 완료를 되돌리면 비운다.
+ *  R14 원인(category='cause')은 상위가 있는 fail 만. 한 번에 등록은 cause_title 로 장애 건 → 원인 → 해결을 함께 만든다.
  * 간선 삽입은 워크스페이스 단위 advisory lock 으로 직렬화하고 would_create_cycle() 로 사이클을 막는다.
  */
 @Service
 public class LogService {
 
   private static final Set<String> TYPES = Set.of("fail", "success", "ref");
+  private static final Set<String> CATEGORIES = Set.of("cause");
 
   private final LogRepository repo;
 
@@ -30,9 +32,12 @@ public class LogService {
     this.repo = repo;
   }
 
-  /** edgeReason = 상위에 이어 붙인 이유(선택). resolveRoot = 이 success 가 장애 건을 해결했다 → 루트를 완료하고 해결 기록으로 남긴다. */
+  /**
+   * edgeReason = 상위에 이어 붙인 이유(선택). resolveRoot = 이 success 가 장애 건을 해결했다 → 루트를 완료하고 해결 기록으로 남긴다.
+   * category = "cause" 면 이 fail 이 상위 장애 건의 원인이다(R14). causeTitle = 한 번에 등록에서 장애 건과 해결 사이에 둘 원인 한 줄.
+   */
   public record CreateRequest(String type, String title, String body, Long parentId, Boolean resolveRoot, String problemTitle, Integer composeMs,
-                              List<PolicyRefService.RefInput> policyRefs, String edgeReason) {}
+                              List<PolicyRefService.RefInput> policyRefs, String edgeReason, String category, String causeTitle) {}
 
   @Transactional
   public LogNodeDto create(TenantContext ctx, CreateRequest req) {
@@ -41,15 +46,27 @@ public class LogService {
     if (blank(req.title()) || blank(req.body())) throw ApiException.badRequest("VALIDATION", "title and body are required");
     long ws = ctx.workspaceId();
     String edgeReason = reason(req.edgeReason());
+    String category = category(req.category());
+    Long parentId = req.parentId();
+    boolean oneShot = parentId == null && "success".equals(type);
+    if (category != null && (!"fail".equals(type) || parentId == null))
+      throw ApiException.badRequest("CATEGORY_INVALID", "category cause needs a fail log with parent_id");
+    String causeTitle = blank(req.causeTitle()) ? null : req.causeTitle().strip();
+    if (causeTitle != null && !oneShot) throw ApiException.badRequest("VALIDATION", "cause_title is only for a success without parent_id");
     repo.lockWorkspace(ws);
 
-    Long parentId = req.parentId();
-    if (parentId == null && "success".equals(type)) {
-      // R2: success 루트 금지 → problem_title 로 fail 루트 자동 생성
+    if (oneShot) {
+      // R2: success 루트 금지 → problem_title 로 fail 루트 자동 생성 (cause_title 이 있으면 루트 → 원인 → 해결)
       if (blank(req.problemTitle())) throw ApiException.badRequest("PROBLEM_TITLE_REQUIRED", "success without parent needs problem_title");
       long root = repo.insertNode(ws, "fail", req.problemTitle().trim(), req.problemTitle().trim(), ctx.userId(), null, "ui");
+      long above = root;
+      if (causeTitle != null) {
+        above = repo.insertNode(ws, "fail", causeTitle, causeTitle, ctx.userId(), null, "ui");
+        repo.setCategory(above, "cause");
+        repo.insertEdge(ws, root, above, ctx.userId(), "manual", null);
+      }
       long id = repo.insertNode(ws, "success", req.title().trim(), req.body().trim(), ctx.userId(), req.composeMs(), "ui");
-      repo.insertEdge(ws, root, id, ctx.userId(), "manual", edgeReason);
+      repo.insertEdge(ws, above, id, ctx.userId(), "manual", edgeReason);
       resolve(ctx, root, null, true);
       repo.addResolution(ws, root, id, ctx.userId());   // 한 번에 등록: 이 success 가 그 장애 건을 해결한 기록이다
       return repo.find(ws, id).orElseThrow();
@@ -63,6 +80,7 @@ public class LogService {
     }
 
     long id = repo.insertNode(ws, type, req.title().trim(), req.body().trim(), ctx.userId(), req.composeMs(), "ui");
+    if (category != null) repo.setCategory(id, category);
     if (parentId != null) {
       repo.insertEdge(ws, parentId, id, ctx.userId(), "manual", edgeReason);
       if (Boolean.TRUE.equals(req.resolveRoot()) && "success".equals(type)) {
@@ -164,6 +182,27 @@ public class LogService {
       throw ApiException.conflict("EDGE_PARENT_TYPE", "success can only follow fail/ref");
     if (repo.wouldCreateCycle(parentId, childId)) throw ApiException.conflict("CYCLE", "edge would create a cycle");
     repo.insertEdge(ws, parentId, childId, ctx.userId(), "manual", why);
+  }
+
+  /** R14. value = "cause" 면 원인으로 표시, 빈 문자열이면 표시를 지운다. */
+  @Transactional
+  public LogNodeDto setCategory(TenantContext ctx, long id, String value) {
+    LogNodeDto node = get(ctx, id);
+    String category = category(value);
+    if (category != null && (!"fail".equals(node.type()) || repo.isRoot(id)))
+      throw ApiException.badRequest("CATEGORY_INVALID", "category cause needs a fail log with a parent");
+    repo.setCategory(id, category);
+    repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), category == null ? "uncategorized" : "categorized",
+        ctx.userName(), category, node.title());
+    return get(ctx, id);
+  }
+
+  /** 분류 값: 빈 값은 null, 알 수 없는 값은 400. */
+  static String category(String s) {
+    if (s == null || s.isBlank()) return null;
+    String t = s.strip();
+    if (!CATEGORIES.contains(t)) throw ApiException.badRequest("CATEGORY_INVALID", "category must be cause");
+    return t;
   }
 
   /** 지금 유효한 해결 기록. 장애 건이 아니면 빈 목록. */

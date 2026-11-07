@@ -34,9 +34,10 @@ public class ChainController {
   /**
    * policyRefs = 그 기록이 따른(또는 벗어난) 규정 조문. 없으면 null. 어시스턴트의 체인과 같은 표시를 타임라인에서도 하게 한다.
    * resolvesRoot = 이 success 가 장애 건을 실제로 해결한 기록으로 남아 있다(지금 유효한 것만 — resolved_nodes()).
+   * isCause = 장애 건의 원인으로 표시한 기록(상위가 있을 때만 — v_log_nodes.is_cause).
    */
   public record ChainNode(long id, String type, String status, String title, int depth, String pathLabel, String note, OffsetDateTime lastConfirmedAt,
-                          List<PolicyRefService.RefView> policyRefs, boolean resolvesRoot) {}
+                          List<PolicyRefService.RefView> policyRefs, boolean resolvesRoot, boolean isCause) {}
   /** reason = 이 기록을 그 상위에 이어 붙인 이유. 없으면 null. */
   public record Edge(long parentId, long childId, String reason) {}
   public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary) {}
@@ -45,7 +46,7 @@ public class ChainController {
   public Chain get(@PathVariable long entryId, @RequestParam(defaultValue = "3") int depth, TenantContext ctx) {
     long ws = ctx.workspaceId();
     List<Map<String, Object>> rows = jdbc.sql("""
-        SELECT v.id, v.type, v.status, v.title, g.depth, v.path_label, v.resolution_summary, v.last_confirmed_at, v.root_id
+        SELECT v.id, v.type, v.status, v.title, g.depth, v.path_label, v.resolution_summary, v.last_confirmed_at, v.root_id, v.is_cause
         FROM get_chain(?, ?, ?, ?) g JOIN v_log_nodes v ON v.id = g.node_id
         ORDER BY g.depth, v.id
         """).params(ws, entryId, Math.max(1, Math.min(depth, 8)), MAX_NODES).query().listOfRows();
@@ -59,7 +60,7 @@ public class ChainController {
         .params(roots, ws).query(Long.class).list());
     List<ChainNode> nodes = rows.stream().map(r -> new ChainNode(num(r, "id"), (String) r.get("type"), (String) r.get("status"), (String) r.get("title"),
         ((Number) r.get("depth")).intValue(), (String) r.get("path_label"), (String) r.get("resolution_summary"),
-        Times.offset(r.get("last_confirmed_at")), refs.get(num(r, "id")), resolving.contains(num(r, "id")))).toList();
+        Times.offset(r.get("last_confirmed_at")), refs.get(num(r, "id")), resolving.contains(num(r, "id")), Boolean.TRUE.equals(r.get("is_cause")))).toList();
     List<Edge> edges = jdbc.sql("SELECT parent_id, child_id, reason FROM log_edges WHERE parent_id = ANY (?) AND child_id = ANY (?) ORDER BY parent_id, child_id")
         .params(ids.toArray(Long[]::new), ids.toArray(Long[]::new))
         .query((rs, i) -> new Edge(rs.getLong("parent_id"), rs.getLong("child_id"), rs.getString("reason"))).list();

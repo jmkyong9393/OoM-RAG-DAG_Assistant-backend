@@ -152,6 +152,15 @@ public class LogRepository {
     return jdbc.sql("SELECT would_create_cycle(?, ?)").params(parent, child).query(Boolean.class).single();
   }
 
+  public void setCategory(long id, String category) {
+    jdbc.sql("UPDATE log_nodes SET category = ? WHERE id = ?").params(category, id).update();
+  }
+
+  /** 비어 있을 때만 채운다(이미 적재한 fail 기록에). 표시를 바꾸거나 지우지 않는다. */
+  public void fillCategory(long id, String category) {
+    jdbc.sql("UPDATE log_nodes SET category = ? WHERE id = ? AND category IS NULL AND type = 'fail'").params(category, id).update();
+  }
+
   public boolean isRoot(long id) {
     return jdbc.sql("SELECT NOT EXISTS (SELECT 1 FROM log_edges WHERE child_id = ?)").param(id).query(Boolean.class).single();
   }

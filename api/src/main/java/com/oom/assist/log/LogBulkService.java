@@ -60,10 +60,13 @@ public class LogBulkService {
 
   // ── bulk ───────────────────────────────────────────────────────────────────
 
-  /** parentReason = 상위에 이어 붙인 이유(모든 상위 간선에 같이). resolves = 이 success 가 상위 장애 건(들)을 해결한 기록이다. */
+  /**
+   * parentReason = 상위에 이어 붙인 이유(모든 상위 간선에 같이). resolves = 이 success 가 상위 장애 건(들)을 해결한 기록이다.
+   * category = "cause" 면 상위 장애 건의 원인(상위가 있는 fail 만). 이미 있는 기록은 비어 있을 때만 채운다.
+   */
   public record Item(String ref, String type, String title, String body, String parentRef, List<String> parentRefs, String problemTitle, String source,
                      String sourceRef, String errorCode, List<String> keywords, String resolutionSummary, OffsetDateTime createdAt,
-                     List<PolicyRefService.RefInput> policyRefs, String parentReason, Boolean resolves) {}
+                     List<PolicyRefService.RefInput> policyRefs, String parentReason, Boolean resolves, String category) {}
   public record BulkRequest(List<Item> items) {}
   public record ItemResult(String ref, long id, String status) {}
   public record BulkResponse(int created, int existing, List<ItemResult> items) {}
@@ -85,11 +88,15 @@ public class LogBulkService {
       if (blank(it.title()) || blank(it.body())) throw ApiException.badRequest("VALIDATION", ref + ": title and body are required");
       String source = it.source() == null ? "bulk" : it.source();
       if (!SOURCES.contains(source)) throw ApiException.badRequest("VALIDATION", ref + ": source must be bulk|synthetic");
+      String category = LogService.category(it.category());
+      if (category != null && (!"fail".equals(it.type()) || parentRefsOf(it).isEmpty()))
+        throw ApiException.badRequest("CATEGORY_INVALID", ref + ": category cause needs a fail item with parent_ref");
 
       // 멱등: 같은 source_ref 가 이미 있으면 재사용
       if (!blank(it.sourceRef())) {
         var found = repo.findBySourceRef(ws, it.sourceRef().trim());
         if (found.isPresent()) {
+          if (category != null) repo.fillCategory(found.get(), category);   // 원인 표시 전에 적재한 기록에도 표시를 채운다
           byRef.put(ref, found.get());
           out.add(new ItemResult(ref, found.get(), "existing"));
           existing++;
@@ -103,6 +110,7 @@ public class LogBulkService {
         Long pid = resolveParent(ws, p, byRef, ref);
         if (pid != null && !parentIds.contains(pid)) parentIds.add(pid);
       }
+      if (category != null && parentIds.isEmpty()) throw ApiException.badRequest("CATEGORY_INVALID", ref + ": category cause needs a parent");
       long id;
       String why = LogService.reason(it.parentReason());
       var refs = policyRefs.normalize(ws, it.policyRefs());   // 잘못된 근거 조문은 여기서 400 → 전체 롤백
@@ -129,6 +137,7 @@ public class LogBulkService {
         id = repo.insertNodeFull(ws, it.type(), it.title().trim(), it.body().trim(), ctx.userId(), source,
             sourceRef, it.errorCode(), it.keywords(), it.resolutionSummary(), it.createdAt());
         for (Long parentId : parentIds) repo.insertEdge(ws, parentId, id, ctx.userId(), "bulk", why);
+        if (category != null) repo.setCategory(id, category);
         // 체인에 success 가 붙으면 그 체인의 루트(들)는 해결된 것 — 단건 등록(R3)과 같은 의미. 이미 해결된 루트는 그대로
         // 해결 기록(log_resolutions)은 resolves 로 밝힌 것만 — success 가 붙었다고 그 건을 해결한 조치라고 단정하지 않는다
         if ("success".equals(it.type()))

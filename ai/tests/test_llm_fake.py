@@ -27,7 +27,7 @@ async def test_classify_rules(prof, query, policy_enabled, expected):
 async def test_template_answer_uses_markers_and_skips_deprecated(prof):
     chain = [
         {"ref": "N1", "id": 101, "type": "fail", "status": "active", "title": "VPN E-403", "resolution_summary": None, "depth": 0},
-        {"ref": "N2", "id": 106, "type": "ref", "status": "active", "title": "토큰 갱신 배치 누락", "resolution_summary": None, "depth": 1},
+        {"ref": "N2", "id": 106, "type": "fail", "status": "active", "title": "토큰 갱신 배치 누락", "resolution_summary": None, "depth": 1, "cause": True},
         {"ref": "N3", "id": 109, "type": "success", "status": "deprecated", "title": "수동 재발급", "resolution_summary": "수동 스크립트", "depth": 2},
         {"ref": "N4", "id": 108, "type": "success", "status": "active", "title": "갱신 주기 조정", "resolution_summary": "주기 30분", "depth": 2},
     ]
