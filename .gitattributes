@@ -5,3 +5,5 @@ data/alignment/*.json text eol=lf
 *.pdf binary
 data/policies/revisions/**/*.md text eol=lf
 data/policies/revisions/**/meta.json text eol=lf
+# 컨테이너에 마운트해 실행하는 셸 스크립트 — CRLF 면 /bin/sh 가 `\r` 에서 깨진다
+deploy/*.sh text eol=lf
