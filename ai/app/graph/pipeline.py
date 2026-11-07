@@ -394,6 +394,10 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
     for e in ch["edges"]:
         if e["parent_id"] in refs:
             parents.setdefault(e["child_id"], []).append(refs[e["parent_id"]])
+    # 갈라지는 체인(깊이 2 이상 기록의 상위가 둘 이상)일 때만 표시한다 — 한 줄기 체인에 표시를 더하면 답변에 뜻 없는 문장이 늘었다
+    depth = {n["id"]: n["depth"] for n in nodes}
+    if len({r for c, ps in parents.items() if depth.get(c, 0) >= 2 for r in ps}) < 2:
+        parents = {}
     ctx, ev_nodes = [], []
     for n in nodes:
         ref, cause = refs[n["id"]], bool(n.get("is_cause"))

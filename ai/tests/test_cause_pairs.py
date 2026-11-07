@@ -40,18 +40,24 @@ def test_render_marks_cause_and_names_parent_from_depth_two(monkeypatch):
 def test_must_include_pairs_each_resolution_with_its_cause(monkeypatch):
     _chain(monkeypatch)
     ctx, _ = pipeline._load_chain(1, 1)
-    must = llm._must_include(ctx)
-    pair = next(m for m in must if m.startswith("원인과 해결을 짝지어"))
+    must = llm._must_include(ctx, asks_cause=True)
+    pair = next(m for m in must if m.startswith("이 장애는 원인이 여럿이다"))
     assert "원인 [N2] → 해결 [N5]" in pair and "원인 [N3] → 해결 [N6]" in pair
     assert "[N7]" not in pair, "해결 기록이 있으면 후속 조치는 짝에 넣지 않는다"
 
 
-def test_must_include_pairs_only_the_line_the_question_entered(monkeypatch):
-    """질문이 한 원인(연휴 망각)으로 들어오면 그 줄만 짝짓는다."""
+def test_no_pair_line_when_the_question_enters_one_cause(monkeypatch):
+    """질문이 한 원인(연휴 망각)으로 들어오면 짝은 하나뿐 — 상위 표시로 충분해 지시를 더하지 않는다."""
     _chain(monkeypatch)
     ctx, _ = pipeline._load_chain(1, 3)
-    pair = next(m for m in llm._must_include(ctx) if m.startswith("원인과 해결을 짝지어"))
-    assert "원인 [N3] → 해결 [N6]" in pair and "[N2]" not in pair
+    assert not any(m.startswith("이 장애는 원인이 여럿이다") for m in llm._must_include(ctx, asks_cause=True))
+
+
+def test_pair_line_comes_last_and_only_when_the_question_asks_cause(monkeypatch):
+    _chain(monkeypatch)
+    ctx, _ = pipeline._load_chain(1, 1)
+    assert llm._must_include(ctx, asks_cause=True)[-1].startswith("이 장애는 원인이 여럿이다")
+    assert not any(m.startswith("이 장애는 원인이 여럿이다") for m in llm._must_include(ctx)), "해결법을 묻는 질문에는 붙이지 않는다"
 
 
 def test_no_pair_line_without_cause_marks(monkeypatch):
@@ -59,8 +65,8 @@ def test_no_pair_line_without_cause_marks(monkeypatch):
     ctx, _ = pipeline._load_chain(1, 1)
     for n in ctx:
         n["cause"] = False
-    assert not any(m.startswith("원인과 해결을 짝지어") for m in llm._must_include(ctx))
-    assert not any(m.startswith("원인과 해결을 짝지어") for m in llm._must_include(ctx, case_required=False))
+    assert not any(m.startswith("이 장애는 원인이 여럿이다") for m in llm._must_include(ctx, asks_cause=True))
+    assert not any(m.startswith("이 장애는 원인이 여럿이다") for m in llm._must_include(ctx, case_required=False, asks_cause=True))
 
 
 def test_template_answer_lists_marked_causes_not_reference_logs(monkeypatch):

@@ -22,6 +22,7 @@ TROUBLE_HINTS = ("오류", "에러", "장애", "해결", "예전에", "사례", 
                  "timeout", "error", "exception", "stacktrace")
 # 약한 힌트: 규정 질문에도 흔히 나온다("인증이 실패하나요"). 단독으로는 troubleshoot 확정 대신 LLM 에 넘긴다
 # "복구" 도 약한 힌트다 — 장애 복구뿐 아니라 계정 복구(고객 FAQ)에도 쓰인다
+CAUSE_HINTS = ("원인", "왜", "이유", "때문")   # 원인을 묻는 질문 — 이때만 원인과 해결을 짝짓게 한다
 TROUBLE_WEAK_HINTS = ("실패", "원인", "조치", "복구", "거부", "안 돼", "안돼", "안 됨", "안됨")
 # 약한 규정 힌트: "~해야 해?"(의무·판단) · "몇 초/몇 회/상한"(기준값) 은 규정이 답을 가진 질문이다. 장애 힌트와 함께 오면 both,
 # 단독이면 LLM 에 넘긴다 — 사례만 보고 "타임아웃은 20초" 처럼 로그 수치를 규정인 양 답하는 것을 막는다(실험 2026-10-29)
@@ -136,7 +137,8 @@ async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chai
         context = _render_context(policy_ctx, chain_ctx)
         # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
         searched = [x for x in policy_ctx if x.get("source") == "search"]
-        must = _must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}) + _wording_notes(searched[:3])
+        must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS))
+                + _wording_notes(searched[:3]))
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -168,7 +170,7 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     return [w + " " for w in text.split(" ") if w]
 
 
-def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: set[str] | None = None) -> list[str]:
+def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: set[str] | None = None, asks_cause: bool = False) -> list[str]:
     """사례가 있을 때 답변이 빠뜨리기 쉬운 것을 컨텍스트에서 뽑는다 — 규칙만 주면 규정 문장만 쓰고 사례·예외를 건너뛰는 일이 잦았다.
     사례 인용, 규정과 달리 처리한 예외, 진입 사례의 '기준 없음', 진입 사례가 따른 규정.
     예외는 질문과 이어진 것만: 진입 사례와 같은 줄기(near)이거나, 질문으로 검색된 조문(searched)을 벗어난 사례. 같은 체인의 다른 가지에 있는 예외까지 넣으면 답이 샌다."""
@@ -189,9 +191,6 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
                 if fixes else "해결 사례를 한 문장 이상 쓰고 그 문장에 [N…] 마커를 붙인다.")
     out = [cite if case_required else
            "먼저 규정으로 답한다. 해결 사례가 이 질문의 상황을 실제로 다룬 것이면 한 문장으로 덧붙이고 [N…] 마커를 붙인다. 상황이 다르면 사례는 쓰지 않고, 사례가 없다거나 다루지 않는다는 말도 하지 않는다."]
-    pairs = _cause_pairs(live, solved or fixes) if case_required else ""
-    if pairs:
-        out.append(pairs)
     for n in live:
         for p in n.get("policy") or []:
             if p["relation"] == "exception" and p.get("ref") and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
@@ -227,11 +226,16 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
         line = _fix_relations([n for n in live if n["ref"] in (solved or fixes)])
         if line:
             out.append(line)
+    # 원인을 물을 때만 · 가장 뒤. 해결법을 묻는 질문에 붙이면 규정 마커 같은 다른 지시를 빠뜨렸다
+    pairs = _cause_pairs(live, solved or fixes) if case_required and asks_cause else ""
+    if pairs:
+        out.append(pairs)
     return out[:6]
 
 
 def _cause_pairs(live: list[dict], fix_refs: list[str]) -> str:
-    """해결 줄이 어느 원인을 해결했는지 한 줄. 원인 아래에 붙은 해결만 — 원인 표시가 없으면 짝을 짓지 않는다."""
+    """원인이 둘 이상일 때 해결 줄이 어느 원인을 해결했는지 한 줄. 원인이 하나면 체인의 상위 표시로 충분해 지시를 더하지 않는다
+    (지시가 늘면 개정 기준·규정 마커 같은 다른 지시를 빠뜨렸다)."""
     causes = {n["ref"] for n in live if n.get("cause")}
     pairs = []
     for n in live:
@@ -239,11 +243,10 @@ def _cause_pairs(live: list[dict], fix_refs: list[str]) -> str:
             for c in n.get("parents") or []:
                 if c in causes:
                     pairs.append(f"원인 [{c}] → 해결 [{n['ref']}]")
-    if not pairs:
+    if len({p.split("]")[0] for p in pairs}) < 2:
         return ""
     # 원인 범위는 진입 기록의 줄기(near)로 이미 좁혀져 있다 — "질문이 말한 원인만" 같은 지시는 증상 묘사를 원인으로 읽어 해결을 빠뜨린다
-    return ("원인과 해결을 짝지어 쓴다: " + ", ".join(pairs) + ". 원인마다 원인 다음에 그 해결을 쓰고, 원인 문장에는 원인 줄의 마커, "
-            "해결 문장에는 해결 줄의 마커를 붙인다. 한 원인의 해결을 다른 원인에 붙이지 않는다.")
+    return "이 장애는 원인이 여럿이다: " + ", ".join(pairs) + ". 해결 방법은 그 원인과 함께 쓰고, 한 원인의 해결을 다른 원인에 붙이지 않는다."
 
 
 def _action(n: dict) -> str:
@@ -321,7 +324,8 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
         for p in policy_ctx:
             lines.append(f"[{p['ref']}] {p['doc_title']} {p['article_label']}: {p['text']}")
     if chain_ctx:
-        lines.append("## 해결 사례 체인 (들여쓰기 = 깊이, '상위:' = 바로 위 기록)")
+        branched = any(n.get("parents") and n["depth"] >= 2 for n in chain_ctx)
+        lines.append("## 해결 사례 체인 (들여쓰기 = 깊이, '상위:' = 바로 위 기록)" if branched else "## 해결 사례 체인 (들여쓰기 = 상하 관계)")
         for n in chain_ctx:
             dep = "[폐기됨] " if n["status"] != "active" else ""
             indent = "  " * max(0, n["depth"])
