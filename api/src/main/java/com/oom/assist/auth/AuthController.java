@@ -65,11 +65,17 @@ public class AuthController {
   /** canConfigure: 이 부서의 설정(규정 사용·사례 사용)을 바꿀 수 있는가 — 부서 admin 이거나 상위(전사 공통)의 admin. */
   /** permissions: 이 부서에서 할 수 있는 관리 동작(admin.members · admin.settings · docs.manage). 화면 노출용이고 서버는 요청마다 다시 검사한다. */
   public record WorkspaceMembership(long id, String name, boolean policyEnabled, boolean caseEnabled, String role, boolean canConfigure, List<String> permissions) {}
-  /** permissions: 부서와 무관한 동작(audit.read = 회사 관리자). */
-  public record Me(long id, String employeeNo, String name, String title, String email, Long workspaceId, List<WorkspaceMembership> workspaces,
-                   boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt, boolean companyAdmin, List<String> permissions) {}
-  /** null 은 그대로, 빈 문자열은 지움(직함 · 이메일). 이름은 지울 수 없다. */
-  public record ProfileRequest(String name, String title, String email) {}
+  /** permissions: 부서와 무관한 동작(audit.read = 회사 관리자). title = 표시용 "직급 · 직책"(예전 화면 호환).
+   *  consentVersion = 지금 처리방침 판, consentedVersion = 이 사용자가 마지막으로 동의한 판. 둘이 다르면 consentRequired. */
+  public record Me(long id, String employeeNo, String name, String title, String grade, String position, String email, Long workspaceId,
+                   List<WorkspaceMembership> workspaces, boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt,
+                   boolean companyAdmin, List<String> permissions, String consentVersion, String consentedVersion) {}
+  /** null 은 그대로, 빈 문자열은 지움(직급 · 직책 · 이메일). 이름은 지울 수 없다. title 은 예전 화면용 — grade · position 이 없을 때만 직급/직책으로 나눠 넣는다. */
+  public record ProfileRequest(String name, String grade, String position, String title, String email) {}
+  /** version = 화면이 보여 준 처리방침 판. 다르면 그사이 문안이 바뀐 것이다. */
+  public record ConsentRequest(String version) {}
+
+  private static final java.util.regex.Pattern POLICY_VERSION = java.util.regex.Pattern.compile("판:\\s*([A-Za-z0-9._-]+)");
 
   @PostMapping("/auth/login")
   public Me login(@Valid @RequestBody LoginRequest body, HttpServletRequest req, HttpServletResponse res) {
@@ -127,10 +133,27 @@ public class AuthController {
   public ResponseEntity<String> privacyPolicy() {
     try {
       String text = Files.readString(privacyPolicyPath, StandardCharsets.UTF_8);
-      return ResponseEntity.ok().contentType(new MediaType("text", "markdown", StandardCharsets.UTF_8)).body(text);
+      ResponseEntity.BodyBuilder ok = ResponseEntity.ok().contentType(new MediaType("text", "markdown", StandardCharsets.UTF_8));
+      String version = versionOf(text);
+      if (version != null) ok.header("X-Policy-Version", version);
+      return ok.body(text);
     } catch (IOException e) {
       throw ApiException.notFound("privacy policy (" + privacyPolicyPath + ")");
     }
+  }
+
+  /** 지금 처리방침 판(문안 머리의 "판: v2"). 파일이 없거나 판 표시가 없으면 null — 그때는 판 없이 "동의한 적 있는가"만 본다. */
+  String policyVersion() {
+    try {
+      return versionOf(Files.readString(privacyPolicyPath, StandardCharsets.UTF_8));
+    } catch (IOException e) {
+      return null;
+    }
+  }
+
+  private static String versionOf(String text) {
+    java.util.regex.Matcher m = POLICY_VERSION.matcher(text);
+    return m.find() ? m.group(1) : null;
   }
 
   @PatchMapping("/auth/password")
@@ -147,19 +170,27 @@ public class AuthController {
     return ResponseEntity.noContent().build();
   }
 
-  /** 개인정보 수집·이용 동의(첫 로그인). 동의 시각만 기록한다 — 문안은 프론트 처리방침 페이지. */
+  /** 개인정보 수집·이용 동의(첫 로그인 · 처리방침 판이 바뀐 뒤). 지금 판에 대한 동의를 판 단위로 남긴다. 화면이 보여 준 판과 지금 판이 다르면 409. */
   @PostMapping("/auth/consent")
-  public ResponseEntity<Void> consent(HttpServletRequest req) {
+  public ResponseEntity<Void> consent(@RequestBody(required = false) ConsentRequest body, HttpServletRequest req) {
     AppPrincipal p = CurrentUser.get().orElseThrow(ApiException::unauthorized);
+    String current = policyVersion();
+    if (body != null && body.version() != null && current != null && !current.equals(body.version()))
+      throw ApiException.conflict("CONSENT_VERSION_MISMATCH", "privacy policy is now " + current + "; reload and consent again");
     jdbc.sql("UPDATE users SET consented_at = coalesce(consented_at, now()) WHERE id = ?").param(p.id()).update();
-    attempts.audit(p.employeeNo(), "consent", LoginAttempts.clientIp(req));
+    if (current != null)
+      jdbc.sql("INSERT INTO user_consents (user_id, policy_version) VALUES (?, ?) ON CONFLICT DO NOTHING").params(p.id(), current).update();
+    attempts.audit(p.employeeNo(), "consent", LoginAttempts.clientIp(req), current);
     return ResponseEntity.noContent().build();
   }
 
   java.util.Optional<Me> loadMe(long userId) {
     return jdbc.sql("""
-          SELECT id, employee_no, email, name, title, must_change_password, consented_at, password_changed_at
-          FROM users WHERE id = ? AND status = 'active'""").param(userId)
+          SELECT id, employee_no, email, name, grade, duty, coalesce(nullif(concat_ws(' · ', grade, duty), ''), title) AS title,
+                 must_change_password, consented_at, password_changed_at,
+                 (SELECT c.policy_version FROM user_consents c WHERE c.user_id = users.id ORDER BY c.consented_at DESC LIMIT 1) AS consented_version,
+                 EXISTS (SELECT 1 FROM user_consents c WHERE c.user_id = users.id AND c.policy_version = ?::text) AS consented_current
+          FROM users WHERE id = ? AND status = 'active'""").params(policyVersion(), userId)
         .query().listOfRows().stream().findFirst()
         .map(u -> {
           List<WorkspaceMembership> ws = jdbc.sql("""
@@ -179,9 +210,12 @@ public class AuthController {
           Timestamp changed = (Timestamp) u.get("password_changed_at");
           Instant expiresAt = changed == null ? null : changed.toInstant().plus(Duration.ofDays(PasswordPolicy.MAX_AGE_DAYS));
           boolean expired = expiresAt == null || expiresAt.isBefore(Instant.now());   // 기준 시각이 없으면(구 계정) 만료로 본다
+          String current = policyVersion();
+          boolean consentRequired = current == null ? u.get("consented_at") == null : !Boolean.TRUE.equals(u.get("consented_current"));
           return new Me(((Number) u.get("id")).longValue(), (String) u.get("employee_no"), (String) u.get("name"), (String) u.get("title"),
-              (String) u.get("email"), home, ws, Boolean.TRUE.equals(u.get("must_change_password")) || expired,
-              u.get("consented_at") == null, expiresAt, companyAdmin, companyAdmin ? List.of("audit.read") : List.of());
+              (String) u.get("grade"), (String) u.get("duty"), (String) u.get("email"), home, ws,
+              Boolean.TRUE.equals(u.get("must_change_password")) || expired, consentRequired, expiresAt, companyAdmin,
+              companyAdmin ? List.of("audit.read") : List.of(), current, (String) u.get("consented_version"));
         });
   }
 
@@ -192,16 +226,16 @@ public class AuthController {
     return p;
   }
 
-  /** 내 정보 정정(처리방침: 이름 · 직함 · 이메일은 본인이 직접 고친다). 사번 · 소속 · 역할은 바꾸지 않는다. 접속기록에는 바뀐 항목 이름만 남긴다. */
+  /** 내 정보 정정(처리방침 §4: 이름 · 직급 · 직책 · 이메일은 본인이 직접 고친다). 사번 · 소속 · 역할은 바꾸지 않는다. 접속기록에는 바뀐 항목 이름만 남긴다. */
   @PatchMapping("/me")
   public Me updateProfile(@RequestBody ProfileRequest body, HttpServletRequest req) {
     AppPrincipal p = CurrentUser.get().orElseThrow(ApiException::unauthorized);
     if (body == null) throw ApiException.badRequest("VALIDATION", "body is required");
-    Map<String, Object> cur = jdbc.sql("SELECT name, title, email FROM users WHERE id = ?").param(p.id()).query().singleRow();
+    Map<String, Object> cur = jdbc.sql("SELECT name, grade, duty, email FROM users WHERE id = ?").param(p.id()).query().singleRow();
     String name = body.name() == null ? (String) cur.get("name") : body.name().strip();
     if (name.isEmpty() || name.length() > 50) throw ApiException.badRequest("VALIDATION", "name must be 1~50 characters");
-    String title = body.title() == null ? (String) cur.get("title") : blankToNull(body.title());
-    if (title != null && title.length() > 50) throw ApiException.badRequest("VALIDATION", "title must be at most 50 characters");
+    String[] gp = gradePosition(body.grade(), body.position(), body.title(), (String) cur.get("grade"), (String) cur.get("duty"));
+    String grade = gp[0], position = gp[1];
     String email = body.email() == null ? (String) cur.get("email") : blankToNull(body.email());
     if (email != null) {
       email = email.toLowerCase();
@@ -209,7 +243,8 @@ public class AuthController {
     }
     List<String> changed = new java.util.ArrayList<>();
     if (!name.equals(cur.get("name"))) changed.add("name");
-    if (!java.util.Objects.equals(title, cur.get("title"))) changed.add("title");
+    if (!java.util.Objects.equals(grade, cur.get("grade"))) changed.add("grade");
+    if (!java.util.Objects.equals(position, cur.get("duty"))) changed.add("position");
     if (!java.util.Objects.equals(email, cur.get("email"))) changed.add("email");
     if (changed.contains("email") && email != null && jdbc.sql("""
           SELECT EXISTS (SELECT 1 FROM users o WHERE o.tenant_id = (SELECT tenant_id FROM users WHERE id = ?) AND o.email = ? AND o.id <> ?)""")
@@ -217,13 +252,38 @@ public class AuthController {
       throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");
     if (!changed.isEmpty()) {
       try {
-        jdbc.sql("UPDATE users SET name = ?, title = ?, email = ? WHERE id = ?").params(name, title, email, p.id()).update();
+        jdbc.sql("UPDATE users SET name = ?, grade = ?, duty = ?, title = ?, email = ? WHERE id = ?")
+            .params(name, grade, position, display(grade, position), email, p.id()).update();
       } catch (org.springframework.dao.DuplicateKeyException e) {
         throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");
       }
       attempts.audit(p.employeeNo(), "profile_changed", LoginAttempts.clientIp(req), String.join(",", changed));
     }
     return loadMe(p.id()).orElseThrow(ApiException::unauthorized);
+  }
+
+  /** 요청의 직급 · 직책을 정한다. grade · position 이 오면 그대로(빈 문자열은 지움), 둘 다 없고 예전 title 만 오면 DB 규칙(title_parts)으로 나눈다. */
+  String[] gradePosition(String grade, String position, String title, String curGrade, String curPosition) {
+    String g, pos;
+    if (grade != null || position != null) {
+      g = grade == null ? curGrade : blankToNull(grade);
+      pos = position == null ? curPosition : blankToNull(position);
+    } else if (title != null) {
+      Map<String, Object> parts = jdbc.sql("SELECT grade, duty FROM title_parts(?)").param(title).query().singleRow();
+      g = (String) parts.get("grade");
+      pos = (String) parts.get("duty");
+    } else {
+      g = curGrade;
+      pos = curPosition;
+    }
+    if ((g != null && g.length() > 30) || (pos != null && pos.length() > 30)) throw ApiException.badRequest("VALIDATION", "grade/position must be at most 30 characters");
+    return new String[] {g, pos};
+  }
+
+  /** 표시용 직함: "매니저 · 팀장". 둘 다 없으면 null. */
+  static String display(String grade, String position) {
+    String s = java.util.stream.Stream.of(grade, position).filter(java.util.Objects::nonNull).collect(java.util.stream.Collectors.joining(" · "));
+    return s.isEmpty() ? null : s;
   }
 
   private static String blankToNull(String s) {

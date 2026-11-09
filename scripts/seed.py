@@ -23,6 +23,11 @@ STRICT = "--strict" in sys.argv
 
 def load(name): return json.loads((SEED / name).read_text(encoding="utf-8"))
 
+# 지금 처리방침 판(문안 머리의 "판: v2"). 시드 계정의 동의를 이 판으로 남긴다 — 판이 없으면 None
+import re
+_POLICY = ROOT / "data" / "legal" / "privacy_policy.md"
+POLICY_VERSION = (m.group(1) if _POLICY.exists() and (m := re.search(r"판:\s*([A-Za-z0-9._-]+)", _POLICY.read_text(encoding="utf-8"))) else None)
+
 TABLES_IN_ORDER = ["tenants", "workspaces", "users", "workspace_members", "log_nodes", "log_edges",
                    "policy_documents", "policy_chunks", "audit_log"]
 
@@ -95,6 +100,11 @@ def main():
                              password_changed_at = coalesce(users.password_changed_at, now()),
                              consented_at = coalesce(users.consented_at, EXCLUDED.consented_at)""",
                         (u["id"], u["tenant_id"], u["name"], u.get("title"), u.get("employee_no"), u.get("email"), pw_hash, bool(u.get("consented"))))
+            # 직급 · 직책: 직함 한 칸을 DB 규칙(title_parts)으로 나눈다(V13). 이미 나뉜 계정은 건드리지 않는다
+            cur.execute("""UPDATE users u SET (grade, duty) = (SELECT p.grade, p.duty FROM title_parts(u.title) p)
+                           WHERE u.id = %s AND u.grade IS NULL AND u.duty IS NULL""", (u["id"],))
+            if u.get("consented") and POLICY_VERSION:
+                cur.execute("INSERT INTO user_consents (user_id, policy_version) VALUES (%s, %s) ON CONFLICT DO NOTHING", (u["id"], POLICY_VERSION))
         for m in load("workspace_members.json"):
             cur.execute("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
                         (m["workspace_id"], m["user_id"], m["role"]))
