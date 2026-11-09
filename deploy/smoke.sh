@@ -27,6 +27,10 @@ for i in $(seq 1 60); do
 done
 echo "actuator/health via caddy: $s"
 curl -s http://localhost/api/v1/actuator/health; echo
+step "처리방침 문안 · 판 (동의 화면이 읽는다 — 문안 마운트가 빠지면 404, 판이 없으면 재동의가 동작하지 않는다)"
+v=$(curl -s -D - -o /dev/null http://localhost/api/v1/auth/privacy-policy | tr -d '\r' | awk -F': ' 'tolower($1)=="x-policy-version"{print $2}')
+[ -n "$v" ] || { echo "X-Policy-Version 없음 — PRIVACY_POLICY_PATH 마운트와 문안 머리의 '판:' 확인"; exit 1; }
+echo "privacy-policy 판: $v"
 step "로그인 (Caddy 경유, 쿠키 저장)"
 rm -f ./.smoke.jar
 code=$(curl -s -o ./.smoke-login.json -w "%{http_code}" -c ./.smoke.jar -H "Content-Type: application/json" \
