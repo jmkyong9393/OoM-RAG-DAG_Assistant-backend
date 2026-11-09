@@ -1,8 +1,9 @@
 #!/bin/sh
 # 빈 운영 DB 를 시연 데이터로 채운다. bootstrap 컨테이너(AI 이미지) 안에서 돈다 — 호스트에서는 bootstrap.sh 로 부른다.
-# 단계: seed(시드) · data(규정 색인 → 사례 적재 → 정제 → 근거 조문 · 체인 기록 연결) · revision:<slug>(시연용 개정판). 전부 멱등.
+# 단계: seed(시드) · data(규정 색인 → 사례 적재 → 정제 → 근거 조문 · 체인 기록 연결) · eval(저장된 평가 결과 → 대시보드 지표)
+#       · revision:<slug>(시연용 개정판). 전부 멱등.
 set -eu
-STEPS="${*:-seed data}"
+STEPS="${*:-seed data eval}"
 PY=/app/.venv/bin/python
 t0=$(date +%s)
 step() { echo; echo "== [$(( $(date +%s) - t0 ))s] $*"; }
@@ -33,13 +34,16 @@ for s in $STEPS; do
       step "근거 조문 연결 · 체인 기록"
       "$PY" scripts/load_alignment.py
       "$PY" scripts/load_chain_records.py ;;
+    eval)
+      step "평가 결과 — data/eval/eval_runs.json (로컬 실측, 서버에서 다시 돌리지 않는다)"
+      "$PY" scripts/load_eval_runs.py ;;
     revision:*)
       slug="${s#revision:}"
       step "개정판 적재 — $slug (supersedes 로 지목한 구판이 폐기되고, 영향받는 사례 수가 나온다)"
       "$PY" scripts/build_policy_json.py --meta "data/policies/revisions/$slug/meta.json" --out data/policies/revisions
       "$PY" scripts/index_policy.py "data/policies/revisions/$slug.chunks.json"
       (cd /app && "$PY" -m app.worker --once --reindex) ;;
-    *) echo "알 수 없는 단계: $s (seed | data | revision:<slug>)"; exit 2 ;;
+    *) echo "알 수 없는 단계: $s (seed | data | eval | revision:<slug>)"; exit 2 ;;
   esac
 done
 step "끝"

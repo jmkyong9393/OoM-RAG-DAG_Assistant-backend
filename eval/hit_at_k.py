@@ -22,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ai"))
+sys.path.insert(0, str(ROOT / "scripts"))   # load_eval_runs.insert
 
 from app.config import ai_mode, profile  # noqa: E402
 from app.llm.client import Usage  # noqa: E402
@@ -53,19 +54,25 @@ def summarize(rows: list[dict], mode: str, k: int) -> dict:
                      "search_ms_p50": round(statistics.median(ms), 1) if ms else None}}
 
 
-def record(rows: list[dict], mode: str, k: int, model: str | None, version: str) -> int:
-    """eval_runs 에 부서별 행과 전체(workspace_id NULL) 행을 넣는다. 넣은 행 수를 돌려준다."""
-    import psycopg
-    from psycopg.types.json import Jsonb
+def eval_rows(rows: list[dict], mode: str, k: int, model: str | None, version: str) -> list[dict]:
+    """eval_runs 에 넣을 부서별 행과 전체(workspace_id NULL) 행."""
     groups: dict[int | None, list[dict]] = {None: rows}
     for r in rows:
         groups.setdefault(r["workspace_id"], []).append(r)
+    out = []
+    for ws, rs in groups.items():
+        s = summarize(rs, mode, k)
+        out.append({"workspace_id": ws, "dataset_version": version, "mode": mode, "hit_at_5": s["hit_at_k"], "n_samples": s["n"],
+                    "meta": {**s["meta"], "embedding_model": model}})
+    return out
+
+
+def record(rows: list[dict], mode: str, k: int, model: str | None, version: str) -> int:
+    """eval_runs 에 부서별 행과 전체 행을 넣는다. 넣은 행 수를 돌려준다."""
+    import psycopg
+    from load_eval_runs import insert
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        for ws, rs in groups.items():
-            s = summarize(rs, mode, k)
-            conn.execute("INSERT INTO eval_runs (workspace_id, dataset_version, mode, is_sample, hit_at_5, n_samples, meta) VALUES (%s, %s, %s, false, %s, %s, %s)",
-                         (ws, version, mode, s["hit_at_k"], s["n"], Jsonb({**s["meta"], "embedding_model": model})))
-    return len(groups)
+        return insert(conn, eval_rows(rows, mode, k, model, version))
 
 
 def main() -> int:

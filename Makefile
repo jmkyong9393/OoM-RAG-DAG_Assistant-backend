@@ -1,7 +1,7 @@
 # 로컬 개발 진입점. Windows는 Git Bash 또는 WSL에서 실행.
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: pdf up down migrate api ai index index-revision worker seed seed-reset load-logs test test-ai psql logs link-policies link-chains
+.PHONY: pdf up down migrate api ai index index-revision worker seed seed-reset load-logs test test-ai psql logs link-policies link-chains load-eval
 
 up:            ## postgres 기동
 	$(COMPOSE) up -d postgres
@@ -50,6 +50,9 @@ load-logs:     ## data/logs/*_v1.json → POST /logs/bulk (멱등, source_ref) +
 
 link-policies: ## data/alignment/*.json → 사례 노드의 근거 조문(attributes.policy_refs). make index · make load-logs 뒤에. 멱등
 	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/load_alignment.py $(ARGS)
+
+load-eval:     ## data/eval/eval_runs.json → eval_runs (저장된 평가 결과 → 대시보드 지표, LLM 호출 없음). 멱등
+	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/load_eval_runs.py $(ARGS)
 
 link-chains:   ## data/chain_records/*.json → 장애 건을 해결한 기록(log_resolutions) · 간선 연결 사유. make load-logs 뒤에. 멱등
 	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/load_chain_records.py $(ARGS)
