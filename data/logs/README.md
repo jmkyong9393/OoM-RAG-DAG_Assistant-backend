@@ -5,7 +5,7 @@
 | 파일 | ws | 건수 | 체인 |
 |---|---|---|---|
 | `sw-dev_v1.json` | 1 SW 개발 | 60 | 배포 이미지 pull 403 · DB 커넥션 풀 고갈 · 토큰 만료 401 · 빌드 캐시 손상 · 컨테이너 OOM · 외부 API 502/배포 롤백 (+ 고아 ref 2) |
-| `hr-ga_v1.json` | 2 인사·총무 | 40 | VPN E-403(교육 미이수·인증서) · 계정 잠김 5회 · 메일함 용량 · 출입카드 · 전자결재 ORA-12154 · 재택 장비 반납 (+ 고아 ref 1) |
+| `hr-ga_v1.json` | 2 경영지원 | 40 | VPN E-403(교육 미이수·인증서) · 계정 잠김 5회 · 메일함 용량 · 출입카드 · 전자결재 ORA-12154 · 재택 장비 반납 (+ 고아 ref 1) |
 
 점검: `python scripts/validate_logs.py` → 규칙 위반(ERROR)·완료 기준 미달(FAIL) 0 이어야 한다.
 
@@ -87,10 +87,10 @@
 
 | 세트 | 파일 | 회사·부서 | 규모 | 대조표 |
 |---|---|---|---|---|
-| retail | `sw-dev_v1` · `hr-ga_v1` | 유통 · SW 개발(1) · 인사·총무(2) | 60 + 40 | `data/alignment/retail.json` |
+| retail | `sw-dev_v1` · `hr-ga_v1` | 유통 · SW 개발(1) · 경영지원(2) | 60 + 40 | `data/alignment/retail.json` |
 | retail-cs | `cs_v1` | 유통 · 고객지원(3) — 민원 처리 사례(환불·반품·악성 민원·계정 도용) | 31 | `data/alignment/retail.json` (`log: cs_v1`) |
 | it | `it-dev_v1` · `it-cs_v1` | IT 서비스 · SW 개발(21) · 고객지원(23) | 60 + 40 | `data/alignment/it.json` |
-| it-hr | `it-hr_v1` | IT 서비스 · 인사·총무(22) — 채용·윤리 사례(레퍼런스 체크 동의·결과 통보·처우 제안·겸직·협력사 선물·채용서류 반환·입사 서류) | 40 | `data/alignment/it.json` (`log: it-hr_v1`) |
+| it-hr | `it-hr_v1` | IT 서비스 · 경영지원(22) — 채용·윤리 사례(레퍼런스 체크 동의·결과 통보·처우 제안·겸직·협력사 선물·채용서류 반환·입사 서류) | 40 | `data/alignment/it.json` (`log: it-hr_v1`) |
 
 - 완료 기준은 세트별로 센다(`scripts/validate_logs.py` 의 `SETS`). retail·it 는 위 D-1 기준 그대로, retail-cs 는 구조 기준만.
 - 적재 순서는 `scripts/load_logs.py` 의 `ORDER`(먼저 만든 세트부터)로 고정한다. IT 회사 파일은 IT 회사 계정(`OIT0001`)으로 적재된다.

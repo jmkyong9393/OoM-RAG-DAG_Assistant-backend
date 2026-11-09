@@ -31,7 +31,7 @@
     "tenant_id": 1,
     "parent_id": 10,
     "kind": "dept",
-    "name": "인사·총무",
+    "name": "경영지원",
     "policy_enabled": true,
     "settings": {
       "language": "ko",
@@ -90,7 +90,7 @@
     "tenant_id": 2,
     "parent_id": 20,
     "kind": "dept",
-    "name": "인사·총무",
+    "name": "경영지원",
     "policy_enabled": true,
     "settings": {
       "language": "ko",

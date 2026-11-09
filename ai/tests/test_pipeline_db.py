@@ -7,7 +7,7 @@ from tests.conftest import collect, parse_blocks, requires_db
 
 pytestmark = requires_db
 
-WS_SW, WS_HR, WS_CS = 1, 2, 3  # 시드: SW개발(규정+사례) · 인사총무(규정+사례) · 고객지원(규정, 사례 없음)
+WS_SW, WS_HR, WS_CS = 1, 2, 3  # 시드: SW개발(규정+사례) · 경영지원(규정+사례) · 고객지원(규정, 사례 없음)
 
 
 def names_of(blocks):
@@ -70,7 +70,7 @@ async def test_both_intent_runs_both_workers(fake_mode, backfilled):
     assert d["intent"]["intent"] == "both"
     assert "policy" in names and "chain" in names
     assert names.index("policy") < names.index("token") and names.index("chain") < names.index("token")
-    # 인사총무(ws 2) 의 체인만 — SW개발(ws 1) 노드 101 은 격리되어 보이지 않는다
+    # 경영지원(ws 2) 의 체인만 — SW개발(ws 1) 노드 101 은 격리되어 보이지 않는다
     ids = {n["id"] for n in d["chain"]["nodes"]}
     assert 111 in ids and 101 not in ids
     stages = [b[1] for b in blocks if b[0] == "stage"]

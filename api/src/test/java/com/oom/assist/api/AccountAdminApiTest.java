@@ -45,7 +45,7 @@ class AccountAdminApiTest extends AbstractApiTest {
     mvc.perform(asUser(get("/me"), userLead)).andExpect(status().isOk())
         .andExpect(jsonPath("$.workspaces[0].permissions", containsInAnyOrder("admin.members", "admin.settings", "docs.manage")))
         .andExpect(jsonPath("$.permissions", empty()));
-    mvc.perform(asUser(get("/me"), userBackend))   // 인사·총무 admin, SW 개발 member
+    mvc.perform(asUser(get("/me"), userBackend))   // 경영지원 admin, SW 개발 member
         .andExpect(jsonPath("$.workspaces[?(@.id == " + wsSw + ")].permissions[*]", empty()));
     long boss = companyAdmin();
     mvc.perform(asUser(get("/me"), boss)).andExpect(jsonPath("$.permissions", contains("audit.read")))
