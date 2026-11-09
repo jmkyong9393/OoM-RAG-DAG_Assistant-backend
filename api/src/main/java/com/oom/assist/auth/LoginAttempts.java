@@ -40,11 +40,16 @@ public class LoginAttempts {
   }
 
   public void audit(String employeeNo, String action, String detail) {
+    audit(employeeNo, action, detail, null);
+  }
+
+  /** label = 무엇이 바뀌었는지(값이 아니라 항목 이름, 예: "name,email"). */
+  public void audit(String employeeNo, String action, String detail, String label) {
     jdbc.sql("""
-          INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason)
-          SELECT u.tenant_id, NULL, 'auth', coalesce(u.id::text, '-'), ?, ?, 'ui', ?
+          INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
+          SELECT u.tenant_id, NULL, 'auth', coalesce(u.id::text, '-'), ?, ?, 'ui', ?, ?
           FROM (SELECT 1) one LEFT JOIN users u ON lower(u.employee_no) = lower(?)""")
-        .params(action, employeeNo, detail, employeeNo).update();
+        .params(action, employeeNo, detail, label, employeeNo).update();
   }
 
   /** 접속 IP. 리버스 프록시(Caddy) 뒤에서는 X-Forwarded-For 의 첫 값. */

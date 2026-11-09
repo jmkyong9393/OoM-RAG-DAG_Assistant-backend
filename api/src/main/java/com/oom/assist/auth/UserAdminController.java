@@ -15,7 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -105,6 +107,65 @@ public class UserAdminController {
     String empNo = jdbc.sql("SELECT employee_no FROM users WHERE id = ?").param(id).query(String.class).single();
     attempts.audit(empNo, "unlocked_by_admin", ctx.userName());
     return ResponseEntity.noContent().build();
+  }
+
+  public record RoleRequest(String role) {}
+
+  /** 역할 변경(현재 워크스페이스 admin). 자기 자신 강등과 마지막 admin 강등은 409 — 부서에 관리자가 없어지면 아무도 되돌릴 수 없다. */
+  @PatchMapping("/users/{id}")
+  @Transactional
+  public MemberDto changeRole(@PathVariable long id, @RequestBody RoleRequest body, TenantContext ctx) {
+    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    String role = body == null ? null : body.role();
+    if (!"member".equals(role) && !"admin".equals(role)) throw ApiException.badRequest("VALIDATION", "role must be member|admin");
+    lockMembers(ctx.workspaceId());
+    String cur = memberRole(ctx.workspaceId(), id);
+    if (!cur.equals(role)) {
+      if ("member".equals(role)) {
+        if (id == ctx.userId()) throw ApiException.conflict("SELF_DEMOTION", "cannot demote yourself");
+        if (adminCount(ctx.workspaceId()) <= 1) throw ApiException.conflict("LAST_ADMIN", "workspace needs at least one admin");
+      }
+      jdbc.sql("UPDATE workspace_members SET role = ? WHERE workspace_id = ? AND user_id = ?").params(role, ctx.workspaceId(), id).update();
+      auditMember(ctx, id, "role_changed", cur + "->" + role);
+    }
+    return members(ctx).stream().filter(m -> m.id() == id).findFirst().orElseThrow(() -> ApiException.notFound("user"));
+  }
+
+  /** 멤버 제외(계정은 남긴다 — 작성한 사례의 작성자로 계속 보인다). 자기 자신 · 마지막 admin 제외는 409. 경로의 부서와 X-Workspace-Id 가 같아야 한다. */
+  @DeleteMapping("/workspaces/{ws}/members/{uid}")
+  @Transactional
+  public ResponseEntity<Void> removeMember(@PathVariable long ws, @PathVariable long uid, TenantContext ctx) {
+    if (ws != ctx.workspaceId()) throw ApiException.badRequest("VALIDATION", "path workspace must match X-Workspace-Id");
+    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    lockMembers(ws);
+    String cur = memberRole(ws, uid);
+    if (uid == ctx.userId()) throw ApiException.conflict("SELF_REMOVAL", "cannot remove yourself");
+    if ("admin".equals(cur) && adminCount(ws) <= 1) throw ApiException.conflict("LAST_ADMIN", "workspace needs at least one admin");
+    jdbc.sql("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?").params(ws, uid).update();
+    auditMember(ctx, uid, "member_removed", "role=" + cur);
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 같은 부서의 역할 변경 · 제외를 줄 세운다 — 관리자 둘이 서로를 동시에 강등해 admin 이 0명이 되는 틈을 막는다. */
+  private void lockMembers(long ws) {
+    jdbc.sql("SELECT pg_advisory_xact_lock(?, ?)").params(7, (int) ws).query(Object.class).optional();
+  }
+
+  private String memberRole(long ws, long uid) {
+    return jdbc.sql("SELECT m.role FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.user_id = ? AND u.status = 'active'")
+        .params(ws, uid).query(String.class).optional().orElseThrow(() -> ApiException.notFound("member"));
+  }
+
+  private long adminCount(long ws) {
+    return jdbc.sql("SELECT count(*) FROM workspace_members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? AND m.role = 'admin' AND u.status = 'active'")
+        .param(ws).query(Long.class).single();
+  }
+
+  private void auditMember(TenantContext ctx, long uid, String action, String reason) {
+    jdbc.sql("""
+          INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason)
+          VALUES (?, ?, 'users', ?, ?, ?, 'ui', ?)""")
+        .params(ctx.tenantId(), ctx.workspaceId(), String.valueOf(uid), action, ctx.userName(), reason).update();
   }
 
   /** 작성규칙을 만족하는 임시 비밀번호: 대문자·소문자·숫자·특수 4종 14자, 연속 문자가 생기면 다시 뽑는다. */

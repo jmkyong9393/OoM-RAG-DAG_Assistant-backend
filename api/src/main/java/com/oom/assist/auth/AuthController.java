@@ -63,9 +63,13 @@ public class AuthController {
   public record LoginRequest(@NotBlank String employeeNo, @NotBlank String password) {}
   public record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {}
   /** canConfigure: 이 부서의 설정(규정 사용·사례 사용)을 바꿀 수 있는가 — 부서 admin 이거나 상위(전사 공통)의 admin. */
-  public record WorkspaceMembership(long id, String name, boolean policyEnabled, boolean caseEnabled, String role, boolean canConfigure) {}
+  /** permissions: 이 부서에서 할 수 있는 관리 동작(admin.members · admin.settings · docs.manage). 화면 노출용이고 서버는 요청마다 다시 검사한다. */
+  public record WorkspaceMembership(long id, String name, boolean policyEnabled, boolean caseEnabled, String role, boolean canConfigure, List<String> permissions) {}
+  /** permissions: 부서와 무관한 동작(audit.read = 회사 관리자). */
   public record Me(long id, String employeeNo, String name, String title, String email, Long workspaceId, List<WorkspaceMembership> workspaces,
-                   boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt, boolean companyAdmin) {}
+                   boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt, boolean companyAdmin, List<String> permissions) {}
+  /** null 은 그대로, 빈 문자열은 지움(직함 · 이메일). 이름은 지울 수 없다. */
+  public record ProfileRequest(String name, String title, String email) {}
 
   @PostMapping("/auth/login")
   public Me login(@Valid @RequestBody LoginRequest body, HttpServletRequest req, HttpServletResponse res) {
@@ -165,7 +169,8 @@ public class AuthController {
                 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
                 WHERE m.user_id = ? AND w.kind = 'dept' ORDER BY (m.role = 'admin') DESC, w.id
                 """).param(userId).query((rs, i) -> new WorkspaceMembership(rs.getLong("id"), rs.getString("name"),
-                  rs.getBoolean("policy_enabled"), rs.getBoolean("case_enabled"), rs.getString("role"), rs.getBoolean("can_configure"))).list();
+                  rs.getBoolean("policy_enabled"), rs.getBoolean("case_enabled"), rs.getString("role"), rs.getBoolean("can_configure"),
+                  permissions("admin".equals(rs.getString("role")), rs.getBoolean("can_configure")))).list();
           // 회사 관리자: 부서가 아닌 상위 워크스페이스(전사 공통)의 admin. 소속 부서 목록에는 넣지 않는다
           boolean companyAdmin = jdbc.sql("""
                 SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
@@ -176,7 +181,52 @@ public class AuthController {
           boolean expired = expiresAt == null || expiresAt.isBefore(Instant.now());   // 기준 시각이 없으면(구 계정) 만료로 본다
           return new Me(((Number) u.get("id")).longValue(), (String) u.get("employee_no"), (String) u.get("name"), (String) u.get("title"),
               (String) u.get("email"), home, ws, Boolean.TRUE.equals(u.get("must_change_password")) || expired,
-              u.get("consented_at") == null, expiresAt, companyAdmin);
+              u.get("consented_at") == null, expiresAt, companyAdmin, companyAdmin ? List.of("audit.read") : List.of());
         });
+  }
+
+  private static List<String> permissions(boolean wsAdmin, boolean canConfigure) {
+    List<String> p = new java.util.ArrayList<>();
+    if (wsAdmin) p.add("admin.members");
+    if (canConfigure) { p.add("admin.settings"); p.add("docs.manage"); }
+    return p;
+  }
+
+  /** 내 정보 정정(처리방침: 이름 · 직함 · 이메일은 본인이 직접 고친다). 사번 · 소속 · 역할은 바꾸지 않는다. 접속기록에는 바뀐 항목 이름만 남긴다. */
+  @PatchMapping("/me")
+  public Me updateProfile(@RequestBody ProfileRequest body, HttpServletRequest req) {
+    AppPrincipal p = CurrentUser.get().orElseThrow(ApiException::unauthorized);
+    if (body == null) throw ApiException.badRequest("VALIDATION", "body is required");
+    Map<String, Object> cur = jdbc.sql("SELECT name, title, email FROM users WHERE id = ?").param(p.id()).query().singleRow();
+    String name = body.name() == null ? (String) cur.get("name") : body.name().strip();
+    if (name.isEmpty() || name.length() > 50) throw ApiException.badRequest("VALIDATION", "name must be 1~50 characters");
+    String title = body.title() == null ? (String) cur.get("title") : blankToNull(body.title());
+    if (title != null && title.length() > 50) throw ApiException.badRequest("VALIDATION", "title must be at most 50 characters");
+    String email = body.email() == null ? (String) cur.get("email") : blankToNull(body.email());
+    if (email != null) {
+      email = email.toLowerCase();
+      if (email.length() > 254 || !email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) throw ApiException.badRequest("VALIDATION", "invalid email");
+    }
+    List<String> changed = new java.util.ArrayList<>();
+    if (!name.equals(cur.get("name"))) changed.add("name");
+    if (!java.util.Objects.equals(title, cur.get("title"))) changed.add("title");
+    if (!java.util.Objects.equals(email, cur.get("email"))) changed.add("email");
+    if (changed.contains("email") && email != null && jdbc.sql("""
+          SELECT EXISTS (SELECT 1 FROM users o WHERE o.tenant_id = (SELECT tenant_id FROM users WHERE id = ?) AND o.email = ? AND o.id <> ?)""")
+        .params(p.id(), email, p.id()).query(Boolean.class).single())
+      throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");
+    if (!changed.isEmpty()) {
+      try {
+        jdbc.sql("UPDATE users SET name = ?, title = ?, email = ? WHERE id = ?").params(name, title, email, p.id()).update();
+      } catch (org.springframework.dao.DuplicateKeyException e) {
+        throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");
+      }
+      attempts.audit(p.employeeNo(), "profile_changed", LoginAttempts.clientIp(req), String.join(",", changed));
+    }
+    return loadMe(p.id()).orElseThrow(ApiException::unauthorized);
+  }
+
+  private static String blankToNull(String s) {
+    return s == null || s.isBlank() ? null : s.strip();
   }
 }

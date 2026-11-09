@@ -12,6 +12,18 @@ public final class Mask {
     return email.charAt(0) + "***" + email.substring(at);
   }
 
+  /** IPv4 는 마지막 자리, IPv6 는 앞 4묶음만 남긴다: 10.0.3.7 → 10.0.3.*, 0:0:0:0:0:0:0:1 → 0:0:0:0:* */
+  public static String ip(String ip) {
+    if (ip == null || ip.isBlank()) return null;
+    String v = ip.strip();
+    if (v.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return v.substring(0, v.lastIndexOf('.')) + ".*";
+    if (v.contains(":")) {
+      String[] g = v.split(":", -1);
+      return String.join(":", java.util.Arrays.copyOf(g, Math.min(4, g.length))) + ":*";
+    }
+    return "***";
+  }
+
   /** OOM0002 → OOM00** (뒤 2자리) */
   public static String employeeNo(String no) {
     if (no == null) return null;
