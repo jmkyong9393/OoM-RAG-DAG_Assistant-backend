@@ -88,7 +88,7 @@ public class PolicyUploadController {
     requireManager(ws, ctx);
     if (Boolean.TRUE.equals(jdbc.sql("""
           SELECT EXISTS (SELECT 1 FROM policy_documents WHERE slug = ?)
-              OR EXISTS (SELECT 1 FROM policy_uploads WHERE slug = ? AND status NOT IN ('rejected', 'failed'))""")
+              OR EXISTS (SELECT 1 FROM policy_uploads WHERE slug = ? AND status IN ('converting', 'review', 'indexing'))""")   // 승인된 것은 문서 유무로 — 영구 삭제한 문서의 slug 는 다시 쓸 수 있다
         .params(slug, slug).query(Boolean.class).single()))
       throw ApiException.conflict("SLUG_TAKEN", "slug already used: " + slug);
     if (supersedes != null && !supersedes.isBlank() && !Boolean.TRUE.equals(jdbc.sql("""

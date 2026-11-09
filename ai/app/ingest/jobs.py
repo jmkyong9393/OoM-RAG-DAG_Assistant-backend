@@ -5,12 +5,14 @@
 """
 from __future__ import annotations
 
+import json
 import types
 from pathlib import Path
 
 from app.config import uploads_dir
 from app.ingest.convert import ConversionError, _scripts, ocr_suspects, pdf_page_texts, preview, to_markdown
 
+PAGES_FILE = "pages.json"   # 원본 옆에 두는 쪽별 글자(PDF)
 SOURCE_TYPE = {"pdf": "pdf", "hwp": "hwp", "hwpx": "hwp"}   # 그 밖(docx · md · txt)은 markdown — policy_documents.source_type 허용값
 
 
@@ -30,7 +32,11 @@ def convert_one(conn) -> str | None:
     try:
         report = dict(row["report"] or {})
         if row["markdown"] is None:
-            md, extracted = to_markdown(uploads_dir() / row["original_path"], row["format"])
+            orig = uploads_dir() / row["original_path"]
+            md, extracted = to_markdown(orig, row["format"])
+            page_texts = extracted.pop("page_texts", None)
+            if page_texts is not None:
+                orig.with_name(PAGES_FILE).write_text(json.dumps(page_texts, ensure_ascii=False), encoding="utf-8")
             report["extract"] = extracted
         else:
             md = row["markdown"]
@@ -75,8 +81,11 @@ def index_one(conn) -> str | None:
         if row["format"] == "pdf":   # 원본 PDF 에서 조문마다 쪽(·글자층이 있으면 위치)을 찾아 근거 조문 '원문 보기'가 그 쪽을 연다
             from pdf_locate import locate
             orig = uploads_dir() / row["original_path"]
-            report["located"] = locate(doc, pdf_page_texts(orig, (report.get("extract") or {}).get("ocr_pages") or []), orig)
-        result = index_document(conn, doc)
+            saved = orig.with_name(PAGES_FILE)
+            texts = (json.loads(saved.read_text(encoding="utf-8")) if saved.exists()
+                     else pdf_page_texts(orig, (report.get("extract") or {}).get("ocr_pages") or []))   # 변환 기록이 없을 때만 다시 읽음
+            report["located"] = locate(doc, texts, orig)
+        result = index_document(conn, doc, actor=row["reviewer"] or row["uploader"] or "script")
         doc_id = conn.execute("SELECT id FROM policy_documents WHERE slug = %s", (row["slug"],)).fetchone()["id"]
         conn.execute("UPDATE policy_documents SET uploaded_by = %s, approved_by = %s, uploaded_at = now() WHERE id = %s",
                      (row["uploader"], row["reviewer"], doc_id))

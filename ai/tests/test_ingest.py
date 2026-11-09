@@ -158,18 +158,26 @@ def test_pdf_upload_records_page_of_each_article(tmp_path, monkeypatch, admin_co
     try:
         with db.connect() as conn:
             assert jobs.convert_one(conn) == "review"
+        assert (tmp_path / tag / "pages.json").exists()   # 쪽별 글자는 보고가 아니라 파일로
+        assert "page_texts" not in admin_conn.execute("SELECT report FROM policy_uploads WHERE id = %s", (up,)).fetchone()["report"]["extract"]
+        monkeypatch.setattr(jobs, "pdf_page_texts", lambda *a: pytest.fail("등록 때 원본을 다시 읽으면 안 된다(스캔본은 OCR 을 또 돈다)"))
         admin_conn.execute("UPDATE policy_uploads SET status = 'indexing', reviewed_by = %s WHERE id = %s", (uid, up))
         with db.connect() as conn:
             assert jobs.index_one(conn) == "approved"
         row = admin_conn.execute("SELECT document_id, report FROM policy_uploads WHERE id = %s", (up,)).fetchone()
         pages = [r["page"] for r in admin_conn.execute("SELECT page FROM policy_chunks WHERE doc_id = %s ORDER BY id", (row["document_id"],))]
         assert pages == [1, 2] and row["report"]["located"]["missing"] == []
+        ev = admin_conn.execute("SELECT actor, source FROM audit_log WHERE table_name = 'policy_documents' AND row_id = %s AND action = 'indexed'",
+                                (str(row["document_id"]),)).fetchone()
+        reviewer = admin_conn.execute("SELECT name FROM users WHERE id = %s", (uid,)).fetchone()["name"]
+        assert ev["actor"] == reviewer and ev["source"] == "ui"   # 문서 이력에 승인자가 남는다(스크립트 적재는 'script')
     finally:
         doc = admin_conn.execute("SELECT id FROM policy_documents WHERE slug = %s", (slug,)).fetchone()
         admin_conn.execute("DELETE FROM policy_uploads WHERE id = %s", (up,))
         if doc:
             admin_conn.execute("DELETE FROM policy_chunks WHERE doc_id = %s", (doc["id"],))
             admin_conn.execute("DELETE FROM policy_documents WHERE id = %s", (doc["id"],))
+            admin_conn.execute("DELETE FROM audit_log WHERE table_name = 'policy_documents' AND row_id = %s", (str(doc["id"]),))
 
 
 @requires_db

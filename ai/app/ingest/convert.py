@@ -57,7 +57,8 @@ def pdf_text(path: Path) -> tuple[str, dict]:
             pages.append(t); how.append("text")
         else:
             pages.append(ocr_page(p)); how.append("ocr")
-    return "\n".join(pages), {"pages": len(how), "ocr_pages": [i + 1 for i, h in enumerate(how) if h == "ocr"]}
+    # page_texts 는 보고(DB)가 아니라 원본 옆 pages.json 으로 간다(jobs) — 등록 때 쪽 찾기에서 OCR 을 다시 하지 않게
+    return "\n".join(pages), {"pages": len(how), "ocr_pages": [i + 1 for i, h in enumerate(how) if h == "ocr"], "page_texts": pages}
 
 
 def ocr_page(page) -> str:

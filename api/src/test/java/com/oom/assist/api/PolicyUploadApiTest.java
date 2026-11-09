@@ -2,8 +2,10 @@ package com.oom.assist.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -114,6 +116,23 @@ class PolicyUploadApiTest extends AbstractApiTest {
         .forEach(rel -> created.add(Path.of(uploadsDir).toAbsolutePath().normalize().resolve(rel)));
     assertThat(jdbc.sql("SELECT action FROM audit_log WHERE table_name = 'policy_uploads' AND row_id = ? ORDER BY id").param(String.valueOf(id)).query(String.class).list())
         .containsExactly("uploaded", "edited", "approved");
+  }
+
+  @Test
+  void slugIsFreedWhenRegisteredDocumentIsPurged() throws Exception {
+    long id = uploaded("test-rule-purge");
+    mvc.perform(upload(userBackend, wsHr, "규정.md", MD, "test-rule-purge", "dept")).andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("SLUG_TAKEN"));   // 진행 중인 업로드
+    // 워커가 등록을 끝낸 상태: 문서가 생기고 업로드는 approved
+    long doc = jdbc.sql("INSERT INTO policy_documents (workspace_id, slug, title, version, source_type, status) VALUES (?, 'test-rule-purge', '시험 규정', '2026-11', 'markdown', 'active') RETURNING id")
+        .param(wsHr).query(Long.class).single();
+    jdbc.sql("UPDATE policy_uploads SET status = 'approved', document_id = ? WHERE id = ?").params(doc, id).update();
+    mvc.perform(upload(userBackend, wsHr, "규정.md", MD, "test-rule-purge", "dept")).andExpect(status().isConflict());   // 문서가 있는 동안
+    mvc.perform(as(patch("/documents/" + doc), userBackend, wsHr).content("{\"status\":\"retired\",\"reason\":\"잘못 올림\"}")).andExpect(status().isOk());
+    mvc.perform(as(delete("/documents/" + doc), userBackend, wsHr)).andExpect(status().isNoContent());
+    mvc.perform(upload(userBackend, wsHr, "규정.md", MD, "test-rule-purge", "dept")).andExpect(status().isAccepted());   // 영구 삭제 뒤에는 다시 쓸 수 있다
+    jdbc.sql("SELECT original_path FROM policy_uploads WHERE slug = 'test-rule-purge' AND status = 'converting'").query(String.class).list()
+        .forEach(rel -> created.add(Path.of(uploadsDir).toAbsolutePath().normalize().resolve(rel)));
   }
 
   private long uploaded(String slug) throws Exception {

@@ -69,8 +69,10 @@ def add_terms(conn, ws: int, terms: list[str]) -> int:
     return n
 
 
-def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
+def index_document(conn, doc: dict, dry_run: bool = False, actor: str = "script") -> dict:
+    """actor: 이력 · 구판 retired_by 에 남길 이름. 스크립트 적재는 'script', 업로드 승인은 승인자 이름(source 'ui')."""
     slug, ws = doc["slug"], doc["workspace_id"]
+    src = "script" if actor == "script" else "ui"
     h = source_hash(doc)
     existing = conn.execute("SELECT id, source_hash, status, workspace_id FROM policy_documents WHERE slug = %s", (slug,)).fetchone()
     result = {"slug": slug, "action": None, "chunks": len(doc["chunks"]), "retired": [], "terms": 0}
@@ -81,8 +83,8 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
         conn.execute("UPDATE policy_documents SET workspace_id = %s WHERE id = %s", (ws, existing["id"]))
         conn.execute("UPDATE policy_chunks SET workspace_id = %s WHERE doc_id = %s", (ws, existing["id"]))
         conn.execute("""INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
-                        VALUES ((SELECT tenant_id FROM workspaces WHERE id = %s), %s, 'policy_documents', %s, 'moved', 'script', 'script', %s, %s)""",
-                     (ws, ws, str(existing["id"]), f"부서 {existing['workspace_id']} → {ws}", doc["title"]))
+                        VALUES ((SELECT tenant_id FROM workspaces WHERE id = %s), %s, 'policy_documents', %s, 'moved', %s, %s, %s, %s)""",
+                     (ws, ws, str(existing["id"]), actor, src, f"부서 {existing['workspace_id']} → {ws}", doc["title"]))
     if existing and doc.get("supersedes") and not dry_run:   # 이미 적재된 개정판의 사슬을 채운다 (superseded_by 가 생기기 전에 적재한 DB)
         conn.execute("UPDATE policy_documents SET superseded_by = %s WHERE slug = %s AND superseded_by IS NULL AND id <> %s",
                      (existing["id"], doc["supersedes"], existing["id"]))
@@ -125,15 +127,15 @@ def index_document(conn, doc: dict, dry_run: bool = False) -> dict:
                                WHERE workspace_id = %s AND title = %s AND status = 'active' AND id <> %s""", (ws, doc["title"], doc_id)).fetchall()
     for o in olds:
         reason = f"{doc['version']} 개정"
-        conn.execute("UPDATE policy_documents SET status='retired', retired_at=%s, retire_reason=%s, retired_by='script', superseded_by=%s WHERE id=%s",
-                     (now, reason, doc_id, o["id"]))
+        conn.execute("UPDATE policy_documents SET status='retired', retired_at=%s, retire_reason=%s, retired_by=%s, superseded_by=%s WHERE id=%s",
+                     (now, reason, actor, doc_id, o["id"]))
         conn.execute("""INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
-                        SELECT w.tenant_id, %s, 'policy_documents', %s, 'superseded', 'script', 'script', %s, %s FROM workspaces w WHERE w.id = %s""",
-                     (ws, str(o["id"]), reason, f"{doc['title']} {o['version']}", ws))
+                        SELECT w.tenant_id, %s, 'policy_documents', %s, 'superseded', %s, %s, %s, %s FROM workspaces w WHERE w.id = %s""",
+                     (ws, str(o["id"]), actor, src, reason, f"{doc['title']} {o['version']}", ws))
         result["retired"].append(o["slug"])
     conn.execute("""INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason, label)
-                    SELECT w.tenant_id, %s, 'policy_documents', %s, 'indexed', 'script', 'script', %s, %s FROM workspaces w WHERE w.id = %s""",
-                 (ws, str(doc_id), f"chunks={len(doc['chunks'])}", f"{doc['title']} {doc['version']}", ws))
+                    SELECT w.tenant_id, %s, 'policy_documents', %s, 'indexed', %s, %s, %s, %s FROM workspaces w WHERE w.id = %s""",
+                 (ws, str(doc_id), actor, src, f"chunks={len(doc['chunks'])}", f"{doc['title']} {doc['version']}", ws))
     return result
 
 
