@@ -85,6 +85,8 @@ def main():
         for w in load("workspaces.json"):
             cur.execute("INSERT INTO workspaces (id, tenant_id, parent_id, kind, name, policy_enabled, case_enabled, settings) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING",
                         (w["id"], w["tenant_id"], w["parent_id"], w["kind"], w["name"], w["policy_enabled"], w.get("case_enabled", True), Jsonb(w.get("settings", {}))))
+            # 옛 기본 이름(인사·총무)이 그대로인 부서만 새 이름으로 — 관리자가 바꾼 이름은 건드리지 않는다
+            cur.execute("UPDATE workspaces SET name = %s WHERE id = %s AND name = '인사·총무' AND %s <> '인사·총무'", (w["name"], w["id"], w["name"]))
             # 이미 있는 부서에는 첫 화면 추천 질문만 채운다(없을 때만 — 관리자가 바꾼 설정은 건드리지 않는다)
             if w.get("settings", {}).get("suggestions"):
                 cur.execute("UPDATE workspaces SET settings = settings || %s WHERE id = %s AND NOT jsonb_exists(settings, 'suggestions')",

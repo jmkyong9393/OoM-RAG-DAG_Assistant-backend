@@ -46,7 +46,7 @@ public abstract class AbstractApiTest {
     tenant = jdbc.sql("INSERT INTO tenants (slug, name) VALUES ('t', 'T') RETURNING id").query(Long.class).single();
     company = jdbc.sql("INSERT INTO workspaces (tenant_id, kind, name, policy_enabled) VALUES (?, 'company', '전사', true) RETURNING id").param(tenant).query(Long.class).single();
     wsSw = jdbc.sql("INSERT INTO workspaces (tenant_id, parent_id, kind, name, policy_enabled) VALUES (?, ?, 'dept', 'SW 개발', false) RETURNING id").params(tenant, company).query(Long.class).single();
-    wsHr = jdbc.sql("INSERT INTO workspaces (tenant_id, parent_id, kind, name, policy_enabled) VALUES (?, ?, 'dept', '인사·총무', true) RETURNING id").params(tenant, company).query(Long.class).single();
+    wsHr = jdbc.sql("INSERT INTO workspaces (tenant_id, parent_id, kind, name, policy_enabled) VALUES (?, ?, 'dept', '경영지원', true) RETURNING id").params(tenant, company).query(Long.class).single();
     userLead = user("배종현", "팀장", empLead, emailLead);
     userBackend = user("장문경", "매니저", empBackend, emailBackend);
     member(wsSw, userLead, "admin");
