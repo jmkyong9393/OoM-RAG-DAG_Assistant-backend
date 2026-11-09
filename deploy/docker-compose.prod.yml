@@ -70,9 +70,11 @@ services:
       SESSION_SAME_SITE: Lax
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
       SEED_PASSWORD: ${SEED_PASSWORD:-Oom!demo-2026}
+      UPLOADS_DIR: /data/uploads   # 규정 업로드 원본 · 변환본 — ai 와 같은 볼륨
       PRIVACY_POLICY_PATH: /data/legal/privacy_policy.md   # 이미지에는 data/ 가 없다 — 동의 화면 문안(GET /auth/privacy-policy)을 마운트로 준다
     volumes:
       - ../data/legal:/data/legal:ro
+      - oom-prod-uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -87,10 +89,12 @@ services:
 
   ai:
     image: ${AI_IMAGE:-oom-ai:local}
-    build: ../ai
+    build: {context: .., dockerfile: ai/Dockerfile}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
     environment:
       <<: *ai-env
       WORKER_EMBEDDED: "1"                   # 정제 워커를 같은 프로세스(스레드)에서 — kiwi 모델 공유로 ≈500 MB 절감
+    volumes:
+      - oom-prod-uploads:/data/uploads       # 업로드 변환 · 등록(워커)이 원본을 읽고 검수본을 쓴다
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,7 +110,7 @@ services:
   # 일회성 데이터 적재(시드 · 규정 색인 · 사례 · 근거 연결 · 체인 기록). 호스트에서 bash bootstrap.sh — 멱등
   bootstrap:
     image: ${AI_IMAGE:-oom-ai:local}
-    build: ../ai
+    build: {context: .., dockerfile: ai/Dockerfile}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
     profiles: ["bootstrap"]
     environment:
       <<: *ai-env
@@ -155,5 +159,6 @@ services:
 
 volumes:
   oom-prod-pgdata:
+  oom-prod-uploads:
   oom-prod-caddy-data:
   oom-prod-caddy-config:

@@ -69,9 +69,9 @@
 
 **답변** — 점검표 4종(유통 13 · IT 11 · 부서별 추천 질문 18 · 어려운 질문 6)을 실제 답변으로 돌려 통과. 점검은 인용한 조문·사례, 들어 있어야 할 말, 들어 있으면 안 되는 말을 본다.
 
-**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 문서 상태, 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
+**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 규정 문서 관리(`/documents`), 규정 파일 업로드 · 자동 변환 · 검수(`/documents/uploads`), 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 143, Python 179(DB 통합 포함).
+**테스트** — Spring 148, Python 189(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과(빈 DB → `bootstrap.sh` 데이터 적재 → Caddy 경유 로그인·SSE). Lightsail 기동은 아직.
 
@@ -117,6 +117,7 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 - **개정은 새 slug + `supersedes`** (적재된 문서를 고치면 청크 id 가 밀려 평가셋이 깨진다). 시행 전 개정판은 `data/policies/revisions/` 에 두고 `make index-revision SLUG=…` 로만 적재한다. 적재하면 영향받는 사례 수가 출력되고(조문 그대로 · 조문 개정 · 대응 조문 확인 필요), 사례의 근거 조문은 개정 사슬을 따라 지금 조문으로 이어진다.
 - 모든 직원에게 적용되는 규정(급여, 원격접속)은 전사 공통 부서에 둔다. `meta.json` 의 `workspace_id` 를 바꾸고 `make index` 하면 문서가 옮겨진다.
 - HWPX 원문은 `scripts/hwpx_to_md.py` 로 먼저 Markdown 화.
+- **화면에서 올리기** — 관리자가 PDF(글자 · 스캔) · Word · HWP · HWPX · MD 를 `POST /documents/uploads` 로 올리면 AI 워커가 같은 변환기(`build_policy_json` · `index_policy`)로 조문 MD 를 만들고, 검수 · 승인 뒤 등록한다(스캔본은 Tesseract OCR, 원본과 검수본은 `UPLOADS_DIR` 에 보관). 로컬은 `data/uploads/`(gitignore). OCR · Word 변환은 tesseract · pandoc 이 있어야 해서 로컬 `make ai` 에서는 PDF 글자층 · HWP · MD 만 된다 — 운영 이미지에는 들어 있다.
 
 **사례 로그** — `data/logs/<세트>_v1.json`(형식은 `data/logs/README.md`) → `python scripts/validate_logs.py` → `make load-logs` → `make worker ARGS=--once`.
 
@@ -156,6 +157,8 @@ bash bootstrap.sh                         # postgres → api(Flyway) → bootstr
 - 데이터 적재는 compose 네트워크 안의 일회성 `bootstrap` 컨테이너(AI 이미지 + `scripts/`·`data/` 읽기 전용 마운트)가 한다. postgres 포트를 호스트에 열지 않고, 사례는 API(`POST /logs/bulk`)로 넣어 도메인 규칙 검사를 같이 받는다.
 - 박스의 레포 체크아웃과 api · ai 이미지는 같은 커밋이어야 한다. Flyway·`bootstrap` 은 레포의 마이그레이션·데이터를 쓰고 api 는 이미지 안의 것을 쓰므로, 레포가 더 새로우면 api 기동 때 뷰 재적용이 실패한다(`cannot drop columns from view`). 레포를 올렸으면 이미지도 같은 커밋으로 pull 한다.
 - 모든 단계가 멱등이다. 데이터만 고쳤으면 `bash bootstrap.sh data` — 규정이 그대로면 재색인 없이 수 초, 바뀌었으면 재색인(그동안 1~2분 어휘 검색이 빈다).
+- AI 이미지는 레포 루트를 빌드 맥락으로 쓴다(`ai/Dockerfile` — `scripts/` 의 변환 · 색인 모듈 4개를 넣고, 허용 목록은 `ai/Dockerfile.dockerignore`). 규정 업로드 변환용 tesseract-ocr(+kor) · pandoc 이 들어 있어 이미지가 약 1.2GB.
+- 규정 업로드 원본 · 검수본은 볼륨 `oom-prod-uploads`(api · ai 가 `/data/uploads` 로 공유). 박스를 옮길 때 DB 와 함께 백업한다.
 - 시연용 개정판은 `bash bootstrap.sh revision:<slug>` (`make index-revision` 과 같다 — 구판 폐기, 영향받는 사례 수 출력).
 - 첫 적재는 약 4분(규정 860청크 임베딩 + 사례 284건 정제, OpenAI 호출 있음). 끝에 적재 수(활성 규정 21 · 청크 860 · 사례 284 · 근거 연결 256 · 해결 기록 9 · 연결 사유 19)를 출력한다.
 

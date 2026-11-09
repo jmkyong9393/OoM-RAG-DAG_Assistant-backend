@@ -69,3 +69,15 @@ def worker_embedded() -> bool:
 
 def worker_poll_sec() -> float:
     return float(os.environ.get("WORKER_POLL_SEC", "3"))
+
+
+def uploads_dir() -> "Path":
+    """규정 업로드 저장소(원본 · 검수한 MD). Spring 의 oom.storage.uploads-dir 와 같은 폴더 — 운영은 공유 볼륨(/data/uploads)."""
+    from pathlib import Path
+    return Path(os.environ.get("UPLOADS_DIR") or Path(__file__).resolve().parents[2] / "data" / "uploads")
+
+
+def scripts_dir() -> "Path":
+    """규정 적재 스크립트(build_policy_json · index_policy · hwpx_to_md) 폴더. 로컬은 레포의 scripts/, 운영 이미지는 /app/scripts."""
+    from pathlib import Path
+    return Path(os.environ.get("SCRIPTS_DIR") or Path(__file__).resolve().parents[2] / "scripts")
