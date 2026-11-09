@@ -9,6 +9,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import java.security.SecureRandom;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,9 +45,10 @@ public class UserAdminController {
   }
 
   public record InviteRequest(@NotBlank @Pattern(regexp = "[A-Za-z0-9-]{3,32}") String employeeNo, @NotBlank String name,
-                              @Email String email, String title, String role) {}
+                              @Email String email, String grade, String position, String title, String role) {}
   public record InviteResponse(long id, String employeeNo, String name, long workspaceId, String role, boolean created, String tempPassword) {}
-  public record MemberDto(long id, String employeeNo, String name, String title, String emailMasked, String role, boolean locked) {}
+  /** title = 표시용 "직급 · 직책"(예전 화면 호환). */
+  public record MemberDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked, String role, boolean locked) {}
 
   @PostMapping("/users")
   @Transactional
@@ -66,10 +68,18 @@ public class UserAdminController {
       if (jdbc.sql("SELECT count(*) FROM users WHERE lower(employee_no) = lower(?)").param(empNo).query(Long.class).single() > 0)
         throw ApiException.conflict("EMPLOYEE_NO_TAKEN", "employee_no already used in another tenant");
       temp = tempPassword(empNo);
+      // 직급 · 직책이 오면 그대로, 예전 화면처럼 title 만 오면 DB 규칙(title_parts)으로 나눈다
+      Map<String, Object> gp = jdbc.sql("""
+            SELECT CASE WHEN ?::text IS NULL AND ?::text IS NULL THEN p.grade ELSE nullif(btrim(?), '') END AS grade,
+                   CASE WHEN ?::text IS NULL AND ?::text IS NULL THEN p.duty ELSE nullif(btrim(?), '') END AS duty
+            FROM title_parts(?) p""")
+          .params(body.grade(), body.position(), body.grade(), body.grade(), body.position(), body.position(), body.title()).query().singleRow();
+      String grade = (String) gp.get("grade"), position = (String) gp.get("duty");
       userId = jdbc.sql("""
-            INSERT INTO users (tenant_id, name, title, email, employee_no, password_hash, must_change_password, password_changed_at)
-            VALUES (?, ?, ?, ?, ?, ?, true, now()) RETURNING id""")
-          .params(ctx.tenantId(), body.name().trim(), body.title(), email, empNo, encoder.encode(temp)).query(Long.class).single();
+            INSERT INTO users (tenant_id, name, grade, duty, title, email, employee_no, password_hash, must_change_password, password_changed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, true, now()) RETURNING id""")
+          .params(ctx.tenantId(), body.name().trim(), grade, position, AuthController.display(grade, position), email, empNo, encoder.encode(temp))
+          .query(Long.class).single();
     } else {
       userId = existing.get();
     }
@@ -88,12 +98,13 @@ public class UserAdminController {
   @GetMapping("/users")
   public List<MemberDto> members(TenantContext ctx) {
     return jdbc.sql("""
-          SELECT u.id, u.employee_no, u.email, u.name, u.title, m.role, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked
+          SELECT u.id, u.employee_no, u.email, u.name, u.grade, u.duty, coalesce(nullif(concat_ws(' · ', u.grade, u.duty), ''), u.title) AS title,
+                 m.role, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked
           FROM workspace_members m JOIN users u ON u.id = m.user_id
           WHERE m.workspace_id = ? AND u.status = 'active' ORDER BY (m.role = 'admin') DESC, u.name""")
         .param(ctx.workspaceId())
         .query((rs, i) -> new MemberDto(rs.getLong("id"), rs.getString("employee_no"), rs.getString("name"), rs.getString("title"),
-            Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"))).list();
+            rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"))).list();
   }
 
   /** 잠금 해제 (현재 워크스페이스 admin, 대상은 그 워크스페이스 멤버). */
