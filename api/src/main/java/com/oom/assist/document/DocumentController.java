@@ -30,7 +30,9 @@ public class DocumentController {
       d.status, d.retired_at, d.retire_reason, d.retired_by, d.superseded_by,
       CASE WHEN w.kind = 'dept' THEN 'dept' ELSE 'company' END AS visibility,
       (SELECT count(*) FROM policy_chunks c WHERE c.doc_id = d.id)::int AS chunk_count,
-      d.indexed_at, d.uploaded_by, d.uploaded_at""";
+      d.indexed_at, d.uploaded_by, d.uploaded_at,
+      EXISTS (SELECT 1 FROM workspace_members m WHERE m.user_id = ? AND m.role = 'admin'
+              AND m.workspace_id IN (SELECT workspace_ancestors(d.workspace_id))) AS can_manage""";
   private static final String IN_SCOPE = "d.workspace_id IN (SELECT workspace_ancestors(?))";
 
   private final JdbcClient jdbc;
@@ -39,10 +41,10 @@ public class DocumentController {
     this.jdbc = jdbc;
   }
 
-  /** approvedBy = 검수 승인자(업로드 검수는 아직 없어 항상 null). supersededBy = 이 문서를 대체한 새 판(있으면 복원 불가). */
+  /** approvedBy = 검수 승인자(업로드 검수가 없어 항상 null). supersededBy = 이 문서를 대체한 새 판. canManage = 요청자가 폐기 · 복원 · 삭제할 수 있는가. */
   public record DocumentDto(long id, long workspaceId, String slug, String title, String version, String docType, String sourceType, boolean hasFile,
                             String status, OffsetDateTime retiredAt, String retireReason, String retiredBy, Long supersededBy, String visibility,
-                            int chunkCount, OffsetDateTime indexedAt, String uploadedBy, OffsetDateTime uploadedAt, String approvedBy) {}
+                            int chunkCount, OffsetDateTime indexedAt, String uploadedBy, OffsetDateTime uploadedAt, String approvedBy, boolean canManage) {}
   public record ChunkDto(String id, String articleLabel, Integer page, String text) {}
   public record EventDto(long id, long workspaceId, Long documentId, String documentLabel, String action, String actor, String source, String reason, OffsetDateTime at) {}
   public record StatusRequest(String status, String reason) {}
@@ -52,7 +54,7 @@ public class DocumentController {
     if (status != null && !Set.of("active", "retired").contains(status)) throw ApiException.badRequest("VALIDATION", "status must be active or retired");
     return jdbc.sql("SELECT " + COLS + " FROM policy_documents d JOIN workspaces w ON w.id = d.workspace_id WHERE " + IN_SCOPE
             + " AND (?::text IS NULL OR d.status = ?) ORDER BY d.status, d.title, d.version, d.id")
-        .params(ctx.workspaceId(), status, status).query(DocumentController::map).list();
+        .params(ctx.userId(), ctx.workspaceId(), status, status).query(DocumentController::map).list();
   }
 
   @GetMapping("/documents/{id}")
@@ -93,9 +95,10 @@ public class DocumentController {
     String reason = body.reason() == null || body.reason().isBlank() ? null : body.reason().strip();
     if (reason != null && reason.length() > REASON_MAX) throw ApiException.badRequest("VALIDATION", "reason must be at most " + REASON_MAX + " characters");
     DocumentDto doc = find(id, ctx);
-    requireManager(doc, ctx);
+    requireManager(doc);
     if (doc.status().equals(body.status())) return doc;
     if ("retired".equals(body.status())) {
+      if (reason == null) throw ApiException.badRequest("REASON_REQUIRED", "reason is required to retire a document");
       jdbc.sql("UPDATE policy_documents SET status = 'retired', retired_at = now(), retire_reason = ?, retired_by = ? WHERE id = ?")
           .params(reason, ctx.userName(), id).update();
       audit(ctx, doc, "retired", reason);
@@ -111,9 +114,9 @@ public class DocumentController {
    *  다른 판이 이 문서를 대체 대상으로 가리키거나 활성 사례가 이 문서를 근거로 적어 두었으면 막는다 — 개정 영향 화면의 근거가 사라진다. */
   @DeleteMapping("/documents/{id}")
   @Transactional
-  public void delete(@PathVariable long id, TenantContext ctx) {
+  public org.springframework.http.ResponseEntity<Void> delete(@PathVariable long id, TenantContext ctx) {
     DocumentDto doc = find(id, ctx);
-    requireManager(doc, ctx);
+    requireManager(doc);
     if (!"retired".equals(doc.status())) throw ApiException.conflict("NOT_RETIRED", "only retired documents can be deleted");
     if (Boolean.TRUE.equals(jdbc.sql("SELECT EXISTS (SELECT 1 FROM policy_documents WHERE superseded_by = ?)").param(id).query(Boolean.class).single()))
       throw ApiException.conflict("DOCUMENT_IN_USE", "an older version points to this document");
@@ -126,20 +129,17 @@ public class DocumentController {
         """).params(doc.slug(), ctx.tenantId()).query(Long.class).single();
     if (cases > 0) throw ApiException.conflict("DOCUMENT_IN_USE", cases + " active cases cite this document");
     jdbc.sql("SELECT purge_document(?, ?)").params(id, ctx.userName()).query(Object.class).optional();
+    return org.springframework.http.ResponseEntity.noContent().build();
   }
 
   private DocumentDto find(long id, TenantContext ctx) {
     return jdbc.sql("SELECT " + COLS + " FROM policy_documents d JOIN workspaces w ON w.id = d.workspace_id WHERE d.id = ? AND " + IN_SCOPE)
-        .params(id, ctx.workspaceId()).query(DocumentController::map).optional().orElseThrow(() -> ApiException.notFound("document"));
+        .params(ctx.userId(), id, ctx.workspaceId()).query(DocumentController::map).optional().orElseThrow(() -> ApiException.notFound("document"));
   }
 
   /** 관리 권한: 문서가 속한 워크스페이스 또는 그 상위의 admin (전사 공통 문서는 회사 관리자만). */
-  private void requireManager(DocumentDto doc, TenantContext ctx) {
-    boolean ok = jdbc.sql("""
-        SELECT EXISTS (SELECT 1 FROM workspace_members m WHERE m.user_id = ? AND m.role = 'admin'
-                       AND m.workspace_id IN (SELECT workspace_ancestors(?)))""")
-        .params(ctx.userId(), doc.workspaceId()).query(Boolean.class).single();
-    if (!ok) throw ApiException.forbidden("document admin required");
+  private void requireManager(DocumentDto doc) {
+    if (!doc.canManage()) throw ApiException.forbidden("document admin required");
   }
 
   private void audit(TenantContext ctx, DocumentDto doc, String action, String reason) {
@@ -158,6 +158,6 @@ public class DocumentController {
         rs.getString("doc_type"), rs.getString("source_type"), rs.getBoolean("has_file"), rs.getString("status"),
         rs.getObject("retired_at", OffsetDateTime.class), rs.getString("retire_reason"), rs.getString("retired_by"), (Long) rs.getObject("superseded_by"),
         rs.getString("visibility"), rs.getInt("chunk_count"), rs.getObject("indexed_at", OffsetDateTime.class), rs.getString("uploaded_by"),
-        rs.getObject("uploaded_at", OffsetDateTime.class), null);
+        rs.getObject("uploaded_at", OffsetDateTime.class), null, rs.getBoolean("can_manage"));
   }
 }

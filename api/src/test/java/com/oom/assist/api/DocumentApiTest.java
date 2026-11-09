@@ -38,7 +38,9 @@ class DocumentApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$[0].visibility").value("company"))
         .andExpect(jsonPath("$[0].chunk_count").value(3))
         .andExpect(jsonPath("$[0].has_file").value(false))
-        .andExpect(jsonPath("$[0].approved_by").value(nullValue()));
+        .andExpect(jsonPath("$[0].approved_by").value(nullValue()))
+        .andExpect(jsonPath("$[0].can_manage").value(false));   // 부서 관리자는 전사 공통 문서를 못 바꾼다
+    mvc.perform(as(get("/documents/" + companyDoc), companyAdmin, wsSw)).andExpect(jsonPath("$.can_manage").value(true));
     mvc.perform(as(get("/documents"), userBackend, wsHr)).andExpect(jsonPath("$[*].id", containsInAnyOrder((int) companyDoc, (int) hrDoc)));
     mvc.perform(as(get("/documents?status=retired"), userLead, wsSw)).andExpect(jsonPath("$", hasSize(0)));
     mvc.perform(as(get("/documents/" + hrDoc), userLead, wsSw)).andExpect(status().isNotFound());   // 다른 부서 문서
@@ -67,7 +69,9 @@ class DocumentApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$[1].reason").value("개정 예정"))
         .andExpect(jsonPath("$[1].document_label").value("VPN 지침 v1"));
     // 부서 문서는 그 부서 관리자가 바꾼다
-    mvc.perform(as(patch("/documents/" + hrDoc), userBackend, wsHr).content("{\"status\":\"retired\"}")).andExpect(status().isOk());
+    mvc.perform(as(patch("/documents/" + hrDoc), userBackend, wsHr).content("{\"status\":\"retired\"}"))
+        .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("REASON_REQUIRED"));   // 폐기는 사유 필수
+    mvc.perform(as(patch("/documents/" + hrDoc), userBackend, wsHr).content("{\"status\":\"retired\",\"reason\":\"통합\"}")).andExpect(status().isOk());
     mvc.perform(as(patch("/documents/" + hrDoc), userBackend, wsHr).content("{\"status\":\"gone\"}")).andExpect(status().isBadRequest());
   }
 
@@ -89,7 +93,7 @@ class DocumentApiTest extends AbstractApiTest {
     mvc.perform(as(delete("/documents/" + companyDoc), companyAdmin, wsSw)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("DOCUMENT_IN_USE"));
     jdbc.sql("UPDATE log_nodes SET status = 'deprecated' WHERE id = ?").param(cited).update();
     mvc.perform(as(delete("/documents/" + companyDoc), userLead, wsSw)).andExpect(status().isForbidden());
-    mvc.perform(as(delete("/documents/" + companyDoc), companyAdmin, wsSw)).andExpect(status().isOk());
+    mvc.perform(as(delete("/documents/" + companyDoc), companyAdmin, wsSw)).andExpect(status().isNoContent());
     mvc.perform(as(get("/documents/" + companyDoc), companyAdmin, wsSw)).andExpect(status().isNotFound());
     org.assertj.core.api.Assertions.assertThat(jdbc.sql("SELECT count(*) FROM policy_chunks WHERE doc_id = ?").param(companyDoc).query(Long.class).single()).isZero();
     mvc.perform(as(get("/documents/events"), userLead, wsSw))
