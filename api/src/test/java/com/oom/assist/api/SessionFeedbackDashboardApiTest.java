@@ -111,6 +111,23 @@ class SessionFeedbackDashboardApiTest extends AbstractApiTest {
   }
 
   @Test
+  void answerQualityAndSearchTimeComeFromTheirOwnRows() throws Exception {
+    // 부서의 답변 품질 실측 행 + 전역 탐색 시간 실측 행 — 한 행으로 고르면 전역 탐색 시간이 부서 행에 가려졌다
+    jdbc.sql("INSERT INTO eval_runs (workspace_id, dataset_version, is_sample, faithfulness, answer_relevance, run_at) VALUES (?, 'answer_checks v1', false, 0.95, 0.66, now() - interval '2 days')")
+        .param(wsSw).update();
+    jdbc.sql("INSERT INTO eval_runs (workspace_id, dataset_version, is_sample, meta, run_at) VALUES (NULL, 'search_time v1', false, "
+        + "'{\"search_time\":{\"before_min\":6.0,\"after_min\":1.2,\"by_intent\":[]}}'::jsonb, now() - interval '1 day')").update();
+    mvc.perform(as(get("/dashboard/summary"), userBackend, wsSw))
+        .andExpect(jsonPath("$.eval.faithfulness").value(0.95)).andExpect(jsonPath("$.search_time.before_min").value(6.0))
+        .andExpect(jsonPath("$.is_sample").value(false));
+    // 부서의 탐색 시간만 담긴 새 행이 와도 답변 품질 카드는 비지 않는다
+    jdbc.sql("INSERT INTO eval_runs (workspace_id, dataset_version, is_sample, meta) VALUES (?, 'search_time v2', false, "
+        + "'{\"search_time\":{\"before_min\":5.0,\"after_min\":1.0,\"by_intent\":[]}}'::jsonb)").param(wsSw).update();
+    mvc.perform(as(get("/dashboard/summary"), userBackend, wsSw))
+        .andExpect(jsonPath("$.eval.faithfulness").value(0.95)).andExpect(jsonPath("$.search_time.before_min").value(5.0));
+  }
+
+  @Test
   void dashboardWithoutDataReturnsNullsNotZeros() throws Exception {
     mvc.perform(as(get("/dashboard/summary"), userBackend, wsSw))
         .andExpect(status().isOk())

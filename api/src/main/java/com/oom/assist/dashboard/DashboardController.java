@@ -30,16 +30,22 @@ public class DashboardController {
     long ws = ctx.workspaceId();
     Map<String, Object> out = new LinkedHashMap<>();
 
-    // eval_runs 최신 행 (워크스페이스 행 우선, 없으면 전역)
+    // 답변 품질과 탐색 시간은 따로 재서 따로 적재한다 — 한 행으로 고르면 한쪽만 담긴 새 행이 다른 쪽 카드를 비운다. 각각 워크스페이스 행 우선, 없으면 전역
     Map<String, Object> eval = jdbc.sql("""
-        SELECT is_sample, faithfulness, answer_relevance, dataset_version, run_at, meta::text AS meta
+        SELECT is_sample, faithfulness, answer_relevance, dataset_version, run_at
         FROM eval_runs WHERE (workspace_id = ? OR workspace_id IS NULL)
-          AND (is_sample OR faithfulness IS NOT NULL OR answer_relevance IS NOT NULL OR jsonb_exists(meta, 'search_time'))
+          AND (faithfulness IS NOT NULL OR answer_relevance IS NOT NULL OR (is_sample AND NOT jsonb_exists(meta, 'search_time')))
         ORDER BY (workspace_id IS NOT NULL) DESC, run_at DESC LIMIT 1
         """).param(ws).query().listOfRows().stream().findFirst().orElse(null);
-    boolean isSample = eval != null && Boolean.TRUE.equals(eval.get("is_sample"));
+    Map<String, Object> searchRow = jdbc.sql("""
+        SELECT is_sample, meta::text AS meta
+        FROM eval_runs WHERE (workspace_id = ? OR workspace_id IS NULL) AND jsonb_exists(meta, 'search_time')
+        ORDER BY (workspace_id IS NOT NULL) DESC, run_at DESC LIMIT 1
+        """).param(ws).query().listOfRows().stream().findFirst().orElse(null);
+    Map<String, Object> flagRow = eval != null ? eval : searchRow;
+    boolean isSample = flagRow != null && Boolean.TRUE.equals(flagRow.get("is_sample"));
     out.put("is_sample", isSample);
-    out.put("search_time", eval == null ? null : searchTime(String.valueOf(eval.get("meta"))));
+    out.put("search_time", searchRow == null ? null : searchTime(String.valueOf(searchRow.get("meta"))));
     out.put("eval", eval == null ? map("faithfulness", null, "answer_relevance", null, "dataset_version", null, "run_at", null)
         : map("faithfulness", eval.get("faithfulness"), "answer_relevance", eval.get("answer_relevance"),
             "dataset_version", eval.get("dataset_version"), "run_at", eval.get("run_at")));
