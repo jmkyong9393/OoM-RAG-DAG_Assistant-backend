@@ -30,7 +30,7 @@ public class DocumentController {
       d.status, d.retired_at, d.retire_reason, d.retired_by, d.superseded_by,
       CASE WHEN w.kind = 'dept' THEN 'dept' ELSE 'company' END AS visibility,
       (SELECT count(*) FROM policy_chunks c WHERE c.doc_id = d.id)::int AS chunk_count,
-      d.indexed_at, d.uploaded_by, d.uploaded_at,
+      d.indexed_at, d.uploaded_by, d.uploaded_at, d.approved_by,
       EXISTS (SELECT 1 FROM workspace_members m WHERE m.user_id = ? AND m.role = 'admin'
               AND m.workspace_id IN (SELECT workspace_ancestors(d.workspace_id))) AS can_manage""";
   private static final String IN_SCOPE = "d.workspace_id IN (SELECT workspace_ancestors(?))";
@@ -41,7 +41,7 @@ public class DocumentController {
     this.jdbc = jdbc;
   }
 
-  /** approvedBy = 검수 승인자(업로드 검수가 없어 항상 null). supersededBy = 이 문서를 대체한 새 판. canManage = 요청자가 폐기 · 복원 · 삭제할 수 있는가. */
+  /** approvedBy = 업로드 검수 승인자(스크립트로 적재한 문서는 null). supersededBy = 이 문서를 대체한 새 판. canManage = 요청자가 폐기 · 복원 · 삭제할 수 있는가. */
   public record DocumentDto(long id, long workspaceId, String slug, String title, String version, String docType, String sourceType, boolean hasFile,
                             String status, OffsetDateTime retiredAt, String retireReason, String retiredBy, Long supersededBy, String visibility,
                             int chunkCount, OffsetDateTime indexedAt, String uploadedBy, OffsetDateTime uploadedAt, String approvedBy, boolean canManage) {}
@@ -160,6 +160,6 @@ public class DocumentController {
         rs.getString("doc_type"), rs.getString("source_type"), rs.getBoolean("has_file"), rs.getString("status"),
         rs.getObject("retired_at", OffsetDateTime.class), rs.getString("retire_reason"), rs.getString("retired_by"), (Long) rs.getObject("superseded_by"),
         rs.getString("visibility"), rs.getInt("chunk_count"), rs.getObject("indexed_at", OffsetDateTime.class), rs.getString("uploaded_by"),
-        rs.getObject("uploaded_at", OffsetDateTime.class), null, rs.getBoolean("can_manage"));
+        rs.getObject("uploaded_at", OffsetDateTime.class), rs.getString("approved_by"), rs.getBoolean("can_manage"));
   }
 }

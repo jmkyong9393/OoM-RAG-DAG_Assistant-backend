@@ -22,6 +22,10 @@ spring:
   mvc:
     async:
       request-timeout: 180000            # SSE 스트림 (ms)
+  servlet:
+    multipart:
+      max-file-size: 30MB                # 규정 원본 업로드(POST /documents/uploads)
+      max-request-size: 31MB
   session:
     timeout: 30m                         # 미사용 30분이면 세션 종료 (보호조치 기준 §4, 개발문서 35). 요청마다 연장
     jdbc:
@@ -50,6 +54,8 @@ oom:
   public-tenant: ${PUBLIC_TENANT:}                   # 로그인 전 GET /workspaces 에 부서를 보여 줄 데모 회사 slug. 비우면 로그인 전에는 빈 목록
   legal:
     privacy-policy-path: ${PRIVACY_POLICY_PATH:../data/legal/privacy_policy.md}   # GET /auth/privacy-policy 가 읽는 문안. 작업 폴더가 api/ 기준
+  storage:
+    uploads-dir: ${UPLOADS_DIR:../data/uploads}     # 규정 원본 · 검수한 MD. AI 워커와 같은 폴더(운영은 공유 볼륨)
   session:
     cookie-name: OOMSESSION                          # 세션 자체는 Spring Session JDBC(spring_session 테이블), 쿠키 속성만 여기(SecurityConfig.cookieSerializer)
     same-site: ${SESSION_SAME_SITE:Lax}              # 프론트가 다른 사이트(예: *.vercel.app)면 None + secure=true 가 필요
