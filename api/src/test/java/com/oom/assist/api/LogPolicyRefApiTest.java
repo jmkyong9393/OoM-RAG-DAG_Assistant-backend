@@ -39,6 +39,27 @@ class LogPolicyRefApiTest extends AbstractApiTest {
   }
 
   @Test
+  void refsCarryDocumentIdAndArticleTextForPopover() throws Exception {
+    // 배지를 누르면 보여 줄 원문: 한 조문이 두 청크로 나뉘어 있으면 순번대로 잇는다
+    jdbc.sql("UPDATE policy_chunks SET text = '① 커넥션 풀은 20 으로 둔다.', page = 3 WHERE id = 'ops-2026-a9-1'").update();
+    jdbc.sql("UPDATE policy_chunks SET text = '② 대기 시간은 3초를 넘기지 않는다.', page = 3 WHERE id = 'ops-2026-a9-2'").update();
+    long ops = jdbc.sql("SELECT id FROM policy_documents WHERE slug = 'ops-2026'").query(Long.class).single();
+    String body = mvc.perform(as(post("/logs"), userLead, wsSw).content("""
+        {"type": "fail", "title": "풀 고갈", "body": "b", "policy_refs": [
+          {"relation": "follows", "policy": "ops-2026", "article": "제9조"}, {"relation": "gap", "topic": "합산 상한"}]}"""))
+        .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    long id = com.jayway.jsonpath.JsonPath.parse(body).read("$.id", Long.class);
+    mvc.perform(as(get("/chains/" + id), userLead, wsSw)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.nodes[0].policy_refs[0].document_id").value(ops))
+        .andExpect(jsonPath("$.nodes[0].policy_refs[0].version").value("1"))
+        .andExpect(jsonPath("$.nodes[0].policy_refs[0].page").value(3))
+        .andExpect(jsonPath("$.nodes[0].policy_refs[0].article_text").value("① 커넥션 풀은 20 으로 둔다.\n② 대기 시간은 3초를 넘기지 않는다."))
+        .andExpect(jsonPath("$.nodes[0].policy_refs[1].document_id").isEmpty())   // 규정 없음(gap)은 원문이 없다
+        .andExpect(jsonPath("$.nodes[0].policy_refs[1].article_text").isEmpty());
+    mvc.perform(as(get("/logs/" + id + "/policy-refs"), userLead, wsSw)).andExpect(jsonPath("$[0].document_id").value(ops));
+  }
+
+  @Test
   void articlePickerListsVisibleActiveArticlesOnce() throws Exception {
     // 자기 부서 + 전사 공통의 활성 문서만, 조문마다 한 줄. 폐기 문서·다른 부서 문서는 나오지 않는다
     mvc.perform(as(get("/logs/policy-articles"), userLead, wsSw)).andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(4)))
@@ -106,6 +127,7 @@ class LogPolicyRefApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$[0].from_label").value("운영지침 1 제9조 (커넥션 풀)"))
         .andExpect(jsonPath("$[1].revision").value("amended")).andExpect(jsonPath("$[1].article_label").value("제10조 (컨테이너 자원)"))
         .andExpect(jsonPath("$[2].revision").value("replaced")).andExpect(jsonPath("$[2].article_label").isEmpty())
+        .andExpect(jsonPath("$[2].article_text").isEmpty())   // 대응 조문이 없으면 원문도 없다(제안 조문으로 안내)
         .andExpect(jsonPath("$[2].from_label").value("운영지침 1 [별표 2] 배포 전 점검표"));
     mvc.perform(as(get("/policy-revisions/impact"), userLead, wsSw)).andExpect(status().isOk())
         // 요약은 사례 수다 — 한 사례가 여러 조문을 가리키면 가장 나쁜 상태로 한 번만 센다. 목록(items)은 조문마다 한 줄
