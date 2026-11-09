@@ -65,10 +65,12 @@ public class DocumentController {
   @GetMapping("/documents/{id}/chunks")
   public List<ChunkDto> chunks(@PathVariable long id, TenantContext ctx) {
     find(id, ctx);
-    // 청크 id = "{slug}-{a|s…}{번호}-{순번}" — 문자열 정렬이면 제10조가 제2조 앞에 와서 번호를 숫자로 정렬한다
+    // 청크 id = "{slug}-{종류}{번호}[-{가지번호}]-{순번}", 종류 a 본문 · q FAQ · p 부칙 · s 별표. 문서 순서(본문 → 부칙 → 별표)대로 숫자 정렬
     return jdbc.sql("""
-        SELECT id, article_label, page, text FROM policy_chunks WHERE doc_id = ?
-        ORDER BY page NULLS LAST, substring(id FROM '-[a-z]+([0-9]+)-[0-9]+$')::int NULLS LAST, substring(id FROM '-([0-9]+)$')::int NULLS LAST, id
+        SELECT id, article_label, page, text FROM (
+          SELECT c.*, regexp_match(c.id, '-([a-z]+)([0-9]+)(?:-([0-9]+))?-([0-9]+)$') AS k FROM policy_chunks c WHERE c.doc_id = ?) x
+        ORDER BY CASE k[1] WHEN 'a' THEN 0 WHEN 'q' THEN 1 WHEN 'p' THEN 2 WHEN 's' THEN 3 ELSE 4 END,
+                 k[2]::int NULLS LAST, coalesce(k[3]::int, 0), k[4]::int NULLS LAST, id
         """).param(id).query((rs, i) -> new ChunkDto(rs.getString("id"), rs.getString("article_label"), (Integer) rs.getObject("page"), rs.getString("text"))).list();
   }
 

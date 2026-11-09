@@ -28,6 +28,9 @@ class DocumentApiTest extends AbstractApiTest {
     chunk(companyDoc, "vpn-guide-a10-1", "제10조", 1);   // 같은 쪽 — 문자열 정렬이면 a10 이 a2 앞
     chunk(companyDoc, "vpn-guide-a2-1", "제2조", 1);
     chunk(companyDoc, "vpn-guide-a2-2", "제2조", 1);
+    chunk(companyDoc, "vpn-guide-p1-1", "부칙 제1조", 1);
+    chunk(companyDoc, "vpn-guide-s1-1", "[별표 1]", 1);
+    chunk(companyDoc, "vpn-guide-a2-2-1", "제2조의2", 1);
   }
 
   @Test
@@ -36,7 +39,7 @@ class DocumentApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$", hasSize(1)))
         .andExpect(jsonPath("$[0].id").value(companyDoc))
         .andExpect(jsonPath("$[0].visibility").value("company"))
-        .andExpect(jsonPath("$[0].chunk_count").value(3))
+        .andExpect(jsonPath("$[0].chunk_count").value(6))
         .andExpect(jsonPath("$[0].has_file").value(false))
         .andExpect(jsonPath("$[0].approved_by").value(nullValue()))
         .andExpect(jsonPath("$[0].can_manage").value(false));   // 부서 관리자는 전사 공통 문서를 못 바꾼다
@@ -49,7 +52,7 @@ class DocumentApiTest extends AbstractApiTest {
   @Test
   void chunksAreOrderedByArticleNumber() throws Exception {
     mvc.perform(as(get("/documents/" + companyDoc + "/chunks"), userLead, wsSw)).andExpect(status().isOk())
-        .andExpect(jsonPath("$[*].id", contains("vpn-guide-a2-1", "vpn-guide-a2-2", "vpn-guide-a10-1")));
+        .andExpect(jsonPath("$[*].id", contains("vpn-guide-a2-1", "vpn-guide-a2-2", "vpn-guide-a2-2-1", "vpn-guide-a10-1", "vpn-guide-p1-1", "vpn-guide-s1-1")));   // 본문(의 조문 포함) → 부칙 → 별표
   }
 
   @Test
