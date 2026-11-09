@@ -43,13 +43,16 @@ public class PolicyRefService {
    * revision: null(개정 없음·내용 그대로) · amended(조문 내용이 바뀜) · replaced(대응 조문 없음 — suggested* 는 내용이 가장 가까운 새 조문).
    * fromLabel 은 사례가 따른 개정 전 조문('환불 규정 2026-11 제9조 (신선식품 반품 제한)').
    */
+  /** documentId · version · page · articleText = 그 조문의 원문(배지를 누르면 보여 줄 것). 지금 유효한 조문이 없으면(replaced · 폐기) null. */
   public record RefView(String relation, String policy, String article, String note, String topic, String docTitle, String articleLabel,
-                        String revision, String fromLabel, String suggestedPolicy, String suggestedArticle, String suggestedLabel) {}
+                        String revision, String fromLabel, String suggestedPolicy, String suggestedArticle, String suggestedLabel,
+                        Long documentId, String version, Integer page, String articleText) {}
 
-  /** resolve_policy_ref 한 행. status: current·same·amended·replaced·retired. */
+  /** resolve_policy_ref 한 행. status: current·same·amended·replaced·retired. articleText 는 그 조문의 청크를 순서대로 이은 원문. */
   public record Resolved(String status, String slug, String docTitle, String version, String articleLabel,
-                         String fromTitle, String fromVersion, String fromLabel, String suggestedLabel) {
-    static final Resolved MISSING = new Resolved("missing", null, null, null, null, null, null, null, null);
+                         String fromTitle, String fromVersion, String fromLabel, String suggestedLabel,
+                         Long docId, Integer page, String articleText) {
+    static final Resolved MISSING = new Resolved("missing", null, null, null, null, null, null, null, null, null, null, null);
 
     boolean stale() {
       return "replaced".equals(status) || "retired".equals(status);
@@ -148,7 +151,8 @@ public class PolicyRefService {
           live ? v.docTitle() : null, live ? v.articleLabel() : null,
           replaced ? "replaced" : live && "amended".equals(v.status()) ? "amended" : null,
           v == null || v == Resolved.MISSING || "current".equals(v.status()) ? null : v.from(),
-          replaced && v.suggestedLabel() != null ? v.slug() : null, m != null && m.find() ? m.group(1) : null, replaced ? v.suggestedLabel() : null));
+          replaced && v.suggestedLabel() != null ? v.slug() : null, m != null && m.find() ? m.group(1) : null, replaced ? v.suggestedLabel() : null,
+          live ? v.docId() : null, live ? v.version() : null, live ? v.page() : null, live ? v.articleText() : null));
     }
     return out;
   }
@@ -156,12 +160,17 @@ public class PolicyRefService {
   /** 근거 조문(문서 slug + 조문)을 지금 유효한 조문으로 푼다 — 문서가 개정됐으면 개정 사슬을 따라간다. 원래 문서에 없는 조문은 MISSING. */
   public Resolved resolve(long ws, String slug, String article, Map<String, Resolved> cache) {
     if (slug == null || article == null) return Resolved.MISSING;
+    // 조문 원문: 한 조문이 여러 청크(…-a9-1, …-a9-2)로 나뉘어 있어 순번(숫자) 순으로 잇는다
     return cache.computeIfAbsent(slug + "|" + article, k -> jdbc.sql("""
-        SELECT status, slug, doc_title, version, article_label, from_title, from_version, from_label, suggested_label
-        FROM resolve_policy_ref(?, ?, ?)""").params(ws, slug, article)
+        SELECT r.status, r.slug, r.doc_title, r.version, r.article_label, r.from_title, r.from_version, r.from_label, r.suggested_label,
+               r.doc_id, r.page,
+               CASE WHEN r.chunk_id IS NOT NULL THEN
+                 (SELECT string_agg(c.text, E'\\n' ORDER BY substring(c.id FROM '-([0-9]+)$')::int NULLS LAST, c.id)
+                  FROM policy_chunks c WHERE c.doc_id = r.doc_id AND is_article(c.article_label, ?)) END AS article_text
+        FROM resolve_policy_ref(?, ?, ?) r""").params(article, ws, slug, article)
         .query((rs, i) -> new Resolved(rs.getString("status"), rs.getString("slug"), rs.getString("doc_title"), rs.getString("version"),
             rs.getString("article_label"), rs.getString("from_title"), rs.getString("from_version"), rs.getString("from_label"),
-            rs.getString("suggested_label")))
+            rs.getString("suggested_label"), (Long) rs.getObject("doc_id"), (Integer) rs.getObject("page"), rs.getString("article_text")))
         .optional().orElse(Resolved.MISSING));
   }
 
