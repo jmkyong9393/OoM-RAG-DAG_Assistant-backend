@@ -50,7 +50,7 @@ async def test_worker_refines_pending_node_and_backfills(fake_mode, pending_node
     assert admin_conn.execute("SELECT count(*) AS c FROM log_nodes WHERE tokens IS NULL AND refine_status <> 'pending'").fetchone()["c"] == 0
     # 두 번째 실행은 할 일이 없다
     again = await worker.run_once()
-    assert again == {"refined": 0, "failed": 0, "chunks": 0, "nodes": 0}
+    assert again == {"refined": 0, "failed": 0, "chunks": 0, "nodes": 0, "converted": 0, "convert_failed": 0, "indexed": 0, "index_failed": 0}
 
 
 async def test_refined_node_is_searchable_by_error_code_and_words(fake_mode, pending_node, admin_conn):

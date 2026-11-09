@@ -13,6 +13,7 @@ import sys
 import time
 
 from app.config import ai_mode, profile as load_profile, worker_poll_sec
+from app.ingest import jobs as ingest
 from app.llm import client as llm
 from app.retrieval import db, embed
 from app.retrieval.tokenize import Tokenizer
@@ -95,6 +96,8 @@ async def run_once(reindex: bool = False) -> dict:
     with db.connect() as conn:
         if reindex:
             db.reset_tokens(conn, load_profile().embedding_model if ai_mode() == "openai" else None)
+        # 규정 업로드(변환 · 등록)를 먼저 — 새로 등록된 조문의 토큰 · 임베딩을 같은 주기의 백필이 채운다
+        stats.update(ingest.run_pending(conn))
         # 한 번에 200건씩(임베딩 요청 크기) 비어 있는 행이 없을 때까지 반복 — --reindex 직후 수백 건도 한 주기에 끝낸다
         while (n := await backfill_chunk_tokens(conn, cache)) > 0:
             stats["chunks"] += n
@@ -121,19 +124,6 @@ async def loop() -> None:
         except Exception as e:  # noqa: BLE001 — DB 끊김 등은 다음 주기에 재시도
             print(f"[worker] error: {e}", flush=True)
         await asyncio.sleep(worker_poll_sec())
-
-
-def start_embedded() -> "threading.Thread":
-    """AI 서비스 프로세스 안에서 loop() 를 데몬 스레드 + 전용 이벤트 루프로 돈다.
-    API 의 이벤트 루프와 분리해 정제의 동기 DB·kiwi 작업이 채팅 스트림을 막지 않게 한다. 프로세스가 끝나면 함께 끝난다."""
-    import threading
-
-    def _run():
-        asyncio.run(loop())
-
-    t = threading.Thread(target=_run, name="refine-worker", daemon=True)
-    t.start()
-    return t
 
 
 def start_embedded() -> "threading.Thread":

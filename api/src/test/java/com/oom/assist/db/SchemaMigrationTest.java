@@ -18,7 +18,8 @@ class SchemaMigrationTest extends AbstractDbTest {
         "search_sessions", "answer_feedback", "workspace_terms", "eval_runs", "audit_log",
         "spring_session", "spring_session_attributes",    // V4 세션 저장소
         "log_resolutions",                                 // V10 장애 건을 해결한 기록
-        "user_consents");                                  // V13 처리방침 판 단위 동의
+        "user_consents",                                   // V13 처리방침 판 단위 동의
+        "policy_uploads");                                 // V14 규정 업로드 · 변환 · 검수
   }
 
   @Test

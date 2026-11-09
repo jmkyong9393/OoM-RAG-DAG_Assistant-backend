@@ -1,0 +1,11 @@
+# ai/Dockerfile 전용(빌드 맥락은 레포 루트). 이미지에 들어갈 것만 남긴다 — data/ · .env · 업로드 원본이 맥락에 실리지 않게
+*
+!ai/pyproject.toml
+!ai/uv.lock
+!ai/app/
+!scripts/build_policy_json.py
+!scripts/index_policy.py
+!scripts/hwpx_to_md.py
+!scripts/pdf_locate.py
+**/__pycache__
+**/*.pyc
