@@ -79,12 +79,13 @@ def search_case_entry(conn, ws: int, tokens: str | None, vec: list[float] | None
         (ws, tokens, vec_literal(vec), error_code, k)).fetchall()
 
 
-def chain(conn, ws: int, entry: int, max_depth: int = 3, max_nodes: int = 30) -> dict:
+def chain(conn, ws: int, entry: int, max_depth: int | None = 3, max_nodes: int = 30, focus: int | None = None) -> dict:
+    """entry 의 조상 · 자손에서 max_nodes 까지. 넘치면 focus(검색으로 찾은 기록) 경로 → 해결 → 원인 경로를 먼저 남긴다(get_chain)."""
     rows = conn.execute("""
         SELECT v.id, v.type, v.status, v.title, v.body, v.resolution_summary, v.error_code, v.author_name,
                g.depth, v.path_label, v.last_confirmed_at, v.root_id, v.attributes->'policy_refs' AS policy_refs, v.is_cause
-        FROM get_chain(%s, %s, %s, %s) g JOIN v_log_nodes v ON v.id = g.node_id
-        ORDER BY g.depth, v.id""", (ws, entry, max_depth, max_nodes)).fetchall()
+        FROM get_chain(%s, %s, %s::int, %s, %s) g JOIN v_log_nodes v ON v.id = g.node_id
+        ORDER BY g.depth, v.id""", (ws, entry, max_depth, max_nodes, focus if focus is not None else entry)).fetchall()
     if not rows:
         return {"entry_id": entry, "nodes": [], "edges": []}
     ids = [r["id"] for r in rows]

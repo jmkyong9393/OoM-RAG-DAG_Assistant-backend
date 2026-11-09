@@ -136,7 +136,7 @@ public class LogRepository {
   }
 
   public boolean isDescendant(long ws, long root, long node) {
-    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM get_chain(?, ?, 32, 100000) g WHERE g.depth > 0 AND g.node_id = ?)")
+    return jdbc.sql("SELECT EXISTS (SELECT 1 FROM bfs_levels(?, ARRAY[?]::bigint[], true) g WHERE g.depth > 0 AND g.node_id = ?)")
         .params(ws, root, node).query(Boolean.class).single();
   }
 
@@ -169,7 +169,7 @@ public class LogRepository {
   public boolean hasActiveSuccessDescendant(long ws, long root) {
     return jdbc.sql("""
         SELECT EXISTS (
-          SELECT 1 FROM get_chain(?, ?, 32, 100000) g JOIN log_nodes n ON n.id = g.node_id
+          SELECT 1 FROM bfs_levels(?, ARRAY[?]::bigint[], true) g JOIN log_nodes n ON n.id = g.node_id
           WHERE g.depth > 0 AND n.type = 'success' AND n.status = 'active')
         """).params(ws, root).query(Boolean.class).single();
   }

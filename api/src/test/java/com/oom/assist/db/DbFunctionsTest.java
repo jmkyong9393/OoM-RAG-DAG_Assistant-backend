@@ -236,7 +236,7 @@ class DbFunctionsTest extends AbstractDbTest {
   }
 
   @Test
-  void chainShrinksDepthWhenNodeCapExceeded() {
+  void chainFillsNearestFirstWhenNodeCapExceeded() {
     long root = node("fail", "root", null);
     long prev = root;
     for (int i = 0; i < 5; i++) { // root → c1 → c2 → c3 → c4 → c5 직선
@@ -247,7 +247,80 @@ class DbFunctionsTest extends AbstractDbTest {
     List<Map<String, Object>> full = jdbc.sql("SELECT node_id, depth FROM get_chain(?, ?, 5, 30)").params(ws, root).query().listOfRows();
     assertThat(full).hasSize(6);
     List<Map<String, Object>> capped = jdbc.sql("SELECT node_id, depth FROM get_chain(?, ?, 5, 3)").params(ws, root).query().listOfRows();
-    assertThat(capped).hasSize(3); // 깊이 5→4→3→2 로 줄어 root + 2단계
+    assertThat(capped).hasSize(3); // 해결 · 원인 표시가 없으면 가까운 순: root + 2단계
+    assertThat(capped.stream().map(r -> ((Number) r.get("depth")).intValue())).containsExactlyInAnyOrder(0, 1, 2);
+  }
+
+  @Test
+  void deepChainHasNoDepthCap() {
+    long root = node("fail", "root", null);
+    long[] line = line(root, 40, "fail");
+    long bottom = line[39];
+    Map<String, Object> row = jdbc.sql("SELECT root_id, depth, path_label FROM v_log_nodes WHERE id = ?").param(bottom).query().singleRow();
+    assertThat(row.get("root_id")).isEqualTo(root);
+    assertThat(row.get("depth")).isEqualTo(40);
+    assertThat(((String) row.get("path_label")).split("\\.")).hasSize(42); // root + 루트 노드 + 40단
+    assertThat(jdbc.sql("SELECT count(*) FROM get_chain(?, ?, NULL, 100, ?)").params(ws, root, root).query(Long.class).single()).isEqualTo(41);
+    // 40단 아래 해결 기록도 해결로 인식한다
+    long fix = node("success", "fix", null);
+    edge(bottom, fix);
+    jdbc.sql("INSERT INTO log_resolutions (workspace_id, root_id, node_id) VALUES (?, ?, ?)").params(ws, root, fix).update();
+    assertThat(jdbc.sql("SELECT resolved_nodes(?, ?)").params(ws, root).query(Long.class).list()).containsExactly(fix);
+  }
+
+  @Test
+  void wideChainOverCapKeepsFocusResolutionAndCausePaths() {
+    long root = node("fail", "root", null);
+    long[] kids = new long[12];
+    long focus = 0, fix = 0, cause = 0;
+    for (int i = 0; i < 12; i++) {
+      kids[i] = node("fail", "k" + i, null);
+      edge(root, kids[i]);
+      for (int j = 0; j < 3; j++) {
+        long g = node(i == 7 && j == 2 ? "success" : "ref", "g" + i + "-" + j, null);
+        edge(kids[i], g);
+        if (i == 7 && j == 2) fix = g;
+        if (i == 11 && j == 2) focus = g;
+      }
+    }
+    cause = kids[9];
+    long causeChild = node("ref", "cause detail", null);
+    edge(cause, causeChild);
+    jdbc.sql("UPDATE log_nodes SET category = 'cause' WHERE id = ?").param(cause).update();
+    jdbc.sql("INSERT INTO log_resolutions (workspace_id, root_id, node_id) VALUES (?, ?, ?)").params(ws, root, fix).update();
+    List<Map<String, Object>> rows = jdbc.sql("SELECT node_id, depth, total FROM get_chain(?, ?, NULL, 10, ?)").params(ws, root, focus).query().listOfRows();
+    List<Long> ids = rows.stream().map(r -> ((Number) r.get("node_id")).longValue()).toList();
+    assertThat(rows).hasSize(10);
+    assertThat(((Number) rows.get(0).get("total")).intValue()).isEqualTo(50);
+    // 검색으로 찾은 기록과 그 위, 해결 기록과 그 위, 원인 — 깊이를 깎았다면 2단의 focus · fix 가 빠진다
+    assertThat(ids).contains(root, kids[11], focus, kids[7], fix, cause);
+  }
+
+  @Test
+  void stackedDiamondsAreReadWithoutPathExplosion() {
+    long top = node("fail", "top", null);
+    long cur = top;
+    for (int i = 0; i < 16; i++) { // 경로 2^16 = 65,536 개
+      long a = node("ref", "a" + i, null), b = node("ref", "b" + i, null), m = node("ref", "m" + i, null);
+      edge(cur, a); edge(cur, b); edge(a, m); edge(b, m);
+      cur = m;
+    }
+    long t0 = System.nanoTime();
+    Map<String, Object> row = jdbc.sql("SELECT root_id, depth FROM v_log_nodes WHERE id = ?").param(cur).query().singleRow();
+    long ms = (System.nanoTime() - t0) / 1_000_000;
+    assertThat(row.get("root_id")).isEqualTo(top);
+    assertThat(row.get("depth")).isEqualTo(32);
+    assertThat(ms).isLessThan(1000); // 경로를 모두 펼치던 이전 뷰는 수 초
+    assertThat(jdbc.sql("SELECT count(*) FROM get_chain(?, ?, NULL, 100, ?)").params(ws, top, top).query(Long.class).single()).isEqualTo(49);
+  }
+
+  @Test
+  void cycleIsRejectedAtAnyDepthAlsoByTrigger() {
+    long root = node("fail", "root", null);
+    long[] line = line(root, 70, "ref");
+    assertThat(cycle(line[69], root)).isTrue(); // 이전 검사는 64단까지만 내려갔다
+    assertFails(() -> edge(line[69], root), "EDGE_CYCLE");
+    assertFails(() -> edge(line[69], line[10]), "EDGE_CYCLE");
   }
 
   @Test
@@ -345,6 +418,17 @@ class DbFunctionsTest extends AbstractDbTest {
     Map<String, Object> v = jdbc.sql("SELECT user_name, score FROM v_search_sessions WHERE id = ?").param(s).query().singleRow();
     assertThat(v.get("user_name")).isEqualTo("tester");
     assertThat(((Number) v.get("score")).intValue()).isEqualTo(-1);
+  }
+
+  private long[] line(long from, int n, String type) {
+    long[] out = new long[n];
+    long prev = from;
+    for (int i = 0; i < n; i++) {
+      out[i] = node(type, "l" + i, null);
+      edge(prev, out[i]);
+      prev = out[i];
+    }
+    return out;
   }
 
   private boolean cycle(long parent, long child) {

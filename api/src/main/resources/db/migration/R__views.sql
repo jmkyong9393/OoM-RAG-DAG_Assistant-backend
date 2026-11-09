@@ -4,18 +4,31 @@
 -- 권한은 V2 의 기본 권한(ALTER DEFAULT PRIVILEGES)으로 다시 붙는다.
 DROP VIEW IF EXISTS v_log_nodes, v_policy_documents, v_search_sessions;
 
+-- 깊이 = 루트에서 가장 짧은 거리(단계 동기 BFS, bfs_levels 와 같은 방식 · 깊이 상한 없음).
+-- 루트 · 경로는 노드마다 한 단계 위 부모 가운데 id 가 가장 작은 것 하나를 따라 정한다 — 경로를 모두 펼치지 않는다.
 CREATE OR REPLACE VIEW v_log_nodes AS
-WITH RECURSIVE t AS (
-  SELECT n.id, n.id AS root_id, 0 AS depth, 'root.n' || n.id::text AS path_label
-  FROM log_nodes n
-  WHERE NOT EXISTS (SELECT 1 FROM log_edges e WHERE e.child_id = n.id)
+WITH RECURSIVE lv(depth, frontier, seen) AS (
+  SELECT 0, r.a, r.a FROM (SELECT array_agg(n.id) AS a FROM log_nodes n
+                           WHERE NOT EXISTS (SELECT 1 FROM log_edges e WHERE e.child_id = n.id)) r
+  WHERE r.a IS NOT NULL
   UNION ALL
-  SELECT e.child_id, t.root_id, t.depth + 1, t.path_label || '.n' || e.child_id::text
-  FROM log_edges e JOIN t ON e.parent_id = t.id
-  WHERE t.depth < 32
+  SELECT lv.depth + 1, nx.f, lv.seen || nx.f FROM lv,
+    LATERAL (SELECT array_agg(c) AS f FROM (
+      SELECT e.child_id AS c FROM log_edges e WHERE e.parent_id = ANY (lv.frontier)
+      EXCEPT
+      SELECT unnest(lv.seen)) s) nx
+  WHERE nx.f IS NOT NULL
+),
+lvl AS (SELECT x AS id, lv.depth FROM lv, unnest(lv.frontier) AS x),
+up AS (
+  SELECT DISTINCT ON (c.id) c.id, e.parent_id
+  FROM lvl c JOIN log_edges e ON e.child_id = c.id JOIN lvl p ON p.id = e.parent_id AND p.depth = c.depth - 1
+  ORDER BY c.id, e.parent_id
 ),
 first_path AS (
-  SELECT DISTINCT ON (id) id, root_id, depth, path_label FROM t ORDER BY id, depth, path_label
+  SELECT l.id, l.id AS root_id, 0 AS depth, 'root.n' || l.id::text AS path_label FROM lvl l WHERE l.depth = 0
+  UNION ALL
+  SELECT u.id, f.root_id, f.depth + 1, f.path_label || '.n' || u.id::text FROM up u JOIN first_path f ON u.parent_id = f.id
 )
 SELECT n.id, n.workspace_id, n.type, n.status, n.title, n.body, n.author_id, u.name AS author_name,
        n.category, n.tags, n.attributes,

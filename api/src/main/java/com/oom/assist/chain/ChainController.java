@@ -15,13 +15,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * GET /chains/{entry_id}?depth=3 — get_chain() 결과(진입 기준 음수=조상·양수=자손) + 그 집합 안의 간선 + 루트 기준 요약.
+ * GET /chains/{entry_id}[?depth=N] — get_chain() 결과(진입 기준 음수=조상·양수=자손) + 그 집합 안의 간선 + 루트 기준 요약.
+ * depth 없으면 조상 · 자손 전체. MAX_NODES 를 넘으면 해결 · 원인 경로를 먼저 남기고 자른다(truncated, total = 전체 수).
  * 요약은 장애 건(루트) 전체 기준: "{루트 제목} 장애 건: 기록 N건, 해결 M건, 완료|진행 중".
  */
 @RestController
 public class ChainController {
 
-  private static final int MAX_NODES = 60;
+  private static final int MAX_NODES = 200;
 
   private final JdbcClient jdbc;
   private final PolicyRefService policyRefs;
@@ -40,16 +41,16 @@ public class ChainController {
                           List<PolicyRefService.RefView> policyRefs, boolean resolvesRoot, boolean isCause) {}
   /** reason = 이 기록을 그 상위에 이어 붙인 이유. 없으면 null. */
   public record Edge(long parentId, long childId, String reason) {}
-  public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary) {}
+  public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary, int total, boolean truncated) {}
 
   @GetMapping("/chains/{entryId}")
-  public Chain get(@PathVariable long entryId, @RequestParam(defaultValue = "3") int depth, TenantContext ctx) {
+  public Chain get(@PathVariable long entryId, @RequestParam(required = false) Integer depth, TenantContext ctx) {
     long ws = ctx.workspaceId();
     List<Map<String, Object>> rows = jdbc.sql("""
-        SELECT v.id, v.type, v.status, v.title, g.depth, v.path_label, v.resolution_summary, v.last_confirmed_at, v.root_id, v.is_cause
-        FROM get_chain(?, ?, ?, ?) g JOIN v_log_nodes v ON v.id = g.node_id
+        SELECT v.id, v.type, v.status, v.title, g.depth, v.path_label, v.resolution_summary, v.last_confirmed_at, v.root_id, v.is_cause, g.total
+        FROM get_chain(?, ?, ?::int, ?, ?) g JOIN v_log_nodes v ON v.id = g.node_id
         ORDER BY g.depth, v.id
-        """).params(ws, entryId, Math.max(1, Math.min(depth, 8)), MAX_NODES).query().listOfRows();
+        """).params(ws, entryId, depth == null ? null : Math.max(1, depth), MAX_NODES, entryId).query().listOfRows();
     if (rows.isEmpty()) throw ApiException.notFound("chain");
 
     List<Long> ids = rows.stream().map(r -> num(r, "id")).toList();
@@ -66,15 +67,16 @@ public class ChainController {
         .query((rs, i) -> new Edge(rs.getLong("parent_id"), rs.getLong("child_id"), rs.getString("reason"))).list();
 
     Long rootId = rows.stream().filter(r -> num(r, "id") == entryId).map(r -> (Long) r.get("root_id")).findFirst().orElse(null);
-    return new Chain(entryId, nodes, edges, summary(ws, rootId));
+    int total = ((Number) rows.get(0).get("total")).intValue();
+    return new Chain(entryId, nodes, edges, summary(ws, rootId), total, total > nodes.size());
   }
 
   private String summary(long ws, Long rootId) {
     if (rootId == null) return null;
     Map<String, Object> r = jdbc.sql("""
         SELECT root.title, root.resolved_at, root.type,
-               (SELECT count(*) FROM get_chain(?, ?, 32, 100000) g WHERE g.depth >= 0) AS records,
-               (SELECT count(*) FROM get_chain(?, ?, 32, 100000) g JOIN log_nodes n ON n.id = g.node_id
+               (SELECT count(*) FROM bfs_levels(?, ARRAY[?]::bigint[], true) g) AS records,
+               (SELECT count(*) FROM bfs_levels(?, ARRAY[?]::bigint[], true) g JOIN log_nodes n ON n.id = g.node_id
                  WHERE g.depth > 0 AND n.type = 'success' AND n.status = 'active') AS solved
         FROM log_nodes root WHERE root.id = ?
         """).params(ws, rootId, ws, rootId, rootId).query().listOfRows().stream().findFirst().orElse(null);

@@ -15,7 +15,7 @@ def _chain(monkeypatch, resolving=frozenset({5, 6})):
               {"parent_id": 3, "child_id": 7, "reason": None}, {"parent_id": 2, "child_id": 7, "reason": None}]
     monkeypatch.setattr(pipeline.db, "connect", lambda: nullcontext())
     monkeypatch.setattr(pipeline.db, "root_of", lambda conn, ws, e: 1)
-    monkeypatch.setattr(pipeline.db, "chain", lambda conn, ws, root, d, n: {"entry_id": root, "nodes": nodes, "edges": edges})
+    monkeypatch.setattr(pipeline.db, "chain", lambda conn, ws, root, d, n, focus=None: {"entry_id": root, "nodes": nodes, "edges": edges})
     monkeypatch.setattr(pipeline.db, "resolved_nodes", lambda conn, ws, root: set(resolving))
 
 
