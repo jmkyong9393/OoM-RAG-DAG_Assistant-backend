@@ -37,7 +37,7 @@ class AccountAdminApiTest extends AbstractApiTest {
         .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EMAIL_TAKEN"));
     // 값이 아니라 바뀐 항목 이름만 남는다
     org.assertj.core.api.Assertions.assertThat(jdbc.sql("SELECT label FROM audit_log WHERE table_name = 'auth' AND action = 'profile_changed' ORDER BY id")
-        .query(String.class).list()).containsExactly("title,email", "title");
+        .query(String.class).list()).containsExactly("grade,email", "grade");
   }
 
   @Test
@@ -88,7 +88,7 @@ class AccountAdminApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.items[0].actor").value("배종현"))
         .andExpect(jsonPath("$.items[0].reason").value("member->admin"));
     mvc.perform(asUser(get("/audit?action=profile_changed&employee_no=" + empBackend), boss))
-        .andExpect(jsonPath("$.items[0].reason").value("title"))
+        .andExpect(jsonPath("$.items[0].reason").value("grade"))
         .andExpect(jsonPath("$.items[0].ip_masked").value("127.0.0.*"));
     mvc.perform(asUser(get("/audit?employee_no=" + empLead), boss)).andExpect(jsonPath("$.items[*].employee_no", everyItem(org.hamcrest.Matchers.equalToIgnoringCase(empLead))));
     mvc.perform(asUser(get("/audit?from=어제"), boss)).andExpect(status().isBadRequest());
