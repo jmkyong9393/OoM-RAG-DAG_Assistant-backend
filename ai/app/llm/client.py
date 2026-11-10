@@ -131,14 +131,15 @@ GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 �
 
 
 async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage,
-                   case_required: bool = True) -> AsyncIterator[str]:
-    """policy_ctx: {ref, article_label, doc_title, text}, chain_ctx: {ref, type, status, title, resolution_summary, depth}"""
+                   case_required: bool = True, scope_docs: list[dict] | None = None) -> AsyncIterator[str]:
+    """policy_ctx: {ref, article_label, doc_title, text, slug}, chain_ctx: {ref, type, status, title, resolution_summary, depth}.
+    scope_docs: 이 부서 범위의 활성 규정 {slug, title} — 근거에 없는 다른 규정 영역을 안내할 때만 쓴다(규정을 끈 부서는 None)."""
     if ai_mode() == "openai" and profile.has_key:
         context = _render_context(policy_ctx, chain_ctx)
         # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
         searched = [x for x in policy_ctx if x.get("source") == "search"]
         must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS))
-                + _wording_notes(searched[:3]))
+                + _wording_notes(searched[:3]) + (_other_rule_notes(query, policy_ctx, scope_docs) if policy_ctx else []))
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -292,6 +293,34 @@ def _wording_notes(policies: list[dict]) -> list[str]:
             w = found[0]
             out.append(f"[{p['ref']}] 은 이 기준을 의무가 아니라 '{w}'(으)로 정했다. '…해야 한다'로 바꾸지 말고 '{w}'라는 말을 그대로 쓴다.")
     return out[:2]
+
+
+# 질문의 다른 규정 영역 단서 → 그 영역 문서(slug 일부). 검색이 둘째 문서를 못 찾는 질의가 있어(80위 밖) 답변이 빈 곳을 알리게 한다
+# (영역, 문서 slug 일부, 단서 낱말, 함께 있어야 하는 말 — None 이면 낱말만으로)
+# 개인정보는 낱말만으로는 지급 시기 · 이력서 정정 같은 질문에도 걸려(317건 중 4건) 보거나 넘기는 말이 함께 있을 때만
+OTHER_AREAS = (
+    ("급여·근로시간", "payroll", ("근무시간", "근로시간", "휴게", "휴식", "쉬는 시간", "쉰 ", "야근", "연장근로", "수당", "임금", "월급", "무급", "유급"), None),
+    ("개인정보", "privacy", ("개인정보", "연락처", "전화번호", "주민번호", "주민등록", "주소록", "명세서", "이력서"),
+     ("볼 수", "봐도", "열람", "보여", "조회", "공유", "넘겨", "보내", "제공", "다운로드")),
+    ("정보보안", "infosec", ("외부 업체", "외부업체", "사외", "반출", "유출", "USB", "외부로"), None),
+)
+
+
+def _other_rule_notes(query: str, policies: list[dict], scope_docs: list[dict] | None) -> list[str]:
+    """질문이 다른 규정 영역을 건드리는데 근거에 그 영역 문서가 없고 같은 부서 범위에 그 문서가 있으면, 답변 끝에 그 문서도 확인하라고 안내하게 한다.
+    문서 제목만 쓰고 내용은 추측하지 않는다. 한 질문에 한 줄."""
+    if not scope_docs:
+        return []
+    for area, key, cues, needs in OTHER_AREAS:
+        cue = next((c for c in cues if c in query), None)
+        if not cue or (needs and not any(w in query for w in needs)) or any(key in (p.get("slug") or "") for p in policies):
+            continue
+        titles = [d["title"] for d in scope_docs if key in d["slug"]][:2]
+        if titles:
+            names = " · ".join(f"「{t}」" for t in titles)
+            return [f"질문의 '{cue.strip()}' 부분({area})은 위 근거 문서가 직접 정하지 않았다. 답변 마지막에 한 문장으로 "
+                    f"\"{area} 기준은 {names}도 함께 확인해야 합니다\"라고 안내한다. 그 문서의 내용은 추측해 쓰지 않고 마커도 붙이지 않는다."]
+    return []
 
 
 def _note_text(p: dict) -> str:

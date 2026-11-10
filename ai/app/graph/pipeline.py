@@ -35,6 +35,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             terms = db.user_terms(conn)
             cctx = db.classify_context(conn, workspace_id, error_code)
             stale_vec = _stale_vectors(conn, ws)
+            scope_docs = db.scope_documents(conn, workspace_id)
         if policy_enabled is None:
             policy_enabled = bool(ws["policy_enabled"])
         # 부서 설정: 사례를 끈 부서(규정 참조형)는 사례를 찾지 않는다. 규정까지 꺼져 있으면 사례가 유일한 근거라 켠 것으로 본다
@@ -145,7 +146,8 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         yield sse("stage", StageEvent(node="generate", status="start").model_dump())
         answer: list[str] = []
         first_token_ms: int | None = None
-        async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage, case_required=intent != "policy"):
+        async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage, case_required=intent != "policy",
+                                        scope_docs=scope_docs if policy_enabled else None):
             if first_token_ms is None:
                 first_token_ms = int((time.perf_counter() - t0) * 1000)
             answer.append(piece)
