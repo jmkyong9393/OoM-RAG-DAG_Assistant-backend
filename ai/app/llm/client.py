@@ -305,28 +305,36 @@ OTHER_AREAS = (
 )
 
 
-def _other_rule(query: str, policies: list[dict], scope_docs: list[dict] | None) -> dict | None:
-    """질문이 다른 규정 영역을 건드리는데 근거에 그 영역 문서가 없고 같은 부서 범위에 그 문서가 있으면 {cue, area, names}. 한 질문에 하나."""
-    if not scope_docs:
-        return None
-    for area, key, cues, needs in OTHER_AREAS:
+def _other_rules(query: str, policies: list[dict], scope_docs: list[dict] | None) -> list[dict]:
+    """질문이 건드리는 다른 규정 영역 중 근거에 그 영역 문서가 없고 같은 부서 범위에 문서가 있는 것들 [{cue, area, titles}] (OTHER_AREAS 순서)."""
+    out = []
+    for area, key, cues, needs in OTHER_AREAS if scope_docs else ():
         cue = next((c for c in cues if c in query), None)
         if not cue or (needs and not any(w in query for w in needs)) or any(key in (p.get("slug") or "") for p in policies):
             continue
         titles = [d["title"] for d in scope_docs if key in d["slug"]][:2]
         if titles:
-            return {"cue": cue.strip(), "area": area, "names": " · ".join(f"「{t}」" for t in titles)}
-    return None
+            out.append({"cue": cue.strip(), "area": area, "titles": titles})
+    return out
+
+
+def _other_rule(query: str, policies: list[dict], scope_docs: list[dict] | None) -> dict | None:
+    """첫 영역 하나 {cue, area, names} — 발동 여부를 볼 때."""
+    o = next(iter(_other_rules(query, policies, scope_docs)), None)
+    return {"cue": o["cue"], "area": o["area"], "names": " · ".join(f"「{t}」" for t in o["titles"])} if o else None
 
 
 NOTICE_PREFIX = "※ "   # 서버가 덧붙이는 안내 줄의 표지 — 채점 도구가 모델 생성문과 구분한다
 
 
-def other_rule_notice(query: str, policies: list[dict], scope_docs: list[dict] | None) -> str | None:
+def other_rule_notice(query: str, policies: list[dict], scope_docs: list[dict] | None, answer: str = "") -> str | None:
     """답변 생성이 끝난 뒤 서버가 덧붙이는 고정 문구. 모델 입력은 바꾸지 않는다 — 지시문으로 넣으면 모델이 설명을 덧붙이다 조 번호를 틀리거나
-    지시 문장이 답변에 새어 나왔다."""
-    o = _other_rule(query, policies, scope_docs) if policies else None
-    return f"{NOTICE_PREFIX}{o['area']} 기준은 {o['names']}도 함께 확인해야 합니다." if o else None
+    지시 문장이 답변에 새어 나왔다. 영역이 여럿이면 한 문장에 함께, 답변이 이미 그 문서 제목을 모두 말한 영역은 뺀다(중복 안내 방지)."""
+    rules = [o for o in (_other_rules(query, policies, scope_docs) if policies else []) if not all(t in answer for t in o["titles"])]
+    if not rules:
+        return None
+    parts = [f"{o['area']} 기준은 " + " · ".join(f"「{t}」" for t in o["titles"]) for o in rules]
+    return f"{NOTICE_PREFIX}{', '.join(parts)}도 함께 확인해야 합니다."
 
 
 def _note_text(p: dict) -> str:

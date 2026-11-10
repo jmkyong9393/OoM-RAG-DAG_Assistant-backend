@@ -52,3 +52,9 @@ def test_only_the_exact_server_notice_at_the_end_is_left_out_of_scoring():
     mid = f"{notice}\n{body}"
     assert aq.split_notice(mid, notice) == (mid, [])
     assert aq.split_notice(body, None) == (body, [])
+
+
+def test_notice_after_a_truncated_answer_is_still_split():
+    notice = "※ 정보보안 기준은 「정보보안 기본규정」도 함께 확인해야 합니다."
+    cut = "외부 반출은 부서장 승인을 받는다.\n(답변 길이 상한에 도달해 이하 생략)"
+    assert aq.split_notice(f"{cut}\n\n{notice}", notice) == (cut, [notice])

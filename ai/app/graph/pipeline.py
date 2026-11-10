@@ -155,7 +155,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         if truncated:
             yield sse("token", TokenEvent(text=TRUNCATED_NOTE).model_dump())
         # 근거에 없는 다른 규정 영역 안내 — 모델이 아니라 서버가 고정 문구로(같은 부서 범위에 실제 있는 문서 제목만)
-        notice = llm.other_rule_notice(query, policy_ctx, scope_docs) if policy_enabled else None
+        notice = llm.other_rule_notice(query, policy_ctx, scope_docs, "".join(answer)) if policy_enabled else None
         if notice:
             answer.append("\n\n" + notice)
             yield sse("token", TokenEvent(text="\n\n" + notice).model_dump())
