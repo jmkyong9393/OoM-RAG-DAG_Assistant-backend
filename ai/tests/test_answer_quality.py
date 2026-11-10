@@ -37,3 +37,18 @@ def test_baseline_pairs_each_question_with_another_answers_questions():
     assert aq.baseline_of(rows) == 0.0, "서로 다른 질문끼리의 유사도"
     assert aq.baseline_of([rows[0], {**rows[0]}]) is None, "같은 질문끼리는 기준선에 넣지 않는다"
     assert round(aq.cosine([1.0, 1.0], [1.0, 0.0]), 4) == 0.7071
+
+
+def test_only_the_exact_server_notice_at_the_end_is_left_out_of_scoring():
+    notice = "※ 급여·근로시간 기준은 「급여 규정」도 함께 확인해야 합니다."
+    body = "응대를 중단한 근로자는 30분 이상의 유급 안정시간을 가진다."
+    assert aq.split_notice(f"{body}\n\n{notice}", notice) == (body, [notice])
+    assert aq.split_notice(f"{body}\n\n{notice}\n", notice) == (body, [notice]), "끝 공백은 무시"
+    # 모델이 스스로 쓴 '※' 문장은 채점 대상으로 남는다
+    own = f"{body}\n※ 위반 시 과태료 500만 원이 부과됩니다."
+    assert aq.split_notice(own, None) == (own, [])
+    assert aq.split_notice(own, notice) == (own, []), "서버 안내가 아니면 떼지 않는다"
+    # 서버 안내와 같은 글자가 답변 중간에 있으면 떼지 않는다(맨 끝만)
+    mid = f"{notice}\n{body}"
+    assert aq.split_notice(mid, notice) == (mid, [])
+    assert aq.split_notice(body, None) == (body, [])

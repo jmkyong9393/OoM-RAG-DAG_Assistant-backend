@@ -108,6 +108,15 @@ def parse(buf: bytes) -> list[tuple[str, object]]:
     return out
 
 
+def split_notice(text: str, notice: str | None) -> tuple[str, list[str]]:
+    """서버가 답변 끝에 붙인 안내(notice)만 떼어 낸다 — 그 문장과 글자까지 같고 맨 끝에 있을 때만.
+    모델이 쓴 문장은 '※'로 시작해도 그대로 채점한다(지난 답변 2,494건에서 모델이 '※'를 쓴 적은 없다)."""
+    body = text.rstrip()
+    if notice and body.endswith(notice):
+        return body[: -len(notice)].rstrip(), [notice]
+    return text.strip(), []
+
+
 async def run_one(item: dict, prof, judge: str, seen: dict, emb_prof) -> dict:
     seen.clear()
     buf = b""
@@ -115,10 +124,8 @@ async def run_one(item: dict, prof, judge: str, seen: dict, emb_prof) -> dict:
         buf += chunk
     blocks = parse(buf)
     text = strip_markers("".join(b[1]["text"] for b in blocks if b[0] == "token"))
-    # 서버가 덧붙인 안내 줄(※ …)은 모델 생성문이 아니므로 채점에서 뺀다 — 결과에는 따로 남긴다
-    lines = text.split("\n")
-    notice = [ln for ln in lines if ln.startswith(llm.NOTICE_PREFIX)]
-    answer = "\n".join(ln for ln in lines if not ln.startswith(llm.NOTICE_PREFIX)).strip()
+    # 서버가 덧붙인 안내(모델 생성문이 아님)는 채점에서 빼고 결과에 따로 남긴다
+    answer, notice = split_notice(text, seen.get("notice"))
     context = seen.get("context")          # 생성 모델에 실제로 준 컨텍스트. 근거가 없어 생성하지 않았으면 None
     usage = llm.Usage()
     row = {"workspace_id": item["workspace_id"], "query": item["query"], "answer": answer, "system_notice": notice, "no_answer": context is None,
@@ -190,6 +197,12 @@ async def main() -> int:
         seen["context"] = render(*args, **kw)
         return seen["context"]
     llm._render_context = spy
+    make_notice = llm.other_rule_notice
+
+    def notice_spy(*args, **kw):   # 서버가 실제로 붙인 안내 문장을 그대로 기억한다
+        seen["notice"] = make_notice(*args, **kw)
+        return seen["notice"]
+    llm.other_rule_notice = notice_spy
     rows = []
     for it in items:
         r = await run_one(it, prof, judge, seen, emb_prof)
