@@ -1,6 +1,6 @@
 """답변이 근거에 없는 다른 규정 영역을 안내 — 검색이 둘째 문서를 못 찾는 질의(80위 밖)를 위해.
-발동 판정(_other_rule), 컨텍스트에 넣는 사실(_render_context), [답변에 꼭 담을 것] 줄(_other_rule_notes)."""
-from app.llm.client import _other_rule, _other_rule_notes, _render_context
+발동 판정(_other_rule)과 서버가 답변 끝에 덧붙이는 고정 문구(other_rule_notice). 모델 입력은 바꾸지 않는다."""
+from app.llm.client import NOTICE_PREFIX, _other_rule, _render_context, other_rule_notice
 
 SCOPE = [{"slug": "retail-cs-protection-2026-11", "title": "고객응대 근로자 보호 지침"},
          {"slug": "retail-payroll-2026-11", "title": "급여 규정"},
@@ -23,15 +23,12 @@ def test_points_to_the_missing_area_by_real_title():
     assert o["names"] == "「개인정보 처리 기준」 · 「개인정보 보호 내부관리계획」"
 
 
-def test_the_fact_goes_into_the_context_so_the_closing_sentence_is_grounded():
-    o = _other_rule("폭언 때문에 상담 끊고 쉰 30분도 근무시간이야?", pol("retail-cs-protection-2026-11"), SCOPE)
-    policy = [{"ref": "P1", "doc_title": "고객응대 근로자 보호 지침", "article_label": "제12조", "text": "보호 조치"}]
-    text = _render_context(policy, [], o)
-    assert text.splitlines()[-1].startswith("- 이 부서 범위의 「급여 규정」: 급여·근로시간 관련 규정 문서")
-    assert "[근거에 없는 다른 규정]" in text and _render_context(policy, []) == "## 규정\n[P1] 고객응대 근로자 보호 지침 제12조: 보호 조치"
-    note = _other_rule_notes(o)
-    assert len(note) == 1 and "\"급여·근로시간 기준은 「급여 규정」도 함께 확인해야 합니다\"" in note[0] and "추측해 쓰지 않" in note[0]
-    assert _other_rule_notes(None) == []
+def test_notice_is_fixed_wording_and_model_input_is_unchanged():
+    policy = [{"ref": "P1", "doc_title": "고객응대 근로자 보호 지침", "article_label": "제12조", "text": "보호 조치", "slug": "retail-cs-protection-2026-11"}]
+    n = other_rule_notice("폭언 때문에 상담 끊고 쉰 30분도 근무시간이야?", policy, SCOPE)
+    assert n == "※ 급여·근로시간 기준은 「급여 규정」도 함께 확인해야 합니다." and n.startswith(NOTICE_PREFIX)
+    assert _render_context(policy, []) == "## 규정\n[P1] 고객응대 근로자 보호 지침 제12조: 보호 조치"   # 모델이 보는 근거는 그대로
+    assert other_rule_notice("폭언 때문에 쉰 30분도 근무시간이야?", [], SCOPE) is None   # 근거가 없으면(근거 없음 답변) 붙이지 않는다
 
 
 def test_no_note_when_area_is_already_in_evidence_or_not_in_scope():

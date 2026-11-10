@@ -114,10 +114,14 @@ async def run_one(item: dict, prof, judge: str, seen: dict, emb_prof) -> dict:
     async for chunk in pipeline.run(item["workspace_id"], None, item["query"]):
         buf += chunk
     blocks = parse(buf)
-    answer = strip_markers("".join(b[1]["text"] for b in blocks if b[0] == "token"))
+    text = strip_markers("".join(b[1]["text"] for b in blocks if b[0] == "token"))
+    # 서버가 덧붙인 안내 줄(※ …)은 모델 생성문이 아니므로 채점에서 뺀다 — 결과에는 따로 남긴다
+    lines = text.split("\n")
+    notice = [ln for ln in lines if ln.startswith(llm.NOTICE_PREFIX)]
+    answer = "\n".join(ln for ln in lines if not ln.startswith(llm.NOTICE_PREFIX)).strip()
     context = seen.get("context")          # 생성 모델에 실제로 준 컨텍스트. 근거가 없어 생성하지 않았으면 None
     usage = llm.Usage()
-    row = {"workspace_id": item["workspace_id"], "query": item["query"], "answer": answer, "no_answer": context is None,
+    row = {"workspace_id": item["workspace_id"], "query": item["query"], "answer": answer, "system_notice": notice, "no_answer": context is None,
            "faithfulness": None, "statements": 0, "supported": 0, "unsupported": []}
     if context is not None:
         st = (await llm._chat_json(prof, judge, STATEMENTS_SYSTEM, f"[질문]\n{item['query']}\n\n[답변]\n{answer}", usage)).get("statements") or []

@@ -146,8 +146,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         yield sse("stage", StageEvent(node="generate", status="start").model_dump())
         answer: list[str] = []
         first_token_ms: int | None = None
-        async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage, case_required=intent != "policy",
-                                        scope_docs=scope_docs if policy_enabled else None):
+        async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage, case_required=intent != "policy"):
             if first_token_ms is None:
                 first_token_ms = int((time.perf_counter() - t0) * 1000)
             answer.append(piece)
@@ -155,6 +154,11 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         truncated = usage.finish_reason == "length"
         if truncated:
             yield sse("token", TokenEvent(text=TRUNCATED_NOTE).model_dump())
+        # 근거에 없는 다른 규정 영역 안내 — 모델이 아니라 서버가 고정 문구로(같은 부서 범위에 실제 있는 문서 제목만)
+        notice = llm.other_rule_notice(query, policy_ctx, scope_docs) if policy_enabled else None
+        if notice:
+            answer.append("\n\n" + notice)
+            yield sse("token", TokenEvent(text="\n\n" + notice).model_dump())
         yield sse("stage", StageEvent(node="generate", status="done").model_dump())
 
         # critic — LLM 미사용: 마커 ↔ 검색 집합 대조

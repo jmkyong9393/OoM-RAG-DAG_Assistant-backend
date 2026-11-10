@@ -131,16 +131,14 @@ GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 �
 
 
 async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chain_ctx: list[dict], usage: Usage,
-                   case_required: bool = True, scope_docs: list[dict] | None = None) -> AsyncIterator[str]:
-    """policy_ctx: {ref, article_label, doc_title, text, slug}, chain_ctx: {ref, type, status, title, resolution_summary, depth}.
-    scope_docs: 이 부서 범위의 활성 규정 {slug, title} — 근거에 없는 다른 규정 영역을 안내할 때만 쓴다(규정을 끈 부서는 None)."""
+                   case_required: bool = True) -> AsyncIterator[str]:
+    """policy_ctx: {ref, article_label, doc_title, text}, chain_ctx: {ref, type, status, title, resolution_summary, depth}"""
     if ai_mode() == "openai" and profile.has_key:
-        other = _other_rule(query, policy_ctx, scope_docs) if policy_ctx else None
-        context = _render_context(policy_ctx, chain_ctx, other)
+        context = _render_context(policy_ctx, chain_ctx)
         # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
         searched = [x for x in policy_ctx if x.get("source") == "search"]
         must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS))
-                + _wording_notes(searched[:3]) + _other_rule_notes(other))
+                + _wording_notes(searched[:3]))
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -321,20 +319,14 @@ def _other_rule(query: str, policies: list[dict], scope_docs: list[dict] | None)
     return None
 
 
-def _other_rule_context(o: dict | None) -> str:
-    """컨텍스트에 넣는 사실 — 안내 문장이 컨텍스트에 근거를 두게(채점 모델도 같은 컨텍스트를 본다)."""
-    if not o:
-        return ""
-    return (f"\n[근거에 없는 다른 규정]\n- 이 부서 범위의 {o['names']}: {o['area']} 관련 규정 문서. 질문의 '{o['cue']}' 부분을 정할 수 있으나 "
-            f"이번 근거에는 그 조문이 없어 함께 확인이 필요하다.")
+NOTICE_PREFIX = "※ "   # 서버가 덧붙이는 안내 줄의 표지 — 채점 도구가 모델 생성문과 구분한다
 
 
-def _other_rule_notes(o: dict | None) -> list[str]:
-    """[답변에 꼭 담을 것] 줄 — 문서 제목만 안내하고 내용은 추측하지 않는다."""
-    if not o:
-        return []
-    return [f"질문의 '{o['cue']}' 부분({o['area']})은 위 근거 조문이 직접 정하지 않았다. 답변 마지막에 [근거에 없는 다른 규정]을 따라 한 문장으로 "
-            f"\"{o['area']} 기준은 {o['names']}도 함께 확인해야 합니다\"라고 안내한다. 그 문서의 내용은 추측해 쓰지 않고 마커도 붙이지 않는다."]
+def other_rule_notice(query: str, policies: list[dict], scope_docs: list[dict] | None) -> str | None:
+    """답변 생성이 끝난 뒤 서버가 덧붙이는 고정 문구. 모델 입력은 바꾸지 않는다 — 지시문으로 넣으면 모델이 설명을 덧붙이다 조 번호를 틀리거나
+    지시 문장이 답변에 새어 나왔다."""
+    o = _other_rule(query, policies, scope_docs) if policies else None
+    return f"{NOTICE_PREFIX}{o['area']} 기준은 {o['names']}도 함께 확인해야 합니다." if o else None
 
 
 def _note_text(p: dict) -> str:
@@ -360,7 +352,7 @@ def _policy_note(p: dict) -> str:
     return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail}{rev})"
 
 
-def _render_context(policy_ctx: list[dict], chain_ctx: list[dict], other: dict | None = None) -> str:
+def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
     lines = []
     if policy_ctx:
         lines.append("## 규정")
@@ -378,7 +370,7 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict], other: dict |
                          + (" (이 장애를 해결한 기록)" if n.get("resolves_root") and n["status"] == "active" else "")
                          + "".join(f" (상위에 이은 이유: {r})" for r in n.get("via") or [])
                          + "".join(_policy_note(p) for p in n.get("policy") or []))
-    return "\n".join(lines) + _other_rule_context(other)
+    return "\n".join(lines)
 
 
 # ── 정제 ─────────────────────────────────────────────────────────────────────
