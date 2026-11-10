@@ -27,12 +27,13 @@ class ChainAndEdgeApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.nodes[2].id").value(fix)).andExpect(jsonPath("$.nodes[2].depth").value(1))
         .andExpect(jsonPath("$.nodes[2].path_label").value("root.n" + root + ".n" + cause + ".n" + fix))
         .andExpect(jsonPath("$.edges", hasSize(2)))
-        .andExpect(jsonPath("$.summary").value("E-403 인증 오류 장애 건: 기록 3건, 해결 1건, 진행 중"))
+        .andExpect(jsonPath("$.overview").value("E-403 인증 오류 장애 건: 기록 3건, 해결 1건, 진행 중"))
+        .andExpect(jsonPath("$.summary").doesNotExist()).andExpect(jsonPath("$.summary_status").value("none"))
         .andExpect(jsonPath("$.total").value(3)).andExpect(jsonPath("$.truncated").value(false));
     jdbc.sql("UPDATE log_nodes SET resolved_at = now() WHERE id = ?").param(root).update();
     mvc.perform(as(get("/chains/" + root + "?depth=1"), userBackend, wsSw))
         .andExpect(jsonPath("$.nodes", hasSize(2))).andExpect(jsonPath("$.truncated").value(true))
-        .andExpect(jsonPath("$.summary").value("E-403 인증 오류 장애 건: 기록 3건, 해결 1건, 완료"));
+        .andExpect(jsonPath("$.overview").value("E-403 인증 오류 장애 건: 기록 3건, 해결 1건, 완료"));
   }
 
   @Test

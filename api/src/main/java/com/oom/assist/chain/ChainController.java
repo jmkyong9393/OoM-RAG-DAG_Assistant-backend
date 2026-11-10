@@ -11,13 +11,16 @@ import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * GET /chains/{entry_id}[?depth=N] — get_chain() 결과(진입 기준 음수=조상·양수=자손) + 그 집합 안의 간선 + 루트 기준 요약.
  * depth 없으면 조상 · 자손 전체. MAX_NODES 를 넘으면 해결 · 원인 경로를 먼저 남기고 자른다(truncated, total = 전체 수).
- * 요약은 장애 건(루트) 전체 기준: "{루트 제목} 장애 건: 기록 N건, 해결 M건, 완료|진행 중".
+ * summary = 저장된 장애 건 AI 요약만(없으면 null, LLM 은 부르지 않는다 — 만드는 건 POST /chains/{id}/summary),
+ * summary_status = fresh | stale | generating | none | deprecated (ChainSummaryService.peek).
+ * overview = 장애 건(루트) 현황 한 줄: "{루트 제목} 장애 건: 기록 N건, 해결 M건, 완료|진행 중".
  */
 @RestController
 public class ChainController {
@@ -26,10 +29,12 @@ public class ChainController {
 
   private final JdbcClient jdbc;
   private final PolicyRefService policyRefs;
+  private final ChainSummaryService summaries;
 
-  public ChainController(JdbcClient jdbc, PolicyRefService policyRefs) {
+  public ChainController(JdbcClient jdbc, PolicyRefService policyRefs, ChainSummaryService summaries) {
     this.jdbc = jdbc;
     this.policyRefs = policyRefs;
+    this.summaries = summaries;
   }
 
   /**
@@ -41,11 +46,16 @@ public class ChainController {
                           List<PolicyRefService.RefView> policyRefs, boolean resolvesRoot, boolean isCause) {}
   /** reason = 이 기록을 그 상위에 이어 붙인 이유. 없으면 null. */
   public record Edge(long parentId, long childId, String reason) {}
-  public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary, int total, boolean truncated) {}
+  public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary, String summaryStatus, OffsetDateTime summaryAt,
+                      String overview, int total, boolean truncated) {}
 
   @GetMapping("/chains/{entryId}")
   public Chain get(@PathVariable long entryId, @RequestParam(required = false) Integer depth, TenantContext ctx) {
-    long ws = ctx.workspaceId();
+    return build(ctx.workspaceId(), entryId, depth, true);
+  }
+
+  /** withSummary=false 는 요약 입력용(POST 요약이 체인을 모을 때) — 저장된 요약 상태를 읽지 않는다. */
+  private Chain build(long ws, long entryId, Integer depth, boolean withSummary) {
     List<Map<String, Object>> rows = jdbc.sql("""
         SELECT v.id, v.type, v.status, v.title, g.depth, v.path_label, v.resolution_summary, v.last_confirmed_at, v.root_id, v.is_cause, g.total
         FROM get_chain(?, ?, ?::int, ?, ?) g JOIN v_log_nodes v ON v.id = g.node_id
@@ -68,7 +78,18 @@ public class ChainController {
 
     Long rootId = rows.stream().filter(r -> num(r, "id") == entryId).map(r -> (Long) r.get("root_id")).findFirst().orElse(null);
     int total = ((Number) rows.get(0).get("total")).intValue();
-    return new Chain(entryId, nodes, edges, summary(ws, rootId), total, total > nodes.size());
+    ChainSummaryService.View ai = withSummary && rootId != null ? summaries.peek(ws, rootId) : null;
+    return new Chain(entryId, nodes, edges, ai == null ? null : ai.summary(), ai == null ? null : ai.status(), ai == null ? null : ai.at(),
+        summary(ws, rootId), total, total > nodes.size());
+  }
+
+  /**
+   * POST /chains/{entry_id}/summary — 장애 건(진입 노드의 루트 ~ 모든 리프) AI 요약을 만든다. GET 은 저장된 것을 읽기만 한다.
+   * 저장된 요약의 지문이 지금과 같으면 그대로, 바뀌었으면 Python 으로 다시 만든다(ChainSummaryService).
+   */
+  @PostMapping("/chains/{entryId}/summary")
+  public ChainSummaryService.Result aiSummary(@PathVariable long entryId, TenantContext ctx) {
+    return summaries.summarize(ctx.workspaceId(), entryId, root -> build(ctx.workspaceId(), root, null, false));
   }
 
   private String summary(long ws, Long rootId) {
