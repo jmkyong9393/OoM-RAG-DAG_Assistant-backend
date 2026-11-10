@@ -182,8 +182,8 @@ async def main() -> int:
     seen: dict = {}
     render = llm._render_context
 
-    def spy(policy_ctx, chain_ctx):
-        seen["context"] = render(policy_ctx, chain_ctx)
+    def spy(*args, **kw):
+        seen["context"] = render(*args, **kw)
         return seen["context"]
     llm._render_context = spy
     rows = []

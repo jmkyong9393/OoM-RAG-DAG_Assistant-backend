@@ -135,11 +135,12 @@ async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chai
     """policy_ctx: {ref, article_label, doc_title, text, slug}, chain_ctx: {ref, type, status, title, resolution_summary, depth}.
     scope_docs: 이 부서 범위의 활성 규정 {slug, title} — 근거에 없는 다른 규정 영역을 안내할 때만 쓴다(규정을 끈 부서는 None)."""
     if ai_mode() == "openai" and profile.has_key:
-        context = _render_context(policy_ctx, chain_ctx)
+        other = _other_rule(query, policy_ctx, scope_docs) if policy_ctx else None
+        context = _render_context(policy_ctx, chain_ctx, other)
         # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
         searched = [x for x in policy_ctx if x.get("source") == "search"]
         must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS))
-                + _wording_notes(searched[:3]) + (_other_rule_notes(query, policy_ctx, scope_docs) if policy_ctx else []))
+                + _wording_notes(searched[:3]) + _other_rule_notes(other))
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM, f"[컨텍스트]\n{context}\n\n[질문]\n{query}{tail}", usage,
                                         max_tokens=answer_max_tokens()):
@@ -306,21 +307,34 @@ OTHER_AREAS = (
 )
 
 
-def _other_rule_notes(query: str, policies: list[dict], scope_docs: list[dict] | None) -> list[str]:
-    """질문이 다른 규정 영역을 건드리는데 근거에 그 영역 문서가 없고 같은 부서 범위에 그 문서가 있으면, 답변 끝에 그 문서도 확인하라고 안내하게 한다.
-    문서 제목만 쓰고 내용은 추측하지 않는다. 한 질문에 한 줄."""
+def _other_rule(query: str, policies: list[dict], scope_docs: list[dict] | None) -> dict | None:
+    """질문이 다른 규정 영역을 건드리는데 근거에 그 영역 문서가 없고 같은 부서 범위에 그 문서가 있으면 {cue, area, names}. 한 질문에 하나."""
     if not scope_docs:
-        return []
+        return None
     for area, key, cues, needs in OTHER_AREAS:
         cue = next((c for c in cues if c in query), None)
         if not cue or (needs and not any(w in query for w in needs)) or any(key in (p.get("slug") or "") for p in policies):
             continue
         titles = [d["title"] for d in scope_docs if key in d["slug"]][:2]
         if titles:
-            names = " · ".join(f"「{t}」" for t in titles)
-            return [f"질문의 '{cue.strip()}' 부분({area})은 위 근거 문서가 직접 정하지 않았다. 답변 마지막에 한 문장으로 "
-                    f"\"{area} 기준은 {names}도 함께 확인해야 합니다\"라고 안내한다. 그 문서의 내용은 추측해 쓰지 않고 마커도 붙이지 않는다."]
-    return []
+            return {"cue": cue.strip(), "area": area, "names": " · ".join(f"「{t}」" for t in titles)}
+    return None
+
+
+def _other_rule_context(o: dict | None) -> str:
+    """컨텍스트에 넣는 사실 — 안내 문장이 컨텍스트에 근거를 두게(채점 모델도 같은 컨텍스트를 본다)."""
+    if not o:
+        return ""
+    return (f"\n[근거에 없는 다른 규정]\n- 이 부서 범위의 {o['names']}: {o['area']} 관련 규정 문서. 질문의 '{o['cue']}' 부분을 정할 수 있으나 "
+            f"이번 근거에는 그 조문이 없어 함께 확인이 필요하다.")
+
+
+def _other_rule_notes(o: dict | None) -> list[str]:
+    """[답변에 꼭 담을 것] 줄 — 문서 제목만 안내하고 내용은 추측하지 않는다."""
+    if not o:
+        return []
+    return [f"질문의 '{o['cue']}' 부분({o['area']})은 위 근거 조문이 직접 정하지 않았다. 답변 마지막에 [근거에 없는 다른 규정]을 따라 한 문장으로 "
+            f"\"{o['area']} 기준은 {o['names']}도 함께 확인해야 합니다\"라고 안내한다. 그 문서의 내용은 추측해 쓰지 않고 마커도 붙이지 않는다."]
 
 
 def _note_text(p: dict) -> str:
@@ -346,7 +360,7 @@ def _policy_note(p: dict) -> str:
     return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail}{rev})"
 
 
-def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
+def _render_context(policy_ctx: list[dict], chain_ctx: list[dict], other: dict | None = None) -> str:
     lines = []
     if policy_ctx:
         lines.append("## 규정")
@@ -364,7 +378,7 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
                          + (" (이 장애를 해결한 기록)" if n.get("resolves_root") and n["status"] == "active" else "")
                          + "".join(f" (상위에 이은 이유: {r})" for r in n.get("via") or [])
                          + "".join(_policy_note(p) for p in n.get("policy") or []))
-    return "\n".join(lines)
+    return "\n".join(lines) + _other_rule_context(other)
 
 
 # ── 정제 ─────────────────────────────────────────────────────────────────────
