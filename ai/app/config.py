@@ -1,5 +1,5 @@
 """환경 설정. LLM 공급자는 '프로필' 단위로 env 에서 읽는다 (개발문서 34 §4):
-LLM_PROFILE_<NAME>_BASE_URL / _API_KEY / _MODEL_LIGHT / _MODEL_ANSWER / _EMBEDDING_MODEL.
+LLM_PROFILE_<NAME>_BASE_URL / _API_KEY / _API_KEY_BACKUP(예비 키) / _MODEL_LIGHT / _MODEL_ANSWER / _EMBEDDING_MODEL.
 워크스페이스 settings.llm_profile 이 프로필 이름을 가리키며, 없으면 'default'.
 
 AI_MODE:
@@ -21,10 +21,35 @@ class LlmProfile:
     model_answer: str
     embedding_model: str
     embedding_dim: int = 1536   # 스키마 vector(1536). text-embedding-3-* 는 이 차원으로 줄여 받는다
+    api_key_backup: str = ""    # 예비 키. 기본 키가 비었거나 막혔을 때(인증 실패 · 잔액 소진) 쓴다
 
     @property
     def has_key(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_key or self.api_key_backup)
+
+
+_on_backup: set[str] = set()   # 기본 키가 막혀 예비 키로 넘어간 프로필 (프로세스가 사는 동안 유지)
+
+
+def api_key_of(p: LlmProfile) -> str:
+    """지금 쓸 키. 기본 키가 1순위이고, 비었거나 막힌 것으로 확인됐으면 예비 키."""
+    if p.api_key_backup and (not p.api_key or p.name in _on_backup):
+        return p.api_key_backup
+    return p.api_key
+
+
+def key_rejected(status: int, body: str) -> bool:
+    """키 자체가 막힌 응답인가 — 인증 실패(401 · 403)나 잔액 소진(429 insufficient_quota). 잠깐의 속도 제한(429)은 아니다."""
+    return status in (401, 403) or (status == 429 and "insufficient_quota" in body)
+
+
+def switch_to_backup(p: LlmProfile) -> bool:
+    """기본 키가 막혔을 때 예비 키로 넘어간다. 넘어갔으면 True — 같은 요청을 한 번 다시 보낸다. 예비 키가 없거나 이미 쓰는 중이면 False."""
+    if not p.api_key_backup or not p.api_key or p.name in _on_backup:
+        return False
+    _on_backup.add(p.name)
+    print(f"[config] 프로필 '{p.name}' 의 기본 키가 거절돼 예비 키로 넘어간다", flush=True)
+    return True
 
 
 def profile(name: str = "default") -> LlmProfile:
@@ -34,6 +59,7 @@ def profile(name: str = "default") -> LlmProfile:
         # .env 에 'KEY=' 처럼 빈 값으로 있어도 기본값을 쓰도록 `or`
         base_url=(os.environ.get(p + "BASE_URL") or "https://api.openai.com/v1").rstrip("/"),
         api_key=os.environ.get(p + "API_KEY", ""),
+        api_key_backup=os.environ.get(p + "API_KEY_BACKUP", ""),
         model_light=os.environ.get(p + "MODEL_LIGHT") or "gpt-4o-mini",
         model_answer=os.environ.get(p + "MODEL_ANSWER") or "gpt-4o-mini",
         embedding_model=os.environ.get(p + "EMBEDDING_MODEL") or "text-embedding-3-large",

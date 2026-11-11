@@ -85,6 +85,7 @@ def admin_conn():
 def fake_mode(monkeypatch):
     monkeypatch.setenv("AI_MODE", "fake")
     monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", raising=False)
 
 
 @pytest.fixture

@@ -61,6 +61,10 @@ def test_auto_mode_without_key_is_fake(monkeypatch):
     from app.config import ai_mode
     monkeypatch.setenv("AI_MODE", "auto")
     monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", raising=False)
     assert ai_mode() == "fake"
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", "sk-backup")
+    assert ai_mode() == "openai", "예비 키만 있어도 키가 있는 것이다"
+    monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP")
     monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
     assert ai_mode() == "openai"

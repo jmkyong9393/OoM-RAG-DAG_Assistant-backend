@@ -10,7 +10,7 @@ from typing import AsyncIterator
 
 import httpx
 
-from app.config import LlmProfile, ai_mode, answer_max_tokens
+from app.config import LlmProfile, ai_mode, answer_max_tokens, api_key_of, key_rejected, switch_to_backup
 from app.llm.schemas import IntentResult, RefineResult
 from app.retrieval.tokenize import Tokenizer, extract_error_code
 
@@ -436,11 +436,13 @@ async def refine(profile: LlmProfile, title: str, body: str, tokenizer: Tokenize
 # ── OpenAI 호환 호출 ─────────────────────────────────────────────────────────
 
 async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage) -> dict:
+    body = {"model": model, "temperature": 0, "response_format": {"type": "json_object"},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(f"{profile.base_url}/chat/completions",
-                              headers={"Authorization": f"Bearer {profile.api_key}"},
-                              json={"model": model, "temperature": 0, "response_format": {"type": "json_object"},
-                                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]})
+        for _ in (1, 2):   # 기본 키가 막힌 응답이면 예비 키로 한 번 다시 보낸다
+            r = await client.post(f"{profile.base_url}/chat/completions", headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body)
+            if not (key_rejected(r.status_code, r.text) and switch_to_backup(profile)):
+                break
         r.raise_for_status()
         j = r.json()
         u = j.get("usage") or {}
@@ -456,22 +458,27 @@ async def _chat_stream(profile: LlmProfile, model: str, system: str, user: str, 
     if max_tokens:
         body["max_tokens"] = max_tokens
     async with httpx.AsyncClient(timeout=120) as client:
-        async with client.stream("POST", f"{profile.base_url}/chat/completions",
-                                 headers={"Authorization": f"Bearer {profile.api_key}"}, json=body) as r:
-            r.raise_for_status()
-            async for line in r.aiter_lines():
-                if not line.startswith("data:"):
-                    continue
-                payload = line[5:].strip()
-                if payload == "[DONE]":
-                    break
-                j = json.loads(payload)
-                if j.get("usage"):
-                    usage.prompt_tokens += int(j["usage"].get("prompt_tokens", 0))
-                    usage.completion_tokens += int(j["usage"].get("completion_tokens", 0))
-                for ch in j.get("choices", []):
-                    if ch.get("finish_reason"):
-                        usage.finish_reason = ch["finish_reason"]
-                    delta = (ch.get("delta") or {}).get("content")
-                    if delta:
-                        yield delta
+        for _ in (1, 2):   # 기본 키가 막힌 응답이면(스트림이 시작되기 전) 예비 키로 한 번 다시 보낸다
+            async with client.stream("POST", f"{profile.base_url}/chat/completions",
+                                     headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body) as r:
+                if r.status_code != 200:
+                    if key_rejected(r.status_code, (await r.aread()).decode("utf-8", "replace")) and switch_to_backup(profile):
+                        continue
+                    r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line[5:].strip()
+                    if payload == "[DONE]":
+                        break
+                    j = json.loads(payload)
+                    if j.get("usage"):
+                        usage.prompt_tokens += int(j["usage"].get("prompt_tokens", 0))
+                        usage.completion_tokens += int(j["usage"].get("completion_tokens", 0))
+                    for ch in j.get("choices", []):
+                        if ch.get("finish_reason"):
+                            usage.finish_reason = ch["finish_reason"]
+                        delta = (ch.get("delta") or {}).get("content")
+                        if delta:
+                            yield delta
+                return

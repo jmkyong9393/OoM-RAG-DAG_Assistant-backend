@@ -2,6 +2,7 @@
 실제 DB 와 함께 끝까지 돌린다. 키 발급 후에는 scripts/llm_smoke.py 로 같은 4경로를 실제 공급자에 1회 확인한다."""
 import pytest
 
+from app import config
 from app.config import profile
 from app.graph import pipeline
 from app.llm import client as llm
@@ -18,6 +19,8 @@ def openai_mode(monkeypatch):
         monkeypatch.setenv("AI_MODE", "openai")
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_BASE_URL", stub.base_url)
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+        monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", raising=False)
+        monkeypatch.setattr(config, "_on_backup", set())   # 예비 키로 넘어간 상태는 프로세스에 남는다 — 테스트마다 처음부터
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_MODEL_LIGHT", "stub-light")
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_MODEL_ANSWER", "stub-answer")
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_EMBEDDING_MODEL", "stub-embed")
@@ -147,3 +150,55 @@ async def test_openai_mode_without_key_degrades_to_fake(openai_mode, monkeypatch
     names = [b[0] for b in blocks]
     assert names[-1] == "done" and dict(blocks)["done"]["model"] == "fake"
     assert not openai_mode.calls, "키가 없으면 공급자를 호출하지 않는다"
+
+
+NO_CREDIT = {"message": "You have no credits remaining.", "type": "insufficient_quota", "code": "credit_balance_exhausted"}
+
+
+async def test_backup_key_takes_over_when_the_primary_is_rejected(openai_mode, monkeypatch):
+    """기본 키가 잔액 소진 · 인증 실패로 거절되면 같은 요청을 예비 키로 한 번 다시 보내고, 그 뒤로는 예비 키만 쓴다."""
+    import httpx
+
+    from app.retrieval import embed
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-empty")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", "sk-backup")
+    openai_mode.reject("sk-empty", 429, NO_CREDIT)
+    prof, u = profile(), llm.Usage()
+    assert (await llm.classify(prof, "요즘 VPN 이 왜 이래?", None, True, u)).reason == "llm: stub"
+    assert [c["auth"] for c in openai_mode.calls] == ["Bearer sk-empty", "Bearer sk-backup"]
+    assert embed.embed_one(prof, "질문") is not None
+    assert "".join([p async for p in llm._chat_stream(prof, "m", "s", "u", u)]).startswith("스텁 답변")
+    assert [c["auth"] for c in openai_mode.calls[2:]] == ["Bearer sk-backup"] * 2, "한 번 넘어가면 기본 키를 다시 두드리지 않는다"
+    # 스트리밍 · 임베딩이 첫 호출이어도 넘어간다 (인증 실패 401 도 같다)
+    for first in ("stream", "embed"):
+        monkeypatch.setattr(config, "_on_backup", set())
+        openai_mode.reject("sk-empty", 401, {"message": "Incorrect API key provided"})
+        n = len(openai_mode.calls)
+        if first == "stream":
+            assert "".join([p async for p in llm._chat_stream(prof, "m", "s", "u", u)]).startswith("스텁 답변")
+        else:
+            assert embed.embed_one(prof, "질문") is not None
+        assert [c["auth"] for c in openai_mode.calls[n:]] == ["Bearer sk-empty", "Bearer sk-backup"], first
+    # 잠깐의 속도 제한(429)은 키 문제가 아니다 — 넘어가지 않고 오류 그대로
+    monkeypatch.setattr(config, "_on_backup", set())
+    openai_mode.reject("sk-empty", 429, {"message": "Rate limit reached", "type": "requests", "code": "rate_limit_exceeded"})
+    n = len(openai_mode.calls)
+    with pytest.raises(httpx.HTTPStatusError):
+        await llm._chat_json(prof, "m", "classify", "u", u)
+    assert [c["auth"] for c in openai_mode.calls[n:]] == ["Bearer sk-empty"] and not config._on_backup
+
+
+async def test_backup_key_is_used_when_the_primary_is_blank_and_errors_surface_without_one(openai_mode, monkeypatch):
+    import httpx
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", "sk-backup")
+    prof, u = profile(), llm.Usage()
+    assert prof.has_key and config.api_key_of(prof) == "sk-backup"
+    await llm._chat_json(prof, "m", "classify", "u", u)
+    assert [c["auth"] for c in openai_mode.calls] == ["Bearer sk-backup"]
+    # 예비 키가 없으면 지금처럼 오류가 그대로 올라온다
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-empty")
+    monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP")
+    openai_mode.reject("sk-empty", 429, NO_CREDIT)
+    with pytest.raises(httpx.HTTPStatusError):
+        await llm._chat_json(profile(), "m", "classify", "u", u)
