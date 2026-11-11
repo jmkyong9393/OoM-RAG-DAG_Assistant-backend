@@ -72,3 +72,9 @@ def test_no_duplicate_when_the_answer_already_names_the_documents():
     assert other_rule_notice(q, p, SCOPE, both) is None
     # 두 문서 중 하나만 말했으면 그 영역은 남긴다
     assert "개인정보 기준" in other_rule_notice(q, p, SCOPE, GAP + " 개인정보 처리 기준에 따르면 …")
+
+
+def test_grouped_markers_are_read_as_separate_citations():
+    from app.graph.pipeline import markers_in
+    assert markers_in("90일 보관한다 [P1, P2]. 사례에서는 연장했다 [N3][P1].") == ["P1", "P2", "N3"]
+    assert markers_in("기준이 없다 [P10].") == ["P10"] and markers_in("표 [1] 참고, [별표 2]") == []

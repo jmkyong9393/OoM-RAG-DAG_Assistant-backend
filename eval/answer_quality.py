@@ -32,7 +32,7 @@ from app.graph import pipeline  # noqa: E402
 from app.llm import client as llm  # noqa: E402
 from app.retrieval import embed  # noqa: E402
 
-MARKER_RE = re.compile(r"\s*\[[PN]\d+\]")
+MARKER_RE = re.compile(r"\s*\[[PN]\d+(?:\s*,\s*[PN]\d+)*\]")
 N_QUESTIONS = 3
 
 STATEMENTS_SYSTEM = """답변을 사실 문장으로 나눈다. JSON {"statements": ["…", …]} 만 낸다.

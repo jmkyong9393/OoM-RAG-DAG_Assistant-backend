@@ -17,7 +17,12 @@ from app.retrieval import db, embed, rerank
 from app.retrieval.tokenize import Tokenizer, extract_error_code, synonym_groups
 from app.sse import sse
 
-MARKER_RE = re.compile(r"\[([PN]\d+)\]")
+MARKER_RE = re.compile(r"\[((?:[PN]\d+)(?:\s*,\s*[PN]\d+)*)\]")   # [P1] 과, 모델이 묶어 쓴 [P1, P2] 도 읽는다
+
+
+def markers_in(text: str) -> list[str]:
+    """답변에 쓰인 마커를 나온 순서대로(중복 없이). 한 괄호에 묶인 것은 풀어서."""
+    return list(dict.fromkeys(m.strip() for g in MARKER_RE.findall(text) for m in g.split(",")))
 TRUNCATED_NOTE = "\n(답변 길이 상한에 도달해 이하 생략)"
 
 
@@ -164,7 +169,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         # critic — LLM 미사용: 마커 ↔ 검색 집합 대조
         yield sse("stage", StageEvent(node="critic", status="start").model_dump())
         ref_to_id = {p["ref"]: f"c:{p['chunk_id']}" for p in policy_ctx} | {n["ref"]: f"n:{n['id']}" for n in chain_ctx}
-        used = list(dict.fromkeys(MARKER_RE.findall("".join(answer))))
+        used = markers_in("".join(answer))
         verified = [m for m in used if m in ref_to_id]
         unverified = [m for m in used if m not in ref_to_id]
         yield sse("citations", CitationsEvent(verified=verified, unverified=unverified).model_dump())
