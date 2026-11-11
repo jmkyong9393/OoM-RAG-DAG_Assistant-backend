@@ -58,3 +58,14 @@ def test_notice_after_a_truncated_answer_is_still_split():
     notice = "※ 정보보안 기준은 「정보보안 기본규정」도 함께 확인해야 합니다."
     cut = "외부 반출은 부서장 승인을 받는다.\n(답변 길이 상한에 도달해 이하 생략)"
     assert aq.split_notice(f"{cut}\n\n{notice}", notice) == (cut, [notice])
+
+
+def test_schema_check_stops_on_an_older_database(tmp_path):
+    import schema_check as sc
+    for n in ("V1__init.sql", "V9__x.sql", "V14__policy_uploads.sql", "R__functions.sql"):
+        (tmp_path / n).write_text("", encoding="utf-8")
+    assert sc.repo_version(tmp_path) == 14, "문자열이 아니라 숫자로 비교한다(V9 < V14)"
+    assert sc.repo_version() >= 14
+    assert sc.stale_message(14, 14, "oom") is None and sc.stale_message(15, 14, "oom") is None
+    msg = sc.stale_message(11, 14, "oom_eval")
+    assert "V11" in msg and "V14" in msg and "POSTGRES_DB=oom_eval" in msg

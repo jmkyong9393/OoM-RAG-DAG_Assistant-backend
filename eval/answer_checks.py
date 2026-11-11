@@ -85,7 +85,10 @@ async def main() -> int:
     ap.add_argument("files", nargs="*", type=Path)
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--runs", type=int, default=1, help="항목마다 반복 횟수 (답변은 실행마다 조금씩 달라진다)")
+    ap.add_argument("--allow-stale-schema", action="store_true", help="DB 스키마가 레포보다 옛 판이어도 돌린다")
     a = ap.parse_args()
+    import schema_check
+    schema_check.ensure_current(a.allow_stale_schema)
     files = a.files or sorted((ROOT / "data" / "answer_checks").glob("*.json"))
     items = [it for f in files for it in json.loads(f.read_text(encoding="utf-8"))]
     cache: dict = {}

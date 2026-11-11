@@ -71,7 +71,7 @@
 
 **API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인, 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 규정 문서 관리(`/documents`), 규정 파일 업로드 · 자동 변환 · 검수(`/documents/uploads`), 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 150, Python 193(DB 통합 포함).
+**테스트** — Spring 150, Python 208(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과(빈 DB → `bootstrap.sh` 데이터 적재 → Caddy 경유 로그인·SSE). Lightsail 기동은 아직.
 
