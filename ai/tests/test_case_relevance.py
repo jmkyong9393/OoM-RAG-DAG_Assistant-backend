@@ -116,30 +116,26 @@ def test_close_runner_up_from_another_chain_unsettles_the_top():
     assert pipeline._settled([top, rival], None) is True, "보정하지 않은 모델은 판정하지 않는다"
 
 
-async def test_passed_candidates_across_chains_get_compared(monkeypatch):
-    """판정을 통과한 후보가 여러 체인이면 가장 가까운 것을 고르게 하고, 한 체인이면 순위대로. 고르기에 실패해도 순위대로."""
-    picks = []
-
-    async def yes(prof, query, case, usage):
-        return True
-
-    def picker(result):
-        async def fn(prof, query, cases, usage):
-            picks.append([c["node_id"] for c in cases])
-            if isinstance(result, Exception):
-                raise result
-            return result
+async def test_nearest_chain_then_rank_within_it(monkeypatch):
+    """체인은 통과한 후보 가운데 가장 가까운 것의 체인, 진입점은 그 체인에서 순위가 가장 높은 통과 후보.
+    거리가 없는 후보(조문에 연결돼 올라온 사례)는 다른 통과 후보가 없을 때만."""
+    def judge(passing):
+        async def fn(prof, query, case, usage):
+            return case["node_id"] in passing
         return fn
 
-    a = {"node_id": 2, "root_id": 2, "exact": False, "distance": 0.55, "lex_terms": 2}
-    b = {"node_id": 3, "root_id": 2, "exact": False, "distance": 0.58, "lex_terms": 1}
-    c = {"node_id": 7, "root_id": 6, "exact": False, "distance": 0.60, "lex_terms": 1}
-    monkeypatch.setattr(pipeline.llm, "judge_case", yes)
-    monkeypatch.setattr(pipeline.llm, "pick_case", picker(2))
-    assert await pipeline._choose_entry(None, "q", [a, b], FLOOR, None) == 2 and not picks, "한 체인이면 고르지 않는다"
-    assert await pipeline._choose_entry(None, "q", [a, b, c], FLOOR, None) == 7 and picks == [[2, 3, 7]]
-    monkeypatch.setattr(pipeline.llm, "pick_case", picker(RuntimeError("llm down")))
-    assert await pipeline._choose_entry(None, "q", [a, b, c], FLOOR, None) == 2
+    a = {"node_id": 2, "root_id": 2, "exact": False, "distance": 0.55, "lex_terms": 3}
+    b = {"node_id": 7, "root_id": 6, "exact": False, "distance": 0.47, "lex_terms": 1}   # 순위는 뒤지만 더 가까운 다른 체인
+    c = {"node_id": 3, "root_id": 2, "exact": False, "distance": 0.52, "lex_terms": 1}   # a 와 같은 체인, a 보다 조금 가깝다
+    linked = {"node_id": 9, "root_id": 9, "exact": False, "distance": None, "lex_terms": 0, "linked": True}
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({2, 3, 7, 9}))
+    assert await pipeline._choose_entry(None, "q", [a, b, c, linked], FLOOR, None) == 7, "더 가까운 체인"
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({2, 3, 9}))
+    assert await pipeline._choose_entry(None, "q", [a, b, c, linked], FLOOR, None) == 2, "같은 체인 안에서는 더 가까운 c 가 아니라 순위가 높은 a"
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({3, 7}))
+    assert await pipeline._choose_entry(None, "q", [a, {**b, "distance": 0.58}, c], FLOOR, None) == 3
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge({9}))
+    assert await pipeline._choose_entry(None, "q", [a, b, c, linked], FLOOR, None) == 9
 
 
 async def test_far_candidates_are_judged_never_trusted(monkeypatch):
@@ -192,7 +188,6 @@ async def test_judge_is_skipped_without_key(fake_mode):
     from app.config import profile
     from app.llm import client as llm
     assert await llm.judge_case(profile(), "q", {"root_title": "r", "title": "t", "summary": "s"}, llm.Usage()) is True
-    assert await llm.pick_case(profile(), "q", [{"root_title": "r", "title": "t"}, {"root_title": "r2", "title": "t2"}], llm.Usage()) == 0
 
 
 @requires_db

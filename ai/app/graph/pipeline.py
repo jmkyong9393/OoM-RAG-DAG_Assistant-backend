@@ -386,7 +386,8 @@ def _case_candidates(ws: int, q_tokens: str, q_vec: list[float] | None, error_co
 
 async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | None, usage) -> int | None:
     """후보 중 진입 노드. 확실한 1위가 아니면 가벼운 모델이 후보마다 같은 문제인지 본다(병렬).
-    통과한 후보가 여러 체인에 걸치면 질문과 가장 가까운 것을 한 번 더 고르게 하고, 그 밖에는 통과한 첫 후보를 쓴다.
+    체인은 통과한 후보 가운데 질문과 가장 가까운(벡터 거리) 것의 체인으로 정한다 — 순위에는 어휘 점수가 섞여 있어 낱말만 겹치는 다른 체인이 앞설 때가 있다.
+    그 체인 안에서는 순위가 가장 높은 통과 후보를 쓴다 — 같은 체인의 기록끼리는 거리가 비슷해, 질문의 낱말까지 본 순위가 그 문제를 다룬 기록을 더 잘 고른다.
     1위 후보의 판정이 실패하면 순위를 그대로 믿는다 — 멀리 있는 후보(weak)는 판정 없이 채택하지 않는다."""
     if not hits:
         return None
@@ -403,12 +404,10 @@ async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | N
     if verdicts[0] is None:
         return None if hits[0].get("weak") else hits[0]["node_id"]
     passed = [h for h, v in zip(hits, verdicts) if v]
-    if len({_chain_of(h) for h in passed}) > 1:
-        try:
-            return passed[await asyncio.wait_for(llm.pick_case(prof, query, passed, usage), JUDGE_TIMEOUT)]["node_id"]
-        except Exception:  # noqa: BLE001 — 고르지 못하면 순위대로
-            pass
-    return passed[0]["node_id"] if passed else None
+    if not passed:
+        return None
+    nearest = min(passed, key=lambda h: h["distance"] if h["distance"] is not None else float("inf"))   # 거리가 없는 후보(조문에 연결돼 올라온 사례)는 맨 뒤. 같으면 순위대로(min 은 앞의 것)
+    return next(h for h in passed if _chain_of(h) == _chain_of(nearest))["node_id"]
 
 
 async def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,

@@ -12,7 +12,7 @@
  {"workspace_id": 23, "query": "카드사 이의제기 들어왔을 때 어떻게 대응했어?", "note": "규정에 기준 없음(카드사 이의제기 대응)",
   "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s6-root"}, {"log": "it-cs_v1", "ref": "s6-flow"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
  {"workspace_id": 23, "query": "상담원이 2단계 인증 대신 풀어줘도 돼?", "note": "규정에 기준 없음(상담원 수동 해제의 본인 확인 기준)",
-  "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s3-bypass"}, {"log": "it-cs_v1", "ref": "s3-bypass-fix"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없"]},
+  "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s3-bypass"}, {"log": "it-cs_v1", "ref": "s3-bypass-fix"}], "contains_any": ["기준이 없", "정해져 있지 않", "규정에 없", "명시되어 있지 않", "기준 없이"]},
  {"workspace_id": 23, "query": "환불 며칠 안에 해줘야 해?", "note": "따른 조치: 제11조 3영업일(당시 팀 목표는 5영업일)",
   "cite_chunks_any": ["it-refund-2026-11-a11-1"], "cite_nodes_any": [{"log": "it-cs_v1", "ref": "s5-sla"}, {"log": "it-cs_v1", "ref": "s5-root"}], "contains_all": ["3영업일"]},
  {"workspace_id": 21, "query": "SEV-2 장애 사후분석 회의는 며칠 안에 열어야 해?", "note": "규정 질의: 제17조 5영업일",

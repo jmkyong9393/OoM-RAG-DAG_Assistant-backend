@@ -120,24 +120,6 @@ async def judge_case(profile: LlmProfile, query: str, case: dict, usage: Usage) 
     return data["relevant"]
 
 
-PICK_SYSTEM = ("아래 후보는 모두 사용자 질문과 관련 있다고 본 사내 해결 사례다. 질문의 상황(대상 · 증상 · 묻는 것)과 가장 가까운 후보 하나를 고른다. "
-               "질문에 적힌 대상과 증상이 사례 묶음 제목 · 기록에 직접 나오는 후보를 우선한다. "
-               'JSON 으로만 답한다: {"pick": 후보 번호}')
-
-
-async def pick_case(profile: LlmProfile, query: str, cases: list[dict], usage: Usage) -> int:
-    """관련 있다고 본 후보가 여러 체인에 걸칠 때, 질문과 가장 가까운 후보의 자리(0부터). 키가 없으면 고르지 않고 순위대로 0."""
-    if ai_mode() != "openai" or not profile.has_key:
-        return 0
-    listing = "\n".join(f"후보 {i}: 사례 묶음 제목: {c['root_title']} / 기록: {c['title']} / 요약: {(c.get('summary') or '')[:200]}"
-                        for i, c in enumerate(cases, 1))
-    data = await _chat_json(profile, profile.model_light, PICK_SYSTEM, f"질문: {query}\n\n{listing}", usage)
-    n = int(data["pick"])
-    if not 1 <= n <= len(cases):
-        raise ValueError("pick: out of range")
-    return n - 1
-
-
 # ── 생성 (스트리밍) ──────────────────────────────────────────────────────────
 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.
