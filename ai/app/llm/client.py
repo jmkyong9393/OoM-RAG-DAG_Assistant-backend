@@ -415,11 +415,97 @@ async def refine(profile: LlmProfile, title: str, body: str, tokenizer: Tokenize
     return RefineResult(error_code=code, keywords=nouns, resolution_summary=(first[:120] if first else None))
 
 
+CHAIN_SUMMARY_MAX_CHARS = 600    # 이보다 길면 마지막 문장 끝에서 자른다(실패로 세지 않음 — 비용은 이미 들었다)
+CHAIN_SUMMARY_MAX_TOKENS = 600   # 출력 상한(길이 · 비용). 3문장이면 넉넉하다
+
+CHAIN_SUMMARY_SYSTEM = """사내 트러블슈팅 기록 묶음(장애 건 하나)의 흐름을 직원이 한눈에 알 수 있게 한국어 한 단락으로 요약한다.
+규칙: (1) 일어난 순서대로 쓴다 — 어떤 문제가 생겼는지 → 원인을 어떻게 찾았는지 → 무엇을 시도했는지(효과가 없던 시도 포함) → 무엇으로 해결했는지. 장애 건의 처리 상태(완료·진행 중 등)는 쓰지 않는다 — 화면에 따로 표시된다.
+(1-1) 입력 첫 줄이 '[참고 메모]' 이면 장애 건이 아니다 — 무엇에 관한 메모인지와 그 내용만 쓰고, 해결 기록이 없다는 말은 하지 않는다.
+(2) 아래 기록에 적힌 내용만 쓴다. 기록에 없는 원인·시도·해결·수치를 지어내거나 일반 상식으로 채우지 않는다. 해결 기록이 없으면 아직 해결 기록이 없다고 쓴다.
+(3) 기록은 들여쓰기 트리로 주어진다. 각 기록의 ' — ' 뒤는 사람이 쓴 기록 본문(원문, 앞부분만)이다. 들여쓰기가 깊을수록 위 기록에 이어진 뒤 단계다. 태그의 '원인'은 장애 건의 원인, '해결'은 장애 건을 실제로 해결한 기록이다.
+(4) '폐기' 태그가 붙은 기록은 해결책으로 쓰지 않고, 필요하면 더 이상 유효하지 않은 조치라고만 언급한다.
+(5) 분량: 3문장 이내, 300자 안팎. 목록·제목·마커 없이 문장으로만 쓰고, 문장은 '~습니다' 체로 끝낸다. 수치·기간·에러 코드는 기록에 적힌 그대로 쓴다.
+JSON {"summary": "…"} 만 낸다."""
+TYPE_KO = {"fail": "실패", "success": "성공", "ref": "참고"}
+
+
+def _chain_tree(nodes: list[dict], edges: list[dict]) -> list[str]:
+    """체인을 들여쓰기 트리로: 루트(상위 없는 기록)부터 간선을 따라 내려가며, 형제는 등록 순. 상위가 여럿인 기록은 두 번째부터 '(위와 같은 기록)'."""
+    by_id = {n.get("id"): n for n in nodes}
+    kids: dict = {}
+    has_parent = set()
+    for e in edges:
+        if e.get("parent_id") in by_id and e.get("child_id") in by_id:
+            kids.setdefault(e["parent_id"], []).append(e)
+            has_parent.add(e["child_id"])
+    order = lambda i: (str(by_id[i].get("created_at") or ""), i)  # noqa: E731
+    lines: list[str] = []
+    seen: set = set()
+
+    def walk(i, level: int, reason: str | None) -> None:
+        n, pad = by_id[i], "  " * level
+        if i in seen:
+            lines.append(f"{pad}- (위와 같은 기록) {n.get('title', '')}")
+            return
+        seen.add(i)
+        tags = ([TYPE_KO.get(n.get("type"), n.get("type", ""))] + (["원인"] if n.get("is_cause") else [])
+                + (["해결"] if n.get("resolves_root") else []) + (["폐기"] if n.get("status") == "deprecated" else []))
+        date = f" ({str(n['created_at'])[5:10].replace('-', '/')})" if n.get("created_at") else ""
+        body = " ".join(str(n.get("body") or "").split())   # 원문 — 줄바꿈은 한 줄로
+        text = f" — {body}" if body else ""
+        why = f" ← 이어 붙인 이유: {reason}" if reason else ""
+        lines.append(f"{pad}- [{'·'.join(tags)}] {n.get('title', '')}{date}{text}{why}")
+        for e in sorted(kids.get(i, []), key=lambda e: order(e["child_id"])):
+            walk(e["child_id"], level + 1, e.get("reason"))
+
+    for i in sorted((i for i in by_id if i not in has_parent), key=order):
+        walk(i, 0, None)
+    for i in sorted((i for i in by_id if i not in seen), key=order):   # 사이클 등으로 루트에서 닿지 않은 기록(없어야 정상)
+        walk(i, 0, None)
+    return lines
+
+
+def _chain_header(nodes: list[dict], edges: list[dict]) -> str:
+    """입력 첫 줄. 맨 위 기록(상위 없는 기록)이 모두 참고면 장애 건이 아니라고 데이터 바로 위에 적는다 — 장애 건처럼 원인·해결 흐름을 찾거나 '해결 기록이 없다'고 쓰지 않게."""
+    ids = {n.get("id") for n in nodes}
+    has_parent = {e.get("child_id") for e in edges if e.get("parent_id") in ids}
+    roots = [n for n in nodes if n.get("id") not in has_parent]
+    if roots and all(n.get("type") == "ref" for n in roots):
+        return "[참고 메모]"
+    return "[기록]"
+
+
+def _clip(text: str, limit: int = CHAIN_SUMMARY_MAX_CHARS) -> str:
+    """요약 길이 상한 — 넘으면 상한 안의 마지막 문장 끝까지, 문장 끝이 너무 앞이면 글자로 자르고 '…'."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = cut.rfind(".")
+    return cut[:end + 1] if end >= limit // 3 else cut.rstrip() + "…"
+
+
+async def summarize_chain(profile: LlmProfile, nodes: list[dict], edges: list[dict], usage: Usage, total: int | None = None) -> str | None:
+    """타임라인 'AI 요약' — 장애 건(루트~리프 전체)의 흐름을 한 단락으로. openai 모드에서만 LLM 1회(답변 모델), 아니면 None(호출 측이 대체 문장을 쓴다).
+    nodes: {id, type, status, title, body?, is_cause?, resolves_root?, created_at?}, edges: {parent_id, child_id, reason?}
+    total: 장애 건 전체 기록 수 — Spring 이 입력을 줄여 보냈으면(해결 · 원인 경로 우선) nodes 보다 크다."""
+    if ai_mode() != "openai" or not profile.has_key or not nodes:
+        return None
+    lines = [_chain_header(nodes, edges)]
+    if total and total > len(nodes):
+        lines.append(f"(기록 {total}건 중 {len(nodes)}건만 — 해결 · 원인 경로를 먼저 골랐다)")
+    lines += _chain_tree(nodes, edges)
+    data = await _chat_json(profile, profile.model_answer, CHAIN_SUMMARY_SYSTEM, "\n".join(lines), usage, max_tokens=CHAIN_SUMMARY_MAX_TOKENS)
+    s = data.get("summary") if isinstance(data, dict) else None
+    return _clip(s.strip()) if isinstance(s, str) and s.strip() else None
+
+
 # ── OpenAI 호환 호출 ─────────────────────────────────────────────────────────
 
-async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage) -> dict:
+async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage, max_tokens: int | None = None) -> dict:
     body = {"model": model, "temperature": 0, "response_format": {"type": "json_object"},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+    if max_tokens:
+        body["max_tokens"] = max_tokens
     async with httpx.AsyncClient(timeout=60) as client:
         for _ in (1, 2):   # 기본 키가 막힌 응답이면 예비 키로 한 번 다시 보낸다
             r = await client.post(f"{profile.base_url}/chat/completions", headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body)

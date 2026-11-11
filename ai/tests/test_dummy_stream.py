@@ -54,7 +54,7 @@ async def test_health_reports_mode_and_chain_summary(dummy_mode):
         h = (await client.get("/ai/health")).json()
         assert h["status"] == "ok" and h["mode"] == "dummy" and h["models"] == {}
         s = (await client.post("/ai/chain-summary", json={"nodes": [{"title": "A"}, {"title": "B"}], "edges": []})).json()
-    assert s == {"summary": "A → B"}
+    assert s == {"summary": "A → B", "code": "AI_DISABLED"}
 
 
 def test_auto_mode_without_key_is_fake(monkeypatch):
