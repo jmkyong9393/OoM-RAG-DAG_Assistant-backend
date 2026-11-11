@@ -83,7 +83,10 @@ def main() -> int:
     ap.add_argument("--record", action="store_true")
     ap.add_argument("--rerank", action="store_true")
     ap.add_argument("files", nargs="*", type=Path)
+    ap.add_argument("--allow-stale-schema", action="store_true", help="DB 스키마가 레포보다 옛 판이어도 돌린다")
     a = ap.parse_args()
+    import schema_check
+    schema_check.ensure_current(a.allow_stale_schema)
     files = a.files or sorted((ROOT / "data" / "evalset").glob("*.json"))
     items = [it for f in files for it in json.loads(f.read_text(encoding="utf-8"))]
     if not items:

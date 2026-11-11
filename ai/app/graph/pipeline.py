@@ -35,6 +35,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
             terms = db.user_terms(conn)
             cctx = db.classify_context(conn, workspace_id, error_code)
             stale_vec = _stale_vectors(conn, ws)
+            scope_docs = db.scope_documents(conn, workspace_id)
         if policy_enabled is None:
             policy_enabled = bool(ws["policy_enabled"])
         # 부서 설정: 사례를 끈 부서(규정 참조형)는 사례를 찾지 않는다. 규정까지 꺼져 있으면 사례가 유일한 근거라 켠 것으로 본다
@@ -153,6 +154,11 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         truncated = usage.finish_reason == "length"
         if truncated:
             yield sse("token", TokenEvent(text=TRUNCATED_NOTE).model_dump())
+        # 근거에 없는 다른 규정 영역 안내 — 모델이 아니라 서버가 고정 문구로(같은 부서 범위에 실제 있는 문서 제목만)
+        notice = llm.other_rule_notice(query, policy_ctx, scope_docs, "".join(answer)) if policy_enabled else None
+        if notice:
+            answer.append("\n\n" + notice)
+            yield sse("token", TokenEvent(text="\n\n" + notice).model_dump())
         yield sse("stage", StageEvent(node="generate", status="done").model_dump())
 
         # critic — LLM 미사용: 마커 ↔ 검색 집합 대조

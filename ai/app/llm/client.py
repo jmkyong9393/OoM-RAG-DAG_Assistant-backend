@@ -294,6 +294,56 @@ def _wording_notes(policies: list[dict]) -> list[str]:
     return out[:2]
 
 
+# 질문의 다른 규정 영역 단서 → 그 영역 문서(slug 일부). 검색이 둘째 문서를 못 찾는 질의가 있어(80위 밖) 답변이 빈 곳을 알리게 한다
+# (영역, 문서 slug 일부, 단서 낱말, 함께 있어야 하는 말 — None 이면 낱말만으로)
+# 개인정보는 낱말만으로는 지급 시기 · 이력서 정정 같은 질문에도 걸려(317건 중 4건) 보거나 넘기는 말이 함께 있을 때만
+OTHER_AREAS = (
+    ("급여·근로시간", "payroll", ("근무시간", "근로시간", "휴게", "휴식", "쉬는 시간", "쉰 ", "야근", "연장근로", "수당", "임금", "월급", "무급", "유급"), None),
+    ("개인정보", "privacy", ("개인정보", "연락처", "전화번호", "주민번호", "주민등록", "주소록", "명세서", "이력서"),
+     ("볼 수", "봐도", "열람", "보여", "조회", "공유", "넘겨", "보내", "제공", "다운로드")),
+    ("정보보안", "infosec", ("외부 업체", "외부업체", "사외", "반출", "유출", "USB", "외부로"), None),
+)
+
+
+def _other_rules(query: str, policies: list[dict], scope_docs: list[dict] | None) -> list[dict]:
+    """질문이 건드리는 다른 규정 영역 중 근거에 그 영역 문서가 없고 같은 부서 범위에 문서가 있는 것들 [{cue, area, titles}] (OTHER_AREAS 순서)."""
+    out = []
+    for area, key, cues, needs in OTHER_AREAS if scope_docs else ():
+        cue = next((c for c in cues if c in query), None)
+        if not cue or (needs and not any(w in query for w in needs)) or any(key in (p.get("slug") or "") for p in policies):
+            continue
+        titles = [d["title"] for d in scope_docs if key in d["slug"]][:2]
+        if titles:
+            out.append({"cue": cue.strip(), "area": area, "titles": titles})
+    return out
+
+
+def _other_rule(query: str, policies: list[dict], scope_docs: list[dict] | None) -> dict | None:
+    """첫 영역 하나 {cue, area, names} — 발동 여부를 볼 때."""
+    o = next(iter(_other_rules(query, policies, scope_docs)), None)
+    return {"cue": o["cue"], "area": o["area"], "names": " · ".join(f"「{t}」" for t in o["titles"])} if o else None
+
+
+NOTICE_PREFIX = "※ "   # 서버가 덧붙이는 안내 줄의 표지 — 채점 도구가 모델 생성문과 구분한다
+
+
+# 답변이 스스로 근거의 빈 곳을 인정한 표현 — 지시문 (9)의 "제공된 규정에는 …기준이 없습니다" 꼴
+GAP_ADMITTED = re.compile(r"기준이 없|근거 없음|정한 규정이 없|규정은 없|정해져 있지 않|명시되어 있지 않|제시되지 않")
+
+
+def other_rule_notice(query: str, policies: list[dict], scope_docs: list[dict] | None, answer: str = "") -> str | None:
+    """답변 생성이 끝난 뒤 서버가 덧붙이는 고정 문구. 모델 입력은 바꾸지 않는다 — 지시문으로 넣으면 모델이 설명을 덧붙이다 조 번호를 틀리거나
+    지시 문장이 답변에 새어 나왔다. 답변이 빈 곳을 인정했을 때만 붙인다(이미 근거로 답을 낸 질문에 붙이면 불필요한 안내가 된다).
+    영역이 여럿이면 한 문장에 함께, 답변이 이미 그 문서 제목을 모두 말한 영역은 뺀다."""
+    if not GAP_ADMITTED.search(answer):
+        return None
+    rules = [o for o in (_other_rules(query, policies, scope_docs) if policies else []) if not all(t in answer for t in o["titles"])]
+    if not rules:
+        return None
+    parts = [f"{o['area']} 기준은 " + " · ".join(f"「{t}」" for t in o["titles"]) for o in rules]
+    return f"{NOTICE_PREFIX}{', '.join(parts)}도 함께 확인해야 합니다."
+
+
 def _note_text(p: dict) -> str:
     """대조표의 메모. 규정이 개정된 사례면 메모가 말하는 '현재 기준'은 개정 전 기준이다 — 모델에게 바꿔 읽으라고 하지 않고 여기서 바꿔 넘긴다."""
     note = p.get("note") or ""

@@ -108,16 +108,27 @@ def parse(buf: bytes) -> list[tuple[str, object]]:
     return out
 
 
+def split_notice(text: str, notice: str | None) -> tuple[str, list[str]]:
+    """서버가 답변 끝에 붙인 안내(notice)만 떼어 낸다 — 그 문장과 글자까지 같고 맨 끝에 있을 때만.
+    모델이 쓴 문장은 '※'로 시작해도 그대로 채점한다(지난 답변 2,494건에서 모델이 '※'를 쓴 적은 없다)."""
+    body = text.rstrip()
+    if notice and body.endswith(notice):
+        return body[: -len(notice)].rstrip(), [notice]
+    return text.strip(), []
+
+
 async def run_one(item: dict, prof, judge: str, seen: dict, emb_prof) -> dict:
     seen.clear()
     buf = b""
     async for chunk in pipeline.run(item["workspace_id"], None, item["query"]):
         buf += chunk
     blocks = parse(buf)
-    answer = strip_markers("".join(b[1]["text"] for b in blocks if b[0] == "token"))
+    text = strip_markers("".join(b[1]["text"] for b in blocks if b[0] == "token"))
+    # 서버가 덧붙인 안내(모델 생성문이 아님)는 채점에서 빼고 결과에 따로 남긴다
+    answer, notice = split_notice(text, seen.get("notice"))
     context = seen.get("context")          # 생성 모델에 실제로 준 컨텍스트. 근거가 없어 생성하지 않았으면 None
     usage = llm.Usage()
-    row = {"workspace_id": item["workspace_id"], "query": item["query"], "answer": answer, "no_answer": context is None,
+    row = {"workspace_id": item["workspace_id"], "query": item["query"], "answer": answer, "system_notice": notice, "no_answer": context is None,
            "faithfulness": None, "statements": 0, "supported": 0, "unsupported": []}
     if context is not None:
         st = (await llm._chat_json(prof, judge, STATEMENTS_SYSTEM, f"[질문]\n{item['query']}\n\n[답변]\n{answer}", usage)).get("statements") or []
@@ -170,7 +181,10 @@ async def main() -> int:
     ap.add_argument("--relevance-embedding", default=None, help="관련성에 쓸 임베딩 모델. 기본은 검색에 쓰는 모델")
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--record", action="store_true")
+    ap.add_argument("--allow-stale-schema", action="store_true", help="DB 스키마가 레포보다 옛 판이어도 돌린다")
     a = ap.parse_args()
+    import schema_check
+    schema_check.ensure_current(a.allow_stale_schema)
     prof = profile()
     if not (ai_mode() == "openai" and prof.has_key):
         print("채점은 openai 모드에서만 한다 (LLM 키 필요)"); return 1
@@ -182,10 +196,16 @@ async def main() -> int:
     seen: dict = {}
     render = llm._render_context
 
-    def spy(policy_ctx, chain_ctx):
-        seen["context"] = render(policy_ctx, chain_ctx)
+    def spy(*args, **kw):
+        seen["context"] = render(*args, **kw)
         return seen["context"]
     llm._render_context = spy
+    make_notice = llm.other_rule_notice
+
+    def notice_spy(*args, **kw):   # 서버가 실제로 붙인 안내 문장을 그대로 기억한다
+        seen["notice"] = make_notice(*args, **kw)
+        return seen["notice"]
+    llm.other_rule_notice = notice_spy
     rows = []
     for it in items:
         r = await run_one(it, prof, judge, seen, emb_prof)
