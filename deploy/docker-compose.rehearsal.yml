@@ -1,0 +1,13 @@
+# 운영 compose 를 실제 프론트 이미지까지 넣어 로컬에서 돌려 보는 오버라이드(스모크와 같되 web 스텁이 없다).
+# 사용: WEB_IMAGE=<프론트 이미지> bash smoke.sh --web [--quick] [--keep]
+services:
+  postgres:
+    ports:
+      - "15433:5432"
+  caddy:
+    environment:
+      SITE_ADDRESS: http://localhost
+  api:
+    environment:
+      SESSION_SECURE_COOKIE: "false"
+      CORS_ORIGINS: http://localhost

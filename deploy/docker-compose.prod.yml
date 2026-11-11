@@ -71,6 +71,7 @@ services:
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
       SEED_PASSWORD: ${SEED_PASSWORD:-Oom!demo-2026}
       UPLOADS_DIR: /data/uploads   # 규정 업로드 원본 · 변환본 — ai 와 같은 볼륨
+      PUBLIC_TENANT: ${PUBLIC_TENANT:-}   # 로그인 전 대문에 부서를 보여 줄 데모 회사. 비우면 빈 목록
       PRIVACY_POLICY_PATH: /data/legal/privacy_policy.md   # 이미지에는 data/ 가 없다 — 동의 화면 문안(GET /auth/privacy-policy)을 마운트로 준다
     volumes:
       - ../data/legal:/data/legal:ro

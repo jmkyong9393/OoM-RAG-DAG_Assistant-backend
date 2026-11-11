@@ -147,6 +147,8 @@ cd deploy && cp .env.example .env.smoke   # 값 채우기 (WEB_IMAGE 는 프론�
 bash smoke.sh                             # 운영 compose 전체: 마이그레이션 → 데이터 적재(bootstrap.sh) → Caddy 경유 로그인·SSE 확인 후 내림 (--keep 유지 · --quick 시드 + 평가 결과만)
 ```
 
+Lightsail 에 올릴 때는 `deploy/lightsail/`(서버 생성 · 운영 설정 · 이미지 전송 · 기동을 명령 네 줄로 — 그 폴더의 README). 실제 프론트 이미지까지 넣은 리허설은 `WEB_IMAGE=<이미지> bash smoke.sh --web --quick`.
+
 박스 첫 기동 (빈 DB):
 
 ```bash
