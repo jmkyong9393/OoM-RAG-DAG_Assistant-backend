@@ -69,6 +69,7 @@ services:
       CORS_ORIGINS: ${SITE_ORIGIN:-http://localhost}
       SESSION_SAME_SITE: Lax
       SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+      CHAIN_SUMMARY_AUTO: ${CHAIN_SUMMARY_AUTO:-true}   # false 면 장애 건 AI 요약을 새로 만들지 않는다
       SEED_PASSWORD: ${SEED_PASSWORD:-Oom!demo-2026}
       UPLOADS_DIR: /data/uploads   # 규정 업로드 원본 · 변환본 — ai 와 같은 볼륨
       PRIVACY_POLICY_PATH: /data/legal/privacy_policy.md   # 이미지에는 data/ 가 없다 — 동의 화면 문안(GET /auth/privacy-policy)을 마운트로 준다

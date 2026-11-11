@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.oom.assist.chain.ChainSummaryService;
+import com.oom.assist.common.config.AppProps;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -18,10 +19,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 장애 건 AI 요약 — GET /chains/{id} 가 저장된 요약을 보여 주고, 없거나 오래됐으면 백그라운드로 만든다. Python 대신 JDK HttpServer 가 /ai/chain-summary 에 답한다.
@@ -38,6 +41,9 @@ class ChainSummaryApiTest extends AbstractApiTest {
   static final AtomicReference<String> scenario = new AtomicReference<>("ok");
   static final AtomicInteger calls = new AtomicInteger();
   static final AtomicReference<String> lastBody = new AtomicReference<>("");
+
+  @Autowired AppProps props;
+  @Autowired ObjectMapper json;
 
   @TestBean(name = "chainSummaryBackground", methodName = "inline")
   ChainSummaryService.Background background;
@@ -74,6 +80,7 @@ class ChainSummaryApiTest extends AbstractApiTest {
   @DynamicPropertySource
   static void aiBaseUrl(DynamicPropertyRegistry r) {
     r.add("oom.ai.base-url", () -> "http://127.0.0.1:" + stub.getAddress().getPort());
+    r.add("oom.chain-summary.auto-on-read", () -> "true");   // 다른 API 테스트는 꺼 둔다(AbstractApiTest)
   }
 
   long root, cause;
@@ -283,5 +290,29 @@ class ChainSummaryApiTest extends AbstractApiTest {
         .andExpect(status().isCreated());
     assertThat(jdbc.sql("SELECT count(*) FROM chain_summaries WHERE root_id = ?").param(root).query(Integer.class).single())
         .isZero();   // 더 이상 장애 건(루트)이 아니어서 아무도 읽지 않는 행
+  }
+
+  @Test
+  void summarizeFalseReadsTheStoredSummaryButNeverStartsOne() throws Exception {
+    ResultActions preview = mvc.perform(as(get("/chains/" + root + "?summarize=false"), userBackend, wsSw)).andExpect(status().isOk());
+    preview.andExpect(jsonPath("$.summary").value(TEMPLATE)).andExpect(jsonPath("$.summary_status").value("none"));
+    assertThat(calls.get()).isZero();   // 미리보기는 만들지 않는다
+    openTwice(root);
+    addChild(cause, "해결: 배치 재기동");
+    mvc.perform(as(get("/chains/" + root + "?summarize=false"), userBackend, wsSw))
+        .andExpect(jsonPath("$.summary").value("요약 1")).andExpect(jsonPath("$.summary_status").value("stale"));   // 저장된 이전 요약은 보여 준다
+    assertThat(calls.get()).isEqualTo(1);
+    openTwice(root).andExpect(jsonPath("$.summary").value("요약 2"));   // 타임라인 조회는 그대로 다시 만든다
+  }
+
+  @Test
+  void autoOnReadOffNeverStartsASummary() {
+    AtomicInteger started = new AtomicInteger();
+    ChainSummaryService off = new ChainSummaryService(jdbc, props, json, task -> started.incrementAndGet(), false);
+    assertThat(off.view(wsSw, root, r -> null).status()).isEqualTo("none");
+    assertThat(started.get()).isZero();
+    ChainSummaryService on = new ChainSummaryService(jdbc, props, json, task -> started.incrementAndGet(), true);
+    on.view(wsSw, root, r -> null);
+    assertThat(started.get()).isEqualTo(1);
   }
 }
