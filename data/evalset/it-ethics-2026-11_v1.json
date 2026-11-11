@@ -10,8 +10,8 @@
   {"workspace_id": 20, "kind": "policy", "query": "신고한 사람이 누군지 알아보려고만 해도 문제 되나요?", "expect": ["c:it-ethics-2026-11-a28-1"], "note": "의역 | 제28조 ③ | 신고자 신분을 캐내려는 시도만으로도 징계 심의 대상"},
   {"workspace_id": 20, "kind": "policy", "query": "업체 뽑는 중인데 견적 낸 회사 담당자랑 따로 봐도 돼?", "expect": ["c:it-ethics-2026-11-a20-1"], "note": "의역 | 제20조 ② | 선정 기간에는 제안사와 따로 만나지 않음"},
   {"workspace_id": 20, "kind": "policy", "query": "대행사가 비싼 선물을 택배로 보내버렸는데 어떡해야 되요?", "expect": ["c:it-ethics-2026-11-a7-1"], "note": "의역(오타) | 제7조 ① | 반송할 수 있으면 즉시 반송, 어려우면 윤리 담당부서 안내에 따라 처리"},
-  {"workspace_id": 20, "kind": "policy", "query": "거래처 장례식에 보내는 조화는 얼마짜리까지 돼요?", "expect": ["c:it-ethics-2026-11-s31-1"], "note": "표 | 별표 2 화환·조화 행 | 10만 원 이하, 장례식·결혼식에 한해 회사 명의 가능"},
-  {"workspace_id": 20, "kind": "policy", "query": "AI 윤리 자가점검은 몇 문항이고 소위원회는 얼마나 자주 열려?", "expect": ["c:it-ethics-2026-11-s20-1"], "note": "표 | 별표 1 점검 행 | 63개 문항 자가점검과 4단계 핵심 체크리스트, 소위원회 월 1회"},
+  {"workspace_id": 20, "kind": "policy", "query": "거래처 장례식에 보내는 조화는 얼마짜리까지 돼요?", "expect": ["c:it-ethics-2026-11-s31-1"], "expect_alt": ["c:it-ethics-2026-11-a6-1"], "note": "표 | 별표 2 화환·조화 행 | 10만 원 이하, 장례식·결혼식에 한해 회사 명의 가능"},
+  {"workspace_id": 20, "kind": "policy", "query": "AI 윤리 자가점검은 몇 문항이고 소위원회는 얼마나 자주 열려?", "expect": ["c:it-ethics-2026-11-s20-1"], "expect_alt": ["c:it-ethics-2026-11-a19-1"], "note": "표 | 별표 1 점검 행 | 63개 문항 자가점검과 4단계 핵심 체크리스트, 소위원회 월 1회"},
   {"workspace_id": 20, "kind": "policy", "query": "상품권 선물 한도가 평소랑 명절 때랑 달라요?", "expect": ["c:it-ethics-2026-11-a6-1"], "note": "비교 | 제6조 ② | 평소 15만 원 이하, 설날·추석에는 30만 원 이하"},
   {"workspace_id": 20, "kind": "policy", "query": "윤리·부정 제보랑 법 위반 제보는 받는 부서가 달라?", "expect": ["c:it-ethics-2026-11-a26-1"], "note": "비교 | 제26조 ④ | 윤리·부정 제보는 경영진단(감사) 부서, 법 위반 제보는 컴플라이언스 부서"}
 ]

@@ -21,7 +21,7 @@ from app.retrieval.tokenize import Tokenizer  # noqa: E402
 async def main() -> int:
     prof = profile(os.environ.get("LLM_PROFILE", "default"))
     if not prof.has_key:
-        print(f"LLM_PROFILE_{prof.name.upper()}_API_KEY 가 비어 있습니다"); return 2
+        print(f"LLM_PROFILE_{prof.name.upper()}_API_KEY 와 _API_KEY_BACKUP 이 모두 비어 있습니다"); return 2
     print(f"profile={prof.name} base={prof.base_url} light={prof.model_light} answer={prof.model_answer} embed={prof.embedding_model}")
     u = llm.Usage()
     ok = True

@@ -60,6 +60,21 @@ async def test_openai_mode_summarizes_with_answer_model(monkeypatch):
         assert body["messages"][1]["content"].startswith("[기록]\n(기록 50건 중 4건만 — 해결 · 원인 경로를 먼저 골랐다)\n- [실패] VPN 접속 시 E-403 반복")
 
 
+async def test_summary_moves_to_the_backup_key_when_the_primary_is_out_of_credit(monkeypatch):
+    from app import config
+    with OpenAIStub() as stub:
+        monkeypatch.setattr(config, "_on_backup", set())
+        monkeypatch.setenv("AI_MODE", "openai")
+        monkeypatch.setenv("LLM_PROFILE_DEFAULT_BASE_URL", stub.base_url)
+        monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-empty")
+        monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", "sk-backup")
+        stub.reject("sk-empty", 429, {"message": "no credits", "type": "insufficient_quota", "code": "credit_balance_exhausted"})
+        async with _client() as client:
+            s = (await client.post("/ai/chain-summary", json={"nodes": NODES, "edges": EDGES})).json()
+        assert s["code"] is None and s["summary"] == "스텁 체인 요약입니다."
+        assert [c["auth"] for c in stub.calls] == ["Bearer sk-empty", "Bearer sk-backup"]
+
+
 def test_long_summary_is_clipped_at_a_sentence_end():
     assert _clip("짧습니다.") == "짧습니다."
     long = "가" * 250 + "습니다. " + "나" * 300 + "습니다. " + "다" * 300 + "습니다."

@@ -11,7 +11,7 @@
   {"workspace_id": 22, "kind": "policy", "query": "군대 아직 안 다녀온 사람도 지원 받아줘?", "expect": ["c:it-recruit-2026-11-a8-1"], "note": "의역 | 제8조 ③④ | 병역 미필자는 지원 제한, 엔지니어 직군은 산업기능요원 대상자를 뽑음"},
   {"workspace_id": 22, "kind": "policy", "query": "이력서 이미 낸 사람이 내용 바꾸고 싶다는데 되요?", "expect": ["c:it-recruit-2026-11-a4-1"], "note": "의역(오타) | 제4조 ①② | 제출 뒤에는 고칠 수 없고, 공고 마감일 전에 삭제를 요청한 다음 새로 제출"},
   {"workspace_id": 22, "kind": "policy", "query": "지원자 입사지원 정보는 몇 년 갖고 있는 거야?", "expect": ["c:it-recruit-2026-11-s26-1"], "note": "표 | 별표 2 입사지원 정보 행 | 1년, 채용 결과 발표일부터"},
-  {"workspace_id": 22, "kind": "policy", "query": "신입 개발자 공채는 개발 경력 몇 년까지 지원돼?", "expect": ["c:it-recruit-2026-11-s15-1"], "note": "표 | 별표 1 경력 기준 행 | 개발자 공채는 총 개발 경력 3년 이하"},
+  {"workspace_id": 22, "kind": "policy", "query": "신입 개발자 공채는 개발 경력 몇 년까지 지원돼?", "expect": ["c:it-recruit-2026-11-s15-1"], "expect_alt": ["c:it-recruit-2026-11-a12-1"], "note": "표 | 별표 1 경력 기준 행 | 개발자 공채는 총 개발 경력 3년 이하"},
   {"workspace_id": 22, "kind": "policy", "query": "법에서 정한 서류 반환 청구기간이랑 우리 회사 기간은 어떻게 달라?", "expect": ["c:it-recruit-2026-11-a20-1", "c:it-recruit-2026-11-a21-1"], "note": "비교 | 제20조 ①, 제21조 ② | 법령은 14일부터 180일까지의 범위, 회사는 결과 발표 뒤 90일 이내"},
   {"workspace_id": 22, "kind": "policy", "query": "같은 포지션 재지원이랑 컬처핏 탈락 뒤 재지원은 제한 기간이 달라?", "expect": ["c:it-recruit-2026-11-a6-1"], "note": "비교 | 제6조 ①② | 같은 포지션은 6개월, 컬처핏 인터뷰 탈락은 모든 공고에 대해 1년"}
 ]

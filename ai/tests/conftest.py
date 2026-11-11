@@ -81,10 +81,17 @@ def admin_conn():
         yield conn
 
 
+@pytest.fixture(autouse=True)
+def _no_inherited_backup_key(monkeypatch):
+    """deploy/.env 의 예비 키를 테스트가 물려받지 않는다 — 기본 키만 비운 테스트가 실제 공급자를 부르지 않게. 필요한 테스트는 직접 넣는다."""
+    monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", raising=False)
+
+
 @pytest.fixture
 def fake_mode(monkeypatch):
     monkeypatch.setenv("AI_MODE", "fake")
     monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROFILE_DEFAULT_API_KEY_BACKUP", raising=False)
 
 
 @pytest.fixture

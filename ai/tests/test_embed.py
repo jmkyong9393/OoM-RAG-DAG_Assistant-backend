@@ -9,6 +9,7 @@ from app.retrieval import embed
 class Resp:
     def __init__(self, status: int, n: int = 1):
         self.status_code, self._n = status, n
+        self.text = '{"error": {"type": "requests", "code": "rate_limit_exceeded"}}' if status >= 400 else ""   # 키 문제가 아닌 일시 오류
 
     def raise_for_status(self):
         if self.status_code >= 400:

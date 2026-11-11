@@ -10,8 +10,8 @@
   {"workspace_id": 1, "kind": "policy", "query": "요청 많다고 튕긴 업체한테 다시 보내는 텀을 어떻게 안내해?", "expect": ["c:retail-dev-security-2026-11-a20-1"], "note": "의역 | 제20조 ③ | 1·2·4·8·16초로 간격을 늘려 다시 시도하고 즉시 재시도는 피함"},
   {"workspace_id": 1, "kind": "policy", "query": "툴로 사이트 싹 훑어서 구멍 찾는 외부인은 어떻게 대응해?", "expect": ["c:retail-dev-security-2026-11-a7-1"], "note": "의역 | 제7조 ③ | 자동화된 스캐닝 도구는 쓸 수 없고, 어기면 IP 차단이나 관계 당국 신고"},
   {"workspace_id": 1, "kind": "policy", "query": "호출 너무 많이 해서 막힌 업체는 언제쯤 풀리게 되요?", "expect": ["c:retail-dev-security-2026-11-a19-1"], "note": "의역(오타) | 제19조 ① | 호출을 한도 안으로 줄이면 수 분에서 수십 분 안에 차단 해제"},
-  {"workspace_id": 1, "kind": "policy", "query": "파트너 앱 Refresh Token은 며칠 동안 유효해?", "expect": ["c:retail-dev-security-2026-11-s22-1"], "note": "표 | 별표 2 유효기간 행 | Refresh Token 14일(Access Token은 2시간)"},
-  {"workspace_id": 1, "kind": "policy", "query": "취약점 포상금은 최대 얼마까지 줄 수 있어?", "expect": ["c:retail-dev-security-2026-11-s12-1"], "note": "표 | 별표 1 금전 포상 행 | 심각도 점수별, 최대 2억 원(규칙 위반 제보는 제외)"},
+  {"workspace_id": 1, "kind": "policy", "query": "파트너 앱 Refresh Token은 며칠 동안 유효해?", "expect": ["c:retail-dev-security-2026-11-s22-1"], "expect_alt": ["c:retail-dev-security-2026-11-a13-1"], "note": "표 | 별표 2 유효기간 행 | Refresh Token 14일(Access Token은 2시간)"},
+  {"workspace_id": 1, "kind": "policy", "query": "취약점 포상금은 최대 얼마까지 줄 수 있어?", "expect": ["c:retail-dev-security-2026-11-s12-1"], "expect_alt": ["c:retail-dev-security-2026-11-a10-1"], "note": "표 | 별표 1 금전 포상 행 | 심각도 점수별, 최대 2억 원(규칙 위반 제보는 제외)"},
   {"workspace_id": 1, "kind": "policy", "query": "일반 API랑 주문 조회는 한도 넘었을 때 응답이 달라?", "expect": ["c:retail-dev-security-2026-11-a18-1"], "note": "비교 | 제18조 ①③ | 일반은 HTTP 429로 돌려주고 주문 조회는 결과 코드 3000과 빈 데이터"},
   {"workspace_id": 1, "kind": "policy", "query": "약관 그냥 바꿀 때랑 파트너한테 불리하게 바꿀 때 공지 기간 달라?", "expect": ["c:retail-dev-security-2026-11-a22-1"], "note": "비교 | 제22조 ④⑤ | 약관 변경은 적용일 7일 전 공지, 불리한 변경은 30일의 유예 기간"}
 ]

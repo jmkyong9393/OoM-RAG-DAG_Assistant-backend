@@ -81,6 +81,19 @@ def test_short_merged_cell_is_filled_down_and_sections_in_order(tmp_path):
     assert lines[-1] == "※ 비고 문단", "section1 은 section0 뒤에"
 
 
+def test_nested_table_does_not_overwrite_outer_cells(tmp_path):
+    """칸 안의 중첩 표는 주소가 (0,0)부터 다시 시작한다 — 바깥 표의 제목 행 · 첫 행을 덮어쓰면 그 행이 사라진다."""
+    inner = '<hp:tbl rowCnt="1" colCnt="1">' + tc(0, 0, "* 면책사유의 개념") + "</hp:tbl>"
+    nested = ('<hp:tc><hp:cellAddr colAddr="1" rowAddr="1"/><hp:cellSpan colSpan="1" rowSpan="1"/>'
+              f"<hp:subList>{p('o 운임의 10% 배상')}<hp:p><hp:run>{inner}</hp:run></hp:p></hp:subList></hp:tc>")
+    body = tbl(2, 2, tc(0, 0, "항 공(국내 여객) (2 - 1)", colspan=2) + tc(0, 1, "3) 운송지연") + nested)
+    lines = h.convert(make_hwpx(tmp_path / "n.hwpx", [body]))
+    assert "#### 항공(국내 여객)" in lines, "바깥 표의 제목 행이 남아 소제목이 된다"
+    rows = [l for l in lines if l.startswith("|")]
+    assert rows[0].startswith("| 3) 운송지연 | o 운임의 10% 배상") and "| * 면책사유의 개념 |" in rows
+    assert lines.index("#### 항공(국내 여객)") < lines.index(rows[0])
+
+
 def test_clean_collapses_spacing_only_for_spaced_titles():
     assert h.clean("품  목  별    해  결  기  준") == "품목별해결기준"
     assert h.clean("비       고") == "비고"

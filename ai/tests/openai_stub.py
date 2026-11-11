@@ -26,6 +26,7 @@ def fake_embedding(text: str) -> list[float]:
 class Handler(BaseHTTPRequestHandler):
     server_version = "openai-stub/0.1"
     calls: list[dict] = []
+    rejected: dict[str, tuple[int, dict]] = {}   # 키 → (상태 코드, 오류 본문). 막힌 키를 흉내 낸다
 
     def log_message(self, *a):  # 조용히
         pass
@@ -45,6 +46,8 @@ class Handler(BaseHTTPRequestHandler):
         Handler.calls.append({"path": self.path, "auth": auth, "body": req})
         if not auth.startswith("Bearer "):
             return self._json(401, {"error": {"message": "missing bearer"}})
+        if auth[7:] in Handler.rejected:
+            return self._json(*Handler.rejected[auth[7:]])
         if self.path.endswith("/embeddings"):
             inputs = req["input"] if isinstance(req["input"], list) else [req["input"]]
             return self._json(200, {"object": "list", "model": req.get("model"),
@@ -107,6 +110,7 @@ class OpenAIStub:
 
     def __enter__(self):
         Handler.calls.clear()
+        Handler.rejected.clear()
         self.thread.start()
         return self
 
@@ -117,3 +121,6 @@ class OpenAIStub:
     @property
     def calls(self) -> list[dict]:
         return Handler.calls
+
+    def reject(self, key: str, status: int, error: dict) -> None:
+        Handler.rejected[key] = (status, {"error": error})

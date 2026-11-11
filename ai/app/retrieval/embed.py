@@ -5,7 +5,7 @@ import time
 
 import httpx
 
-from app.config import LlmProfile, ai_mode
+from app.config import LlmProfile, ai_mode, api_key_of, key_rejected, switch_to_backup
 
 
 def embed(profile: LlmProfile, texts: list[str]) -> list[list[float]] | None:
@@ -14,11 +14,14 @@ def embed(profile: LlmProfile, texts: list[str]) -> list[list[float]] | None:
     body: dict = {"model": profile.embedding_model, "input": texts}
     if profile.embedding_model.startswith("text-embedding-3"):   # 차원을 줄여 받을 수 있는 모델 — 스키마 vector(1536) 에 맞춘다
         body["dimensions"] = profile.embedding_dim
-    for attempt in (1, 2):   # 일시 오류(5xx·429·연결 끊김)는 한 번 다시 시도한다
+    for attempt in (1, 2):   # 일시 오류(5xx·429·연결 끊김)는 한 번 다시 시도한다. 키가 막힌 것이면 예비 키로 다시 보낸다
         try:
             r = httpx.post(f"{profile.base_url}/embeddings", timeout=60,
-                           headers={"Authorization": f"Bearer {profile.api_key}"}, json=body)
-            if attempt == 1 and (r.status_code >= 500 or r.status_code == 429):
+                           headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body)
+            if key_rejected(r.status_code, r.text) and switch_to_backup(profile):
+                r = httpx.post(f"{profile.base_url}/embeddings", timeout=60,
+                               headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body)
+            if attempt == 1 and (r.status_code >= 500 or r.status_code == 429) and not key_rejected(r.status_code, r.text):
                 time.sleep(0.5)
                 continue
             break

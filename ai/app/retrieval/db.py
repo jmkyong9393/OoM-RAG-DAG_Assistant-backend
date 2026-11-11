@@ -152,12 +152,12 @@ def cases_linked_to(conn, ws: int, keys: list[tuple[str, str]], k: int = 3) -> l
 
 
 def case_briefs(conn, ws: int, node_ids: list[int]) -> dict[int, dict]:
-    """관련성 판정에 보여 줄 요약: 체인 루트 제목 · 그 기록의 제목 · 해결 요약(없으면 본문 앞부분)."""
+    """관련성 판정에 보여 줄 요약: 체인 루트(id · 제목) · 그 기록의 제목 · 해결 요약(없으면 본문 앞부분)."""
     rows = conn.execute("""
-        SELECT v.id, v.title, coalesce(v.resolution_summary, left(v.body, 200)) AS summary, r.title AS root_title
+        SELECT v.id, v.title, coalesce(v.resolution_summary, left(v.body, 200)) AS summary, r.id AS root_id, r.title AS root_title
         FROM v_log_nodes v JOIN log_nodes r ON r.id = coalesce(v.root_id, v.id)
         WHERE v.workspace_id = %s AND v.id = ANY(%s)""", (ws, node_ids)).fetchall()
-    return {r["id"]: {"title": r["title"], "summary": r["summary"], "root_title": r["root_title"]} for r in rows}
+    return {r["id"]: {"title": r["title"], "summary": r["summary"], "root_id": r["root_id"], "root_title": r["root_title"]} for r in rows}
 
 
 # ── 정제 워커 ────────────────────────────────────────────────────────────────
