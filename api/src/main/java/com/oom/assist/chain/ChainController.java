@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -86,15 +85,6 @@ public class ChainController {
   private Chain summaryInput(long root) {   // 백그라운드 스레드에서도 불린다 — 요청 컨텍스트(TenantContext)를 쓰지 않는다
     long ws = jdbc.sql("SELECT workspace_id FROM log_nodes WHERE id = ?").param(root).query(Long.class).single();
     return build(ws, root, null, ChainSummaryService.INPUT_NODES, false);
-  }
-
-  /**
-   * POST /chains/{entry_id}/summary — 장애 건 AI 요약을 지금 만든다(기다림). 화면은 쓰지 않는다(GET 이 백그라운드로 만든다) — 확인 · 수동 재생성용.
-   * 저장된 요약의 지문이 지금과 같으면 그대로, 바뀌었으면 Python 으로 다시 만든다(ChainSummaryService).
-   */
-  @PostMapping("/chains/{entryId}/summary")
-  public ChainSummaryService.Result aiSummary(@PathVariable long entryId, TenantContext ctx) {
-    return summaries.summarize(ctx.workspaceId(), entryId, this::summaryInput);
   }
 
   private String summary(long ws, Long rootId) {

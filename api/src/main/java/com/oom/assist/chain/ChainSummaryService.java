@@ -1,7 +1,6 @@
 package com.oom.assist.chain;
 
 import com.oom.assist.common.config.AppProps;
-import com.oom.assist.common.error.ApiException;
 import com.oom.assist.common.util.Times;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -45,21 +44,6 @@ public class ChainSummaryService {
   // 요약 규칙 버전 — Python 프롬프트(ai/app/llm/client.py CHAIN_SUMMARY_SYSTEM)나 입력 형식(_chain_tree · _chain_header)을 바꾸면 올린다.
   // 지문 앞에 붙으므로 올리면 기록이 그대로여도 모든 장애 건이 다음에 열릴 때 한 번씩 새 규칙으로 다시 요약된다(그동안은 stale).
   static final String SUMMARY_VERSION = "1";
-
-  static final Map<String, String> MESSAGES = Map.of(
-      "AI_TIMEOUT", "AI 서버가 응답하지 않습니다",
-      "AI_RATE_LIMIT", "AI 사용량이 많아 잠시 후 다시 시도합니다",
-      "AI_BAD_OUTPUT", "요약 결과가 올바르지 않습니다",
-      "AI_ERROR", "요약 생성 중 오류가 발생했습니다",
-      "AI_DISABLED", "AI 요약이 꺼져 있습니다");
-
-  /**
-   * status: fresh | stale(이전 요약 — 최근 변경 미반영) | failed(보여줄 요약 없음) | generating | deprecated.
-   * summary 는 LLM 요약만 담는다(없으면 null — 한 줄 문장은 프론트가 GET /chains 로 이미 가진 것을 쓴다).
-   * retryable=false 면 같은 내용으로 3회 실패해 기록이 바뀔 때까지 다시 시도하지 않는다.
-   */
-  public record Result(String status, String summary, OffsetDateTime generatedAt, Integer basedOnRecords, int currentRecords,
-                       String code, String message, boolean retryable) {}
 
   private static final Logger log = LoggerFactory.getLogger(ChainSummaryService.class);
 
@@ -127,26 +111,23 @@ public class ChainSummaryService {
     return v;
   }
 
-  /** chainOf: 루트 id → 장애 건 요약 입력 체인(최대 INPUT_NODES 건, total = 전체 수). */
-  public Result summarize(long ws, long entryId, LongFunction<ChainController.Chain> chainOf) {
-    Long root = jdbc.sql("SELECT root_id FROM v_log_nodes WHERE workspace_id = ? AND id = ?").params(ws, entryId)
-        .query(Long.class).optional().orElseThrow(() -> ApiException.notFound("chain"));
+  /**
+   * chainOf: 루트 id → 장애 건 요약 입력 체인(최대 INPUT_NODES 건, total = 전체 수).
+   * 결과는 chain_summaries 에만 남긴다 — 화면은 다음 GET 에서 peek 로 읽는다.
+   */
+  private void summarize(long ws, long root, LongFunction<ChainController.Chain> chainOf) {
     String rootStatus = jdbc.sql("SELECT status FROM log_nodes WHERE id = ?").param(root).query(String.class).single();
-    // 기록 수는 타임라인 카드 '기록 N건'과 같은 기준(폐기 제외). 폐기 여부는 지문에 들어가 있어 폐기해도 다시 요약된다
-    int records = jdbc.sql("SELECT count(*) FROM bfs_levels(?, ARRAY[?]::bigint[], true) g JOIN log_nodes n ON n.id = g.node_id WHERE n.status = 'active'")
-        .params(ws, root).query(Integer.class).single();
+    if ("deprecated".equals(rootStatus)) return;   // 폐기된 장애 건은 LLM 을 부르지 않는다
+
     Map<String, Object> row = stored(root);
-
-    if ("deprecated".equals(rootStatus)) return result("deprecated", row, records, null, false);   // 폐기된 장애 건은 LLM 을 부르지 않는다
-
     String sig = signature(ws, root);
-    if (row != null && row.get("summary") != null && sig.equals(row.get("summary_sig"))) return result("fresh", row, records, null, false);
+    if (row != null && row.get("summary") != null && sig.equals(row.get("summary_sig"))) return;   // 최신
 
     boolean sameSig = row != null && sig.equals(row.get("sig"));
-    if (sameSig && ((Number) row.get("fail_count")).intValue() >= MAX_FAILS) return failed(row, records, false);
+    if (sameSig && ((Number) row.get("fail_count")).intValue() >= MAX_FAILS) return;   // 같은 내용으로 형식 오류 3회 — 기록이 바뀔 때까지 쉰다
     if (sameSig && row.get("failed_at") != null
-        && Times.offset(row.get("failed_at")).isAfter(dbNow().minusMinutes(FAIL_WAIT_MIN))) return failed(row, records, true);
-    if (!claim(root, sig)) return result("generating", row, records, null, true);
+        && Times.offset(row.get("failed_at")).isAfter(dbNow().minusMinutes(FAIL_WAIT_MIN))) return;   // 실패 후 대기
+    if (!claim(root, sig)) return;   // 다른 요청이 만드는 중
 
     String code;
     String error = null;
@@ -161,12 +142,15 @@ public class ChainSummaryService {
     } catch (java.net.http.HttpTimeoutException | java.net.ConnectException e) {
       code = "AI_TIMEOUT";
       error = e.toString();
-    } catch (Exception e) {   // Python 5xx · 응답 형식 오류 등 — 요약은 보조 기능이라 종류만 남기고 이전 요약으로 답한다
+    } catch (Exception e) {   // Python 5xx · 응답 형식 오류 등 — 요약은 보조 기능이라 종류만 남기고 이전 요약을 계속 보여 준다
       code = "AI_ERROR";
       error = e.toString();
     }
 
     if (code == null) {
+      // 기록 수는 타임라인 카드 '기록 N건'과 같은 기준(폐기 제외). 폐기 여부는 지문에 들어가 있어 폐기해도 다시 요약된다
+      int records = jdbc.sql("SELECT count(*) FROM bfs_levels(?, ARRAY[?]::bigint[], true) g JOIN log_nodes n ON n.id = g.node_id WHERE n.status = 'active'")
+          .params(ws, root).query(Integer.class).single();
       jdbc.sql("""
           UPDATE chain_summaries SET summary = ?, summary_sig = ?, summary_records = ?, created_at = now(),
                  model = ?, prompt_tokens = ?, completion_tokens = ?,
@@ -174,19 +158,16 @@ public class ChainSummaryService {
           WHERE root_id = ?""").params(text, sig, records,
               usage.get("model"), intOrNull(usage.get("prompt_tokens")), intOrNull(usage.get("completion_tokens")), root)
           .update();
-      return result("fresh", stored(root), records, null, false);
+      return;
     }
     if ("AI_DISABLED".equals(code)) {   // 키 없음 · fake — 실패로 세지 않는다
       jdbc.sql("UPDATE chain_summaries SET generating_since = NULL WHERE root_id = ?").param(root).update();
-      Map<String, Object> now = stored(root);
-      return result(now.get("summary") != null ? "stale" : "failed", now, records, code, true);
+      return;
     }
     jdbc.sql("""
         UPDATE chain_summaries SET fail_count = fail_count + CASE WHEN ? = 'AI_BAD_OUTPUT' THEN 1 ELSE 0 END,
                error_kind = ?, last_error = ?, failed_at = now(), generating_since = NULL
         WHERE root_id = ?""").params(code, code, error == null ? code : error, root).update();   // 비용이 든 형식 오류만 센다(MAX_FAILS)
-    Map<String, Object> now = stored(root);
-    return failed(now, records, ((Number) now.get("fail_count")).intValue() < MAX_FAILS);
   }
 
   /**
@@ -275,18 +256,5 @@ public class ChainSummaryService {
 
   private OffsetDateTime dbNow() {
     return Times.offset(jdbc.sql("SELECT now()").query(java.sql.Timestamp.class).single());
-  }
-
-  /** 새 요약을 못 만들었을 때: 이전 요약이 있으면 stale, 없으면 failed. */
-  private Result failed(Map<String, Object> row, int records, boolean retryable) {
-    boolean hasSummary = row != null && row.get("summary") != null;
-    return result(hasSummary ? "stale" : "failed", row, records, row == null ? null : (String) row.get("error_kind"), retryable);
-  }
-
-  private Result result(String status, Map<String, Object> row, int records, String code, boolean retryable) {
-    String summary = row == null ? null : (String) row.get("summary");
-    OffsetDateTime at = summary == null ? null : Times.offset(row.get("created_at"));
-    Integer based = summary == null || row.get("summary_records") == null ? null : ((Number) row.get("summary_records")).intValue();
-    return new Result(status, summary, at, based, records, code, code == null ? null : MESSAGES.get(code), retryable);
   }
 }
