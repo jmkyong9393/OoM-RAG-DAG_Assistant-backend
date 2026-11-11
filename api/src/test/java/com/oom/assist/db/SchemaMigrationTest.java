@@ -19,7 +19,8 @@ class SchemaMigrationTest extends AbstractDbTest {
         "spring_session", "spring_session_attributes",    // V4 세션 저장소
         "log_resolutions",                                 // V10 장애 건을 해결한 기록
         "user_consents",                                   // V13 처리방침 판 단위 동의
-        "policy_uploads");                                 // V14 규정 업로드 · 변환 · 검수
+        "policy_uploads",                                  // V14 규정 업로드 · 변환 · 검수
+        "chain_summaries");                                // V15 장애 건 AI 요약 · 지문
   }
 
   @Test
@@ -64,6 +65,10 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tablePriv("oom_api", "log_resolutions", "INSERT")).isTrue();
     assertThat(tablePriv("oom_ai", "log_resolutions", "SELECT")).isTrue();
     assertThat(tablePriv("oom_ai", "log_resolutions", "INSERT")).isFalse();
+    // V15: 체인 요약은 Spring 만 쓴다(Python 은 요약을 만들어 돌려줄 뿐)
+    assertThat(tablePriv("oom_api", "chain_summaries", "UPDATE")).isTrue();
+    assertThat(tablePriv("oom_api", "chain_summaries", "DELETE")).isTrue();   // 루트가 아니게 된 기록의 요약 정리
+    assertThat(tablePriv("oom_ai", "chain_summaries", "UPDATE")).isFalse();
     // R__ 로 나중에 만든 뷰·함수에도 기본 권한이 적용된다
     assertThat(tablePriv("oom_api", "v_log_nodes", "SELECT")).isTrue();
     assertThat(jdbc.sql("SELECT has_function_privilege('oom_ai', 'get_chain(bigint,bigint,int,int)', 'EXECUTE')").query(Boolean.class).single()).isTrue();

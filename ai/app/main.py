@@ -7,12 +7,14 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.config import ai_mode, profile, worker_embedded, worker_embedded
 from app.graph import pipeline
+from app.llm import client as llm
 from app.sse import sse
 
 @asynccontextmanager
@@ -52,6 +54,7 @@ class ChatRequest(BaseModel):
 class ChainSummaryRequest(BaseModel):
     nodes: list[dict]
     edges: list[dict]
+    total: int | None = None   # 장애 건 전체 기록 수(Spring 이 입력을 줄였으면 nodes 보다 크다)
 
 
 @app.get("/ai/health")
@@ -78,10 +81,33 @@ async def chat(req: ChatRequest):
     return StreamingResponse(gen, media_type="text/event-stream", headers=SSE_HEADERS)
 
 
+CHAIN_SUMMARY_TIMEOUT_SEC = 15   # 순서 유지: 이 값(15) < Spring→Python 타임아웃(20) < Spring 선점 무시 기준(30)
+
+
 @app.post("/ai/chain-summary")
-def chain_summary(req: ChainSummaryRequest):
-    titles = [n.get("title", "") for n in req.nodes]
-    return {"summary": " → ".join(titles) if titles else ""}
+async def chain_summary(req: ChainSummaryRequest):
+    """응답 {summary, code}. code 가 null 이면 LLM 요약(+ model · prompt_tokens · completion_tokens — Spring 이 비용 확인용으로 저장), 아니면 summary 는 제목 연결(대체 문장)이고 code 는 실패 종류
+    (에러 응답의 {code, message} 와 같은 대문자 코드 — Spring 이 그대로 전달한다):
+    AI_DISABLED(키 없음·fake — 실패로 세지 않는다) | AI_TIMEOUT(연결 실패·시간 초과) | AI_RATE_LIMIT(429) | AI_BAD_OUTPUT(형식 오류·빈 응답) | AI_ERROR."""
+    titles = " → ".join(n.get("title", "") for n in req.nodes)
+    if ai_mode() != "openai" or not profile().has_key:
+        return {"summary": titles, "code": "AI_DISABLED"}
+    usage = llm.Usage()
+    try:
+        text = await asyncio.wait_for(llm.summarize_chain(profile(), req.nodes, req.edges, usage, req.total), CHAIN_SUMMARY_TIMEOUT_SEC)
+        code = None if text else "AI_BAD_OUTPUT"
+    except (TimeoutError, httpx.TransportError):
+        code = "AI_TIMEOUT"
+    except httpx.HTTPStatusError as e:
+        code = "AI_RATE_LIMIT" if e.response.status_code == 429 else "AI_ERROR"
+    except (ValueError, KeyError, IndexError):
+        code = "AI_BAD_OUTPUT"
+    except Exception:  # noqa: BLE001 — 요약은 보조 기능: 어떤 실패든 종류만 알리고 대체 문장으로 답한다
+        code = "AI_ERROR"
+    if code is not None:
+        return {"summary": titles, "code": code}
+    return {"summary": text, "code": None, "model": profile().model_answer,
+            "prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens}
 
 
 async def dummy_stream(req: ChatRequest):

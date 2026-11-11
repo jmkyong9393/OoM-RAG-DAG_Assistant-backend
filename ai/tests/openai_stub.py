@@ -60,6 +60,8 @@ class Handler(BaseHTTPRequestHandler):
                 content = json.dumps({"intent": intent, "reason": "stub"})
             elif "Extract" in system:
                 content = json.dumps({"error_code": None, "keywords": ["스텁", "키워드", "정제"], "resolution_summary": "스텁이 정리한 해결 요약."})
+            elif "트러블슈팅 기록 묶음" in system:
+                content = json.dumps({"summary": "스텁 체인 요약입니다."})
             else:
                 content = json.dumps({})
             return self._json(200, {"id": "stub", "object": "chat.completion", "model": req.get("model"),

@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * GET /chains/{entry_id}[?depth=N] — get_chain() 결과(진입 기준 음수=조상·양수=자손) + 그 집합 안의 간선 + 루트 기준 요약.
  * depth 없으면 조상 · 자손 전체. MAX_NODES 를 넘으면 해결 · 원인 경로를 먼저 남기고 자른다(truncated, total = 전체 수).
- * 요약은 장애 건(루트) 전체 기준: "{루트 제목} 장애 건: 기록 N건, 해결 M건, 완료|진행 중".
+ * summary = 장애 건 AI 요약(최신 또는 이전 요약). 아직 없으면 현황 한 줄 "{루트 제목} 장애 건: 기록 N건, 해결 M건, 완료|진행 중".
+ *   없거나 오래됐으면 백그라운드로 새로 만든다(ChainSummaryService.view) — 응답은 기다리지 않고 다음 조회에 반영.
+ * summary_status = fresh | stale | generating | none | deprecated, summary_at = AI 요약을 만든 시각(프론트는 몰라도 된다).
  */
 @RestController
 public class ChainController {
@@ -26,10 +28,12 @@ public class ChainController {
 
   private final JdbcClient jdbc;
   private final PolicyRefService policyRefs;
+  private final ChainSummaryService summaries;
 
-  public ChainController(JdbcClient jdbc, PolicyRefService policyRefs) {
+  public ChainController(JdbcClient jdbc, PolicyRefService policyRefs, ChainSummaryService summaries) {
     this.jdbc = jdbc;
     this.policyRefs = policyRefs;
+    this.summaries = summaries;
   }
 
   /**
@@ -41,16 +45,21 @@ public class ChainController {
                           List<PolicyRefService.RefView> policyRefs, boolean resolvesRoot, boolean isCause) {}
   /** reason = 이 기록을 그 상위에 이어 붙인 이유. 없으면 null. */
   public record Edge(long parentId, long childId, String reason) {}
-  public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary, int total, boolean truncated) {}
+  public record Chain(long entryId, List<ChainNode> nodes, List<Edge> edges, String summary, String summaryStatus, OffsetDateTime summaryAt,
+                      int total, boolean truncated) {}
 
   @GetMapping("/chains/{entryId}")
   public Chain get(@PathVariable long entryId, @RequestParam(required = false) Integer depth, TenantContext ctx) {
-    long ws = ctx.workspaceId();
+    return build(ctx.workspaceId(), entryId, depth, MAX_NODES, true);
+  }
+
+  /** withSummary=false 는 요약 입력용(limit = INPUT_NODES) — 저장된 요약을 읽거나 생성을 시작하지 않는다. */
+  private Chain build(long ws, long entryId, Integer depth, int limit, boolean withSummary) {
     List<Map<String, Object>> rows = jdbc.sql("""
         SELECT v.id, v.type, v.status, v.title, g.depth, v.path_label, v.resolution_summary, v.last_confirmed_at, v.root_id, v.is_cause, g.total
         FROM get_chain(?, ?, ?::int, ?, ?) g JOIN v_log_nodes v ON v.id = g.node_id
         ORDER BY g.depth, v.id
-        """).params(ws, entryId, depth == null ? null : Math.max(1, depth), MAX_NODES, entryId).query().listOfRows();
+        """).params(ws, entryId, depth == null ? null : Math.max(1, depth), limit, entryId).query().listOfRows();
     if (rows.isEmpty()) throw ApiException.notFound("chain");
 
     List<Long> ids = rows.stream().map(r -> num(r, "id")).toList();
@@ -68,7 +77,14 @@ public class ChainController {
 
     Long rootId = rows.stream().filter(r -> num(r, "id") == entryId).map(r -> (Long) r.get("root_id")).findFirst().orElse(null);
     int total = ((Number) rows.get(0).get("total")).intValue();
-    return new Chain(entryId, nodes, edges, summary(ws, rootId), total, total > nodes.size());
+    ChainSummaryService.View ai = withSummary && rootId != null ? summaries.view(ws, rootId, this::summaryInput) : null;
+    String text = ai != null && ai.summary() != null ? ai.summary() : summary(ws, rootId);
+    return new Chain(entryId, nodes, edges, text, ai == null ? null : ai.status(), ai == null ? null : ai.at(), total, total > nodes.size());
+  }
+
+  private Chain summaryInput(long root) {   // 백그라운드 스레드에서도 불린다 — 요청 컨텍스트(TenantContext)를 쓰지 않는다
+    long ws = jdbc.sql("SELECT workspace_id FROM log_nodes WHERE id = ?").param(root).query(Long.class).single();
+    return build(ws, root, null, ChainSummaryService.INPUT_NODES, false);
   }
 
   private String summary(long ws, Long rootId) {
