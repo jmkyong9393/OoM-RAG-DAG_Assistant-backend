@@ -23,12 +23,24 @@ def test_points_to_the_missing_area_by_real_title():
     assert o["names"] == "「개인정보 처리 기준」 · 「개인정보 보호 내부관리계획」"
 
 
+GAP = "제공된 규정에는 이 부분에 관한 기준이 없습니다."   # 답변이 빈 곳을 인정한 문장
+
+
 def test_notice_is_fixed_wording_and_model_input_is_unchanged():
     policy = [{"ref": "P1", "doc_title": "고객응대 근로자 보호 지침", "article_label": "제12조", "text": "보호 조치", "slug": "retail-cs-protection-2026-11"}]
-    n = other_rule_notice("폭언 때문에 상담 끊고 쉰 30분도 근무시간이야?", policy, SCOPE)
+    n = other_rule_notice("폭언 때문에 상담 끊고 쉰 30분도 근무시간이야?", policy, SCOPE, GAP)
     assert n == "※ 급여·근로시간 기준은 「급여 규정」도 함께 확인해야 합니다." and n.startswith(NOTICE_PREFIX)
     assert _render_context(policy, []) == "## 규정\n[P1] 고객응대 근로자 보호 지침 제12조: 보호 조치"   # 모델이 보는 근거는 그대로
-    assert other_rule_notice("폭언 때문에 쉰 30분도 근무시간이야?", [], SCOPE) is None   # 근거가 없으면(근거 없음 답변) 붙이지 않는다
+    assert other_rule_notice("폭언 때문에 쉰 30분도 근무시간이야?", [], SCOPE, GAP) is None   # 근거가 없으면(근거 없음 답변) 붙이지 않는다
+
+
+def test_notice_only_when_the_answer_admits_a_gap():
+    q, p = "USB 같은 이동식 저장매체 쓰려면 누구 승인 받아?", pol("retail-privacy-plan-2026-11")
+    assert _other_rule(q, p, SCOPE) is not None   # 단서(USB)는 있고 정보보안 문서는 근거에 없다
+    assert other_rule_notice(q, p, SCOPE, "USB 를 쓰려면 부서장의 승인을 받아야 한다.") is None   # 이미 근거로 답했다 → 불필요한 안내
+    assert other_rule_notice(q, p, SCOPE, "") is None
+    for admitted in ("제공된 규정에는 USB 사용에 관한 기준이 없습니다.", "이 부분을 정한 규정이 없다.", "반출 절차는 명시되어 있지 않다."):
+        assert other_rule_notice(q, p, SCOPE, admitted) == "※ 정보보안 기준은 「정보보안 기본규정」도 함께 확인해야 합니다.", admitted
 
 
 def test_no_note_when_area_is_already_in_evidence_or_not_in_scope():
@@ -48,15 +60,15 @@ def test_personal_data_needs_an_access_or_transfer_word():
 def test_two_areas_in_one_question_become_one_sentence():
     q = "급여 명세서를 외부 업체에 보내도 돼?"   # 개인정보(명세서 + 보내) · 정보보안(외부 업체) 둘 다
     assert [o["area"] for o in _other_rules(q, pol("retail-payroll-2026-11"), SCOPE)] == ["개인정보", "정보보안"]
-    n = other_rule_notice(q, pol("retail-payroll-2026-11"), SCOPE)
+    n = other_rule_notice(q, pol("retail-payroll-2026-11"), SCOPE, GAP)
     assert n == "※ 개인정보 기준은 「개인정보 처리 기준」 · 「개인정보 보호 내부관리계획」, 정보보안 기준은 「정보보안 기본규정」도 함께 확인해야 합니다."
 
 
 def test_no_duplicate_when_the_answer_already_names_the_documents():
     q, p = "급여 명세서를 외부 업체에 보내도 돼?", pol("retail-payroll-2026-11")
-    said = "정보보안 기본규정에 따라 외부 반출은 승인이 필요하다."
+    said = GAP + " 정보보안 기본규정에 따라 외부 반출은 승인이 필요하다."
     assert other_rule_notice(q, p, SCOPE, said) == "※ 개인정보 기준은 「개인정보 처리 기준」 · 「개인정보 보호 내부관리계획」도 함께 확인해야 합니다."
     both = said + " 개인정보 처리 기준과 개인정보 보호 내부관리계획도 본다."
     assert other_rule_notice(q, p, SCOPE, both) is None
     # 두 문서 중 하나만 말했으면 그 영역은 남긴다
-    assert "개인정보 기준" in other_rule_notice(q, p, SCOPE, "개인정보 처리 기준에 따르면 …")
+    assert "개인정보 기준" in other_rule_notice(q, p, SCOPE, GAP + " 개인정보 처리 기준에 따르면 …")

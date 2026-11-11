@@ -327,9 +327,16 @@ def _other_rule(query: str, policies: list[dict], scope_docs: list[dict] | None)
 NOTICE_PREFIX = "※ "   # 서버가 덧붙이는 안내 줄의 표지 — 채점 도구가 모델 생성문과 구분한다
 
 
+# 답변이 스스로 근거의 빈 곳을 인정한 표현 — 지시문 (9)의 "제공된 규정에는 …기준이 없습니다" 꼴
+GAP_ADMITTED = re.compile(r"기준이 없|근거 없음|정한 규정이 없|규정은 없|정해져 있지 않|명시되어 있지 않|제시되지 않")
+
+
 def other_rule_notice(query: str, policies: list[dict], scope_docs: list[dict] | None, answer: str = "") -> str | None:
     """답변 생성이 끝난 뒤 서버가 덧붙이는 고정 문구. 모델 입력은 바꾸지 않는다 — 지시문으로 넣으면 모델이 설명을 덧붙이다 조 번호를 틀리거나
-    지시 문장이 답변에 새어 나왔다. 영역이 여럿이면 한 문장에 함께, 답변이 이미 그 문서 제목을 모두 말한 영역은 뺀다(중복 안내 방지)."""
+    지시 문장이 답변에 새어 나왔다. 답변이 빈 곳을 인정했을 때만 붙인다(이미 근거로 답을 낸 질문에 붙이면 불필요한 안내가 된다).
+    영역이 여럿이면 한 문장에 함께, 답변이 이미 그 문서 제목을 모두 말한 영역은 뺀다."""
+    if not GAP_ADMITTED.search(answer):
+        return None
     rules = [o for o in (_other_rules(query, policies, scope_docs) if policies else []) if not all(t in answer for t in o["titles"])]
     if not rules:
         return None
