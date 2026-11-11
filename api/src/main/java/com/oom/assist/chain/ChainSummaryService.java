@@ -13,14 +13,20 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.function.LongFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
 
 /**
  * 트러블슈팅 'AI 요약' — 장애 건(루트~리프 전체)을 Python /ai/chain-summary 로 한 단락 요약하고 chain_summaries 에 저장한다.
- * 볼 때마다 불리지만 LLM 은 지문(요약에 영향을 주는 값의 md5)이 바뀌었을 때만 부른다. 처리 순서:
+ * GET /chains 가 저장된 요약이 없거나(none) 오래됐으면(stale) 백그라운드로 summarize 를 시작하고(view) 응답은 기다리지 않는다 —
+ * 처음엔 틀 문장 · 이전 요약, 다음 조회부터 새 요약. LLM 은 지문(요약에 영향을 주는 값의 md5)이 바뀌었을 때만 부른다. 처리 순서:
  * 폐기 → 지문 같음(fresh) → 같은 지문 실패 3회 · 5분 이내 실패 → 생성 중 표시(선점) 실패(generating) → Python 호출.
  * LLM 호출은 트랜잭션 밖에서 한다(선점 · 저장만 각각 짧게) — 최대 20초 동안 DB 연결을 잡지 않게.
  */
@@ -30,8 +36,11 @@ public class ChainSummaryService {
   // 순서 유지: Python 요약 제한(15초, ai/app/main.py CHAIN_SUMMARY_TIMEOUT_SEC) < AI_TIMEOUT(20초) < CLAIM_STALE_SEC(30초)
   static final Duration AI_TIMEOUT = Duration.ofSeconds(20);
   static final int CLAIM_STALE_SEC = 30;   // 생성 중 표시가 이보다 오래면 요약 도중 죽은 것으로 보고 다시 선점
-  static final int MAX_FAILS = 3;          // 같은 지문으로 연속 실패하면 지문이 바뀔 때까지 다시 시도하지 않는다
+  // 같은 지문으로 형식 오류(AI_BAD_OUTPUT — LLM 이 답해 비용이 든 실패)가 3번이면 지문이 바뀔 때까지 다시 시도하지 않는다.
+  // 서버 꺼짐 · 시간 초과 · 429(사용량 · 크레딧) · 기타 오류는 비용이 들지 않아 세지 않고 5분 대기만 한다 — 장애가 길어도 끝나면 다시 요약된다.
+  static final int MAX_FAILS = 3;
   static final int FAIL_WAIT_MIN = 5;      // 실패 후 대기 — 일시 장애 동안 여는 사람마다 20초씩 기다리지 않게
+  public static final int INPUT_NODES = 40;  // 요약 입력 기록 수 상한 — 넘으면 해결 · 원인 경로를 먼저 남긴다(get_chain). 500자 × 40 ≈ 2만 자
   static final int BODY_MAX = 500;         // 요약 입력에 넣는 기록 본문 길이 상한(자) — 긴 장애 건의 입력이 커지지 않게
   // 요약 규칙 버전 — Python 프롬프트(ai/app/llm/client.py CHAIN_SUMMARY_SYSTEM)나 입력 형식(_chain_tree · _chain_header)을 바꾸면 올린다.
   // 지문 앞에 붙으므로 올리면 기록이 그대로여도 모든 장애 건이 다음에 열릴 때 한 번씩 새 규칙으로 다시 요약된다(그동안은 stale).
@@ -52,16 +61,36 @@ public class ChainSummaryService {
   public record Result(String status, String summary, OffsetDateTime generatedAt, Integer basedOnRecords, int currentRecords,
                        String code, String message, boolean retryable) {}
 
+  private static final Logger log = LoggerFactory.getLogger(ChainSummaryService.class);
+
   private final JdbcClient jdbc;
   private final AppProps props;
   private final ObjectMapper json;
+  private final Background background;
   // HTTP/1.1 고정 — ChatRelayService 와 같은 이유(uvicorn 이 h2c 업그레이드 요청의 본문을 버린다)
   private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build();
 
-  public ChainSummaryService(JdbcClient jdbc, AppProps props, ObjectMapper json) {
+  public ChainSummaryService(JdbcClient jdbc, AppProps props, ObjectMapper json, Background background) {
     this.jdbc = jdbc;
     this.props = props;
     this.json = json;
+    this.background = background;
+  }
+
+  /**
+   * 백그라운드 요약 실행 — 가상 스레드. Executor 빈으로 두지 않는다(그러면 Spring Boot 기본 작업 실행기가 빠진다).
+   * 테스트는 같은 스레드에서 돌게 바꾼다(테스트 트랜잭션의 데이터를 보도록).
+   */
+  public interface Background {
+    void run(Runnable task);
+  }
+
+  @Configuration(proxyBeanMethods = false)
+  static class BackgroundConfig {
+    @Bean
+    Background chainSummaryBackground() {
+      return Executors.newVirtualThreadPerTaskExecutor()::execute;
+    }
   }
 
   /** GET /chains 용 — 저장된 AI 요약과 그 상태. LLM 을 부르지 않고 저장값 · 지문만 본다. */
@@ -80,7 +109,25 @@ public class ChainSummaryService {
     return new View(summary != null ? "stale" : "none", summary, at);
   }
 
-  /** chainOf: 루트 id → 장애 건 전체 체인(GET /chains/{root} 와 같은 것). */
+  /**
+   * GET /chains 용 — peek 결과를 그대로 돌려주고, 요약이 없거나(none) 오래됐으면(stale) 백그라운드로 다시 만든다.
+   * 생성 중 · 폐기 · 최신이면 시작하지 않는다. 실패 대기 · 3회 중단 · 선점은 summarize 가 그대로 지킨다.
+   */
+  public View view(long ws, long root, LongFunction<ChainController.Chain> chainOf) {
+    View v = peek(ws, root);
+    if ("none".equals(v.status()) || "stale".equals(v.status())) {
+      background.run(() -> {
+        try {
+          summarize(ws, root, chainOf);
+        } catch (RuntimeException e) {   // 요약은 보조 기능 — 다음 조회에 다시 시도한다
+          log.warn("chain summary for root {} failed: {}", root, e.toString());
+        }
+      });
+    }
+    return v;
+  }
+
+  /** chainOf: 루트 id → 장애 건 요약 입력 체인(최대 INPUT_NODES 건, total = 전체 수). */
   public Result summarize(long ws, long entryId, LongFunction<ChainController.Chain> chainOf) {
     Long root = jdbc.sql("SELECT root_id FROM v_log_nodes WHERE workspace_id = ? AND id = ?").params(ws, entryId)
         .query(Long.class).optional().orElseThrow(() -> ApiException.notFound("chain"));
@@ -104,10 +151,12 @@ public class ChainSummaryService {
     String code;
     String error = null;
     String text = null;
+    Map<?, ?> usage = Map.of();
     try {
       Map<?, ?> res = callAi(payload(chainOf.apply(root)));
       code = (String) res.get("code");
       text = code == null ? (String) res.get("summary") : null;
+      usage = res;
       if (code == null && (text == null || text.isBlank())) code = "AI_BAD_OUTPUT";
     } catch (java.net.http.HttpTimeoutException | java.net.ConnectException e) {
       code = "AI_TIMEOUT";
@@ -120,8 +169,11 @@ public class ChainSummaryService {
     if (code == null) {
       jdbc.sql("""
           UPDATE chain_summaries SET summary = ?, summary_sig = ?, summary_records = ?, created_at = now(),
+                 model = ?, prompt_tokens = ?, completion_tokens = ?,
                  fail_count = 0, error_kind = NULL, last_error = NULL, failed_at = NULL, generating_since = NULL
-          WHERE root_id = ?""").params(text, sig, records, root).update();
+          WHERE root_id = ?""").params(text, sig, records,
+              usage.get("model"), intOrNull(usage.get("prompt_tokens")), intOrNull(usage.get("completion_tokens")), root)
+          .update();
       return result("fresh", stored(root), records, null, false);
     }
     if ("AI_DISABLED".equals(code)) {   // 키 없음 · fake — 실패로 세지 않는다
@@ -130,8 +182,9 @@ public class ChainSummaryService {
       return result(now.get("summary") != null ? "stale" : "failed", now, records, code, true);
     }
     jdbc.sql("""
-        UPDATE chain_summaries SET fail_count = fail_count + 1, error_kind = ?, last_error = ?, failed_at = now(), generating_since = NULL
-        WHERE root_id = ?""").params(code, error == null ? code : error, root).update();
+        UPDATE chain_summaries SET fail_count = fail_count + CASE WHEN ? = 'AI_BAD_OUTPUT' THEN 1 ELSE 0 END,
+               error_kind = ?, last_error = ?, failed_at = now(), generating_since = NULL
+        WHERE root_id = ?""").params(code, code, error == null ? code : error, root).update();   // 비용이 든 형식 오류만 센다(MAX_FAILS)
     Map<String, Object> now = stored(root);
     return failed(now, records, ((Number) now.get("fail_count")).intValue() < MAX_FAILS);
   }
@@ -201,7 +254,7 @@ public class ChainSummaryService {
       m.put("reason", e.reason());
       return m;
     }).toList();
-    return Map.of("nodes", nodes, "edges", edges);
+    return Map.of("nodes", nodes, "edges", edges, "total", chain.total());
   }
 
   private Map<?, ?> callAi(Map<String, Object> body) throws Exception {
@@ -214,6 +267,10 @@ public class ChainSummaryService {
 
   private Map<String, Object> stored(long root) {
     return jdbc.sql("SELECT * FROM chain_summaries WHERE root_id = ?").param(root).query().listOfRows().stream().findFirst().orElse(null);
+  }
+
+  private static Integer intOrNull(Object v) {
+    return v instanceof Number n ? n.intValue() : null;
   }
 
   private OffsetDateTime dbNow() {

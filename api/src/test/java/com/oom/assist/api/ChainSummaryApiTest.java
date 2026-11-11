@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.oom.assist.chain.ChainSummaryService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -19,12 +20,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * POST /chains/{id}/summary — 장애 건 AI 요약. Python 대신 JDK HttpServer 가 /ai/chain-summary 에 답한다.
- * 지문이 같으면 다시 부르지 않음 · 본문으로 요약(AI 정리를 기다리지 않음) · 실패 기록과 대기 · 3회 실패면 멈춤 · 이전 요약 · 폐기 · 생성 중 표시.
- * GET /chains/{id} 는 저장된 요약과 summary_status 만 보여 주고 AI 는 부르지 않는다.
+ * 장애 건 AI 요약 — POST /chains/{id}/summary(바로 생성)와 GET /chains/{id}(백그라운드 생성). Python 대신 JDK HttpServer 가 /ai/chain-summary 에 답한다.
+ * 지문이 같으면 다시 부르지 않음 · 본문으로 요약(AI 정리를 기다리지 않음) · 실패 기록과 대기 · 형식 오류 3회면 멈춤(서버 꺼짐 등은 안 셈) · 이전 요약 · 폐기 · 생성 중 표시
+ * · 입력 40건 상한 · 루트가 아니게 되면 요약 행 삭제. 백그라운드 실행기는 같은 스레드로 바꿔 테스트 트랜잭션의 데이터를 보게 한다.
  * 테스트 트랜잭션 안에서는 now() 가 고정이라 '시간이 지남'은 시각 컬럼을 직접 앞당겨 만든다.
  */
 class ChainSummaryApiTest extends AbstractApiTest {
@@ -34,6 +36,13 @@ class ChainSummaryApiTest extends AbstractApiTest {
   static final AtomicInteger calls = new AtomicInteger();
   static final AtomicReference<String> lastBody = new AtomicReference<>("");
 
+  @TestBean(name = "chainSummaryBackground", methodName = "inline")
+  ChainSummaryService.Background background;
+
+  static ChainSummaryService.Background inline() {
+    return Runnable::run;
+  }
+
   @BeforeAll
   static void startStub() throws Exception {
     stub = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -41,9 +50,10 @@ class ChainSummaryApiTest extends AbstractApiTest {
       lastBody.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
       int n = calls.incrementAndGet();
       String body = switch (scenario.get()) {
-        case "fail" -> "{\"summary\":\"A → B\",\"code\":\"AI_TIMEOUT\"}";
+        case "fail" -> "{\"summary\":\"A → B\",\"code\":\"AI_BAD_OUTPUT\"}";   // LLM 이 답했지만 형식 오류 — 비용이 들어 센다
+        case "down" -> "{\"summary\":\"A → B\",\"code\":\"AI_TIMEOUT\"}";       // 서버 꺼짐 · 시간 초과 — 세지 않는다
         case "disabled" -> "{\"summary\":\"A → B\",\"code\":\"AI_DISABLED\"}";
-        default -> "{\"summary\":\"요약 " + n + "\",\"code\":null}";
+        default -> "{\"summary\":\"요약 " + n + "\",\"code\":null,\"model\":\"gpt-test\",\"prompt_tokens\":120,\"completion_tokens\":30}";
       };
       byte[] b = body.getBytes(StandardCharsets.UTF_8);
       ex.getResponseHeaders().add("Content-Type", "application/json");
@@ -99,6 +109,8 @@ class ChainSummaryApiTest extends AbstractApiTest {
     summary(root).andExpect(jsonPath("$.status").value("fresh")).andExpect(jsonPath("$.summary").value("요약 1"));
     assertThat(calls.get()).isEqualTo(1);
     assertThat(jdbc.sql("SELECT root_id FROM chain_summaries").query(Long.class).list()).containsExactly(root);
+    assertThat(jdbc.sql("SELECT model || ':' || prompt_tokens || ':' || completion_tokens FROM chain_summaries WHERE root_id = ?").param(root)
+        .query(String.class).single()).isEqualTo("gpt-test:120:30");   // 비용 확인용
   }
 
   @Test
@@ -137,7 +149,7 @@ class ChainSummaryApiTest extends AbstractApiTest {
   void failureIsRecordedWaitsThenStopsAfterThreeAndResetsWhenTheCaseChanges() throws Exception {
     scenario.set("fail");
     summary(root).andExpect(jsonPath("$.status").value("failed")).andExpect(jsonPath("$.summary").doesNotExist())
-        .andExpect(jsonPath("$.code").value("AI_TIMEOUT")).andExpect(jsonPath("$.message").value("AI 서버가 응답하지 않습니다"))
+        .andExpect(jsonPath("$.code").value("AI_BAD_OUTPUT")).andExpect(jsonPath("$.message").value("요약 결과가 올바르지 않습니다"))
         .andExpect(jsonPath("$.retryable").value(true));
     summary(root).andExpect(jsonPath("$.status").value("failed"));   // 실패 후 대기 — 부르지 않는다
     assertThat(calls.get()).isEqualTo(1);
@@ -162,7 +174,7 @@ class ChainSummaryApiTest extends AbstractApiTest {
     addChild(cause, "해결: 배치 재기동");
     scenario.set("fail");
     summary(root).andExpect(jsonPath("$.status").value("stale")).andExpect(jsonPath("$.summary").value("요약 1"))
-        .andExpect(jsonPath("$.code").value("AI_TIMEOUT")).andExpect(jsonPath("$.based_on_records").value(2))
+        .andExpect(jsonPath("$.code").value("AI_BAD_OUTPUT")).andExpect(jsonPath("$.based_on_records").value(2))
         .andExpect(jsonPath("$.current_records").value(3));
   }
 
@@ -215,23 +227,56 @@ class ChainSummaryApiTest extends AbstractApiTest {
   }
 
   @Test
-  void getChainShowsOnlyTheStoredAiSummaryWithItsStateAndNeverCallsAi() throws Exception {
-    chainView(cause).andExpect(jsonPath("$.summary").doesNotExist()).andExpect(jsonPath("$.summary_status").value("none"))
-        .andExpect(jsonPath("$.overview").value("VPN 접속 시 E-403 반복 장애 건: 기록 2건, 해결 0건, 진행 중"));   // 틀 문장은 overview 로만
-    summary(root);
+  void getChainShowsTheOverviewFirstAndSummarizesInTheBackground() throws Exception {
+    chainView(cause).andExpect(jsonPath("$.summary").value("VPN 접속 시 E-403 반복 장애 건: 기록 2건, 해결 0건, 진행 중"))   // 처음엔 틀 문장
+        .andExpect(jsonPath("$.summary_status").value("none"));
+    assertThat(calls.get()).isEqualTo(1);   // 그 조회가 백그라운드 생성을 시작(테스트는 같은 스레드)
     chainView(cause).andExpect(jsonPath("$.summary").value("요약 1")).andExpect(jsonPath("$.summary_status").value("fresh"))
         .andExpect(jsonPath("$.summary_at").exists());
+    chainView(cause);
+    assertThat(calls.get()).isEqualTo(1);   // 내용이 같으면 다시 부르지 않는다
 
-    long fresh = jdbc.sql("INSERT INTO log_nodes (workspace_id, type, title, body, author_id) VALUES (?, 'success', '방금 등록', 'b', ?) RETURNING id")
-        .params(wsSw, userBackend).query(Long.class).single();
-    edge(wsSw, cause, fresh);   // AI 정리 전이어도 기다리지 않고 바로 '이전 요약'
-    chainView(root).andExpect(jsonPath("$.summary").value("요약 1")).andExpect(jsonPath("$.summary_status").value("stale"));
-    jdbc.sql("UPDATE chain_summaries SET generating_since = now() WHERE root_id = ?").param(root).update();
-    chainView(root).andExpect(jsonPath("$.summary_status").value("generating"));
+    addChild(cause, "해결: 배치 재기동");
+    chainView(root).andExpect(jsonPath("$.summary").value("요약 1")).andExpect(jsonPath("$.summary_status").value("stale"));   // 이전 요약을 보여 주고
+    chainView(root).andExpect(jsonPath("$.summary").value("요약 2")).andExpect(jsonPath("$.summary_status").value("fresh"));   // 다음 조회에 새 요약
+
+    addChild(cause, "참고: 로그 위치");
+    jdbc.sql("UPDATE chain_summaries SET generating_since = now() WHERE root_id = ?").param(root).update();   // 다른 요청이 만드는 중
+    chainView(root).andExpect(jsonPath("$.summary").value("요약 2")).andExpect(jsonPath("$.summary_status").value("generating"));
     mvc.perform(as(patch("/logs/" + root), userLead, wsSw).content("{\"status\":\"deprecated\",\"reason\":\"중복 기록\"}")).andExpect(status().isOk());
-    chainView(root).andExpect(jsonPath("$.summary").value("요약 1")).andExpect(jsonPath("$.summary_status").value("deprecated"));
-    assertThat(calls.get()).isEqualTo(1);   // GET 은 한 번도 부르지 않았다
+    chainView(root).andExpect(jsonPath("$.summary").value("요약 2")).andExpect(jsonPath("$.summary_status").value("deprecated"));
+    assertThat(calls.get()).isEqualTo(2);   // 생성 중 · 폐기면 시작하지 않는다
   }
+
+  @Test
+  void serverDownOrRateLimitWaitsButNeverStopsTheSummary() throws Exception {
+    scenario.set("down");
+    for (int i = 0; i < 4; i++) {
+      summary(root).andExpect(jsonPath("$.code").value("AI_TIMEOUT")).andExpect(jsonPath("$.retryable").value(true));
+      failedLongAgo();
+    }
+    assertThat(calls.get()).isEqualTo(4);   // 비용이 안 드는 실패는 세지 않아 3회에서 멈추지 않는다
+    assertThat(jdbc.sql("SELECT fail_count FROM chain_summaries WHERE root_id = ?").param(root).query(Integer.class).single()).isZero();
+  }
+
+  @Test
+  void largeCasesSendAtMost40RecordsWithTheTotal() throws Exception {
+    for (int i = 0; i < 45; i++) addChild(cause, "시도 " + i);
+    summary(root);
+    assertThat(lastBody.get().split("\"title\"", -1).length - 1).isBetween(1, 40);
+    assertThat(lastBody.get()).contains("\"total\":47");   // 루트 + 원인 + 45건
+  }
+
+  @Test
+  void linkingACaseUnderAnotherRecordDropsItsStoredSummary() throws Exception {
+    summary(root);
+    long upper = node(wsSw, "fail", "상위 장애", userBackend);
+    mvc.perform(as(post("/edges"), userBackend, wsSw).content("{\"parent_id\":" + upper + ",\"child_id\":" + root + "}"))
+        .andExpect(status().isCreated());
+    assertThat(jdbc.sql("SELECT count(*) FROM chain_summaries WHERE root_id = ?").param(root).query(Integer.class).single())
+        .isZero();   // 더 이상 장애 건(루트)이 아니어서 아무도 읽지 않는 행
+  }
+
 
   @Test
   void otherWorkspacesCaseIsNotFound() throws Exception {

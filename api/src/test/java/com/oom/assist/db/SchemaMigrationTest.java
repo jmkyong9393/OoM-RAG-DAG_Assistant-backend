@@ -67,6 +67,7 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tablePriv("oom_ai", "log_resolutions", "INSERT")).isFalse();
     // V15: 체인 요약은 Spring 만 쓴다(Python 은 요약을 만들어 돌려줄 뿐)
     assertThat(tablePriv("oom_api", "chain_summaries", "UPDATE")).isTrue();
+    assertThat(tablePriv("oom_api", "chain_summaries", "DELETE")).isTrue();   // 루트가 아니게 된 기록의 요약 정리
     assertThat(tablePriv("oom_ai", "chain_summaries", "UPDATE")).isFalse();
     // R__ 로 나중에 만든 뷰·함수에도 기본 권한이 적용된다
     assertThat(tablePriv("oom_api", "v_log_nodes", "SELECT")).isTrue();

@@ -117,6 +117,8 @@ public class LogRepository {
   public void insertEdge(long ws, long parent, long child, long createdBy, String origin, String reason) {
     jdbc.sql("INSERT INTO log_edges (workspace_id, parent_id, child_id, created_by, origin, reason) VALUES (?, ?, ?, ?, ?, ?)")
         .params(ws, parent, child, createdBy, origin, reason).update();
+    // 상위가 생긴 기록은 더 이상 장애 건(루트)이 아니다 — 그 기록 번호로 저장된 AI 요약은 아무도 읽지 않으니 지운다
+    jdbc.sql("DELETE FROM chain_summaries WHERE root_id = ?").param(child).update();
   }
 
   // ── 장애 건을 해결한 기록 (log_resolutions, V10) ──

@@ -3,7 +3,7 @@ import asyncio
 
 import httpx
 
-from app.llm.client import _chain_header, _chain_tree
+from app.llm.client import _chain_header, _chain_tree, _clip
 from app.main import app
 from tests.openai_stub import OpenAIStub
 
@@ -41,7 +41,7 @@ def test_state_is_never_written_and_reference_root_is_marked_as_memo():
     assert _chain_tree(done, EDGES)[0] == "- [실패] VPN 접속 시 E-403 반복 (11/03)"   # 완료 처리 여부는 요약에 쓰지 않는다(화면이 표시)
     nodes = [{"id": 1, "type": "ref", "status": "active", "title": "로컬 개발 DB 초기화 메모", "body": "DB 볼륨을 지우고 다시 시드"}]
     assert _chain_tree(nodes, []) == ["- [참고] 로컬 개발 DB 초기화 메모 — DB 볼륨을 지우고 다시 시드"]
-    assert _chain_header(nodes, []) == "[기록] 참고 메모 묶음(장애 건 아님)"   # 데이터 바로 위에 적는다
+    assert _chain_header(nodes, []) == "[참고 메모]"   # 데이터 바로 위에 적는다(설명 없이 — 요약에 옮겨지지 않게)
     assert _chain_header(NODES, EDGES) == "[기록]"   # 장애 건(루트 실패)은 그대로
 
 
@@ -52,12 +52,19 @@ async def test_openai_mode_summarizes_with_answer_model(monkeypatch):
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
         monkeypatch.setenv("LLM_PROFILE_DEFAULT_MODEL_ANSWER", "stub-answer")
         async with _client() as client:
-            s = (await client.post("/ai/chain-summary", json={"nodes": NODES, "edges": EDGES})).json()
-        assert s == {"summary": "스텁 체인 요약입니다.", "code": None}
+            s = (await client.post("/ai/chain-summary", json={"nodes": NODES, "edges": EDGES, "total": 50})).json()
+        assert s == {"summary": "스텁 체인 요약입니다.", "code": None, "model": "stub-answer", "prompt_tokens": 42, "completion_tokens": 7}   # 비용 확인용
         body = stub.calls[-1]["body"]
-        assert body["model"] == "stub-answer" and body["response_format"] == {"type": "json_object"}
+        assert body["model"] == "stub-answer" and body["response_format"] == {"type": "json_object"} and body["max_tokens"] == 600
         assert "흐름" in body["messages"][0]["content"]
-        assert body["messages"][1]["content"].startswith("[기록]\n- [실패] VPN 접속 시 E-403 반복")
+        assert body["messages"][1]["content"].startswith("[기록]\n(기록 50건 중 4건만 — 해결 · 원인 경로를 먼저 골랐다)\n- [실패] VPN 접속 시 E-403 반복")
+
+
+def test_long_summary_is_clipped_at_a_sentence_end():
+    assert _clip("짧습니다.") == "짧습니다."
+    long = "가" * 250 + "습니다. " + "나" * 300 + "습니다. " + "다" * 300 + "습니다."
+    assert _clip(long) == "가" * 250 + "습니다. " + "나" * 300 + "습니다."   # 600자 안의 마지막 문장까지
+    assert _clip("가" * 700) == "가" * 600 + "…"   # 문장 끝이 없으면 글자로
 
 
 TITLES = "VPN 접속 시 E-403 반복 → 토큰 갱신 배치 중단 → 배치 재기동 → 클라이언트 재설치"
