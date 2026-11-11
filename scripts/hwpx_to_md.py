@@ -78,10 +78,25 @@ def cell_text(tc: ET.Element) -> str:
     return clean(" ".join(filter(None, (para_text(p) for p in tc.iter(HP + "p")))))
 
 
+def own_cells(tbl: ET.Element) -> list[ET.Element]:
+    """이 표의 칸만. 칸 안에 든 중첩 표의 칸은 뺀다 — 주소가 (0,0)부터 다시 시작해 바깥 표의 칸을 덮어쓴다."""
+    out: list[ET.Element] = []
+
+    def walk(el: ET.Element):
+        for ch in el:
+            if ch.tag == HP + "tc":
+                out.append(ch)
+            elif ch.tag != HP + "tbl":
+                walk(ch)
+
+    walk(tbl)
+    return out
+
+
 def table_rows(tbl: ET.Element) -> list[list[str]]:
     rows = int(tbl.get("rowCnt", 0)); cols = int(tbl.get("colCnt", 0))
     grid = [[None] * cols for _ in range(rows)]
-    for tc in tbl.iter(HP + "tc"):
+    for tc in own_cells(tbl):
         addr = tc.find(HP + "cellAddr"); span = tc.find(HP + "cellSpan")
         if addr is None:
             continue
