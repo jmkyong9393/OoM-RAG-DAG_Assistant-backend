@@ -32,7 +32,7 @@ import org.springframework.test.web.servlet.ResultActions;
  */
 class ChainSummaryApiTest extends AbstractApiTest {
 
-  static final String OVERVIEW = "VPN 접속 시 E-403 반복 장애 건: 기록 2건, 해결 0건, 진행 중";   // 요약이 없을 때 보이는 틀 문장
+  static final String TEMPLATE = "VPN 접속 시 E-403 반복 장애 건: 기록 2건, 해결 0건, 진행 중";   // 요약이 없을 때 보이는 틀 문장
 
   static HttpServer stub;
   static final AtomicReference<String> scenario = new AtomicReference<>("ok");
@@ -118,8 +118,8 @@ class ChainSummaryApiTest extends AbstractApiTest {
   }
 
   @Test
-  void firstOpenShowsTheOverviewThenTheWholeCaseSummaryAndReusesIt() throws Exception {
-    open(cause).andExpect(jsonPath("$.summary").value(OVERVIEW)).andExpect(jsonPath("$.summary_status").value("none"));   // 처음엔 틀 문장
+  void firstOpenShowsTheTemplateThenTheWholeCaseSummaryAndReusesIt() throws Exception {
+    open(cause).andExpect(jsonPath("$.summary").value(TEMPLATE)).andExpect(jsonPath("$.summary_status").value("none"));   // 처음엔 틀 문장
     assertThat(lastBody.get()).contains("\"body\"", "\"is_cause\":true", "\"resolves_root\"", "\"created_at\"", "VPN 접속 시 E-403 반복");   // 중간 노드를 열어도 장애 건 전체
     open(root).andExpect(jsonPath("$.summary").value("요약 1")).andExpect(jsonPath("$.summary_status").value("fresh"))
         .andExpect(jsonPath("$.summary_at").exists());
@@ -170,7 +170,7 @@ class ChainSummaryApiTest extends AbstractApiTest {
     open(root);   // 생성 시도 → 형식 오류
     assertThat(row("error_kind")).isEqualTo("AI_BAD_OUTPUT");
     assertThat(row("fail_count")).isEqualTo(1);
-    open(root).andExpect(jsonPath("$.summary").value(OVERVIEW)).andExpect(jsonPath("$.summary_status").value("none"));   // 실패 후 대기 — 부르지 않는다
+    open(root).andExpect(jsonPath("$.summary").value(TEMPLATE)).andExpect(jsonPath("$.summary_status").value("none"));   // 실패 후 대기 — 부르지 않는다
     assertThat(calls.get()).isEqualTo(1);
 
     failedLongAgo();
@@ -223,7 +223,7 @@ class ChainSummaryApiTest extends AbstractApiTest {
   }
 
   @Test
-  void deprecatedCaseWithoutSummaryShowsTheOverviewAndNeverCallsAi() throws Exception {
+  void deprecatedCaseWithoutSummaryShowsTheTemplateAndNeverCallsAi() throws Exception {
     deprecate(root);
     openTwice(root).andExpect(jsonPath("$.summary_status").value("deprecated")).andExpect(jsonPath("$.summary_at").doesNotExist());
     assertThat(calls.get()).isZero();
@@ -243,7 +243,7 @@ class ChainSummaryApiTest extends AbstractApiTest {
   void disabledAiIsNotCountedAsAFailure() throws Exception {
     scenario.set("disabled");
     open(root);
-    open(root).andExpect(jsonPath("$.summary").value(OVERVIEW)).andExpect(jsonPath("$.summary_status").value("none"));   // 대기 없이 다시 부른다
+    open(root).andExpect(jsonPath("$.summary").value(TEMPLATE)).andExpect(jsonPath("$.summary_status").value("none"));   // 대기 없이 다시 부른다
     assertThat(calls.get()).isEqualTo(2);
     assertThat(row("fail_count")).isEqualTo(0);
   }
