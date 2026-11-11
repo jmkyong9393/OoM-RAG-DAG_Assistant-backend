@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.function.LongFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -54,11 +55,15 @@ public class ChainSummaryService {
   // HTTP/1.1 고정 — ChatRelayService 와 같은 이유(uvicorn 이 h2c 업그레이드 요청의 본문을 버린다)
   private final HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build();
 
-  public ChainSummaryService(JdbcClient jdbc, AppProps props, ObjectMapper json, Background background) {
+  private final boolean autoOnRead;   // false 면 조회가 요약 생성을 시작하지 않는다(저장된 요약만 보여 준다)
+
+  public ChainSummaryService(JdbcClient jdbc, AppProps props, ObjectMapper json, Background background,
+                             @Value("${oom.chain-summary.auto-on-read:true}") boolean autoOnRead) {
     this.jdbc = jdbc;
     this.props = props;
     this.json = json;
     this.background = background;
+    this.autoOnRead = autoOnRead;
   }
 
   /**
@@ -96,10 +101,11 @@ public class ChainSummaryService {
   /**
    * GET /chains 용 — peek 결과를 그대로 돌려주고, 요약이 없거나(none) 오래됐으면(stale) 백그라운드로 다시 만든다.
    * 생성 중 · 폐기 · 최신이면 시작하지 않는다. 실패 대기 · 3회 중단 · 선점은 summarize 가 그대로 지킨다.
+   * oom.chain-summary.auto-on-read=false 면 어떤 조회도 시작하지 않는다.
    */
   public View view(long ws, long root, LongFunction<ChainController.Chain> chainOf) {
     View v = peek(ws, root);
-    if ("none".equals(v.status()) || "stale".equals(v.status())) {
+    if (autoOnRead && ("none".equals(v.status()) || "stale".equals(v.status()))) {
       background.run(() -> {
         try {
           summarize(ws, root, chainOf);

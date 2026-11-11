@@ -25,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 매 테스트마다 테넌트·워크스페이스 2(SW: 전원 member, 배종현 admin / HR: 장문경만)·사용자 2명(비밀번호 "pw-" + 이름)을 심고 롤백한다.
  * 보호된 엔드포인트는 as() 로 인증 주체를 직접 주입한다(로그인 흐름 자체는 AuthApiTest 가 검증).
  */
-@SpringBootTest
+@SpringBootTest(properties = "oom.chain-summary.auto-on-read=false")   // GET /chains 가 AI 요약을 시작하지 않게 — 요약 테스트만 켠다
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @Transactional

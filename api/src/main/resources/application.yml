@@ -56,6 +56,8 @@ oom:
     privacy-policy-path: ${PRIVACY_POLICY_PATH:../data/legal/privacy_policy.md}   # GET /auth/privacy-policy 가 읽는 문안. 작업 폴더가 api/ 기준
   storage:
     uploads-dir: ${UPLOADS_DIR:../data/uploads}     # 규정 원본 · 검수한 MD. AI 워커와 같은 폴더(운영은 공유 볼륨)
+  chain-summary:
+    auto-on-read: ${CHAIN_SUMMARY_AUTO:true}          # false 면 GET /chains 가 AI 요약 생성을 시작하지 않는다(저장된 요약만) — LLM 호출을 멈출 때
   session:
     cookie-name: OOMSESSION                          # 세션 자체는 Spring Session JDBC(spring_session 테이블), 쿠키 속성만 여기(SecurityConfig.cookieSerializer)
     same-site: ${SESSION_SAME_SITE:Lax}              # 프론트가 다른 사이트(예: *.vercel.app)면 None + secure=true 가 필요
