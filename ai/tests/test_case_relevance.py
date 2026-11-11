@@ -104,10 +104,95 @@ async def test_borderline_candidate_goes_to_judge(monkeypatch):
     assert await pipeline._choose_entry(None, "q", [a], None, None) == 2, "보정하지 않은 모델은 판정하지 않는다"
 
 
+def test_close_runner_up_from_another_chain_unsettles_the_top():
+    top = {"node_id": 1, "root_id": 1, "exact": False, "distance": 0.39, "lex_terms": 2}
+    rival = {"node_id": 5, "root_id": 4, "exact": False, "distance": 0.41, "lex_terms": 2}
+    assert pipeline._settled([top], FLOOR) is True
+    assert pipeline._settled([top, rival], FLOOR) is False, "다른 체인이 근소하게 뒤따르면 판정에 맡긴다"
+    assert pipeline._settled([top, {**rival, "root_id": 1}], FLOOR) is True, "같은 체인의 다른 기록은 경쟁자가 아니다"
+    assert pipeline._settled([top, {**rival, "distance": 0.39 + pipeline.SURE_MARGIN + 0.01}], FLOOR) is True
+    assert pipeline._settled([{**top, "exact": True}, rival], FLOOR) is True, "에러 코드 일치는 그대로 채택"
+    assert pipeline._settled([{**top, "distance": 0.50}], FLOOR) is False
+    assert pipeline._settled([top, rival], None) is True, "보정하지 않은 모델은 판정하지 않는다"
+
+
+async def test_passed_candidates_across_chains_get_compared(monkeypatch):
+    """판정을 통과한 후보가 여러 체인이면 가장 가까운 것을 고르게 하고, 한 체인이면 순위대로. 고르기에 실패해도 순위대로."""
+    picks = []
+
+    async def yes(prof, query, case, usage):
+        return True
+
+    def picker(result):
+        async def fn(prof, query, cases, usage):
+            picks.append([c["node_id"] for c in cases])
+            if isinstance(result, Exception):
+                raise result
+            return result
+        return fn
+
+    a = {"node_id": 2, "root_id": 2, "exact": False, "distance": 0.55, "lex_terms": 2}
+    b = {"node_id": 3, "root_id": 2, "exact": False, "distance": 0.58, "lex_terms": 1}
+    c = {"node_id": 7, "root_id": 6, "exact": False, "distance": 0.60, "lex_terms": 1}
+    monkeypatch.setattr(pipeline.llm, "judge_case", yes)
+    monkeypatch.setattr(pipeline.llm, "pick_case", picker(2))
+    assert await pipeline._choose_entry(None, "q", [a, b], FLOOR, None) == 2 and not picks, "한 체인이면 고르지 않는다"
+    assert await pipeline._choose_entry(None, "q", [a, b, c], FLOOR, None) == 7 and picks == [[2, 3, 7]]
+    monkeypatch.setattr(pipeline.llm, "pick_case", picker(RuntimeError("llm down")))
+    assert await pipeline._choose_entry(None, "q", [a, b, c], FLOOR, None) == 2
+
+
+async def test_far_candidates_are_judged_never_trusted(monkeypatch):
+    """가까운 후보가 없을 때 올린 후보(weak)는 판정을 통과해야만 쓴다 — 판정이 실패하면 사례 없음."""
+    weak = {"node_id": 4, "root_id": 4, "exact": False, "distance": 0.76, "lex_terms": 1, "weak": True}
+    assert pipeline._sure({**weak, "distance": 0.30}, FLOOR) is False
+
+    async def verdict(prof, query, case, usage):
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(pipeline.llm, "judge_case", verdict)
+    answer = True
+    assert await pipeline._choose_entry(None, "q", [weak], FLOOR, None) == 4
+    answer = False
+    assert await pipeline._choose_entry(None, "q", [weak], FLOOR, None) is None
+    answer = RuntimeError("llm down")
+    assert await pipeline._choose_entry(None, "q", [weak], FLOOR, None) is None
+
+
+def test_candidates_widen_only_when_they_can_be_judged(monkeypatch):
+    """가까운 후보가 없으면 상위 몇 건을 weak 로 올린다. 벡터가 없거나 보정하지 않은 모델이면(판정 불가) 올리지 않는다."""
+    from contextlib import contextmanager
+
+    far = [{"node_id": i, "score": 1.0 / i, "exact": False, "lex_terms": 1, "distance": 0.70 + i / 100} for i in range(1, 6)]
+    asked = []
+
+    @contextmanager
+    def no_conn():
+        yield None
+
+    def search(conn, ws, tokens, vec, code, k):
+        asked.append(k)
+        return [dict(h) for h in far] if vec else [{**h, "distance": None} for h in far]
+
+    monkeypatch.setattr(pipeline.db, "connect", no_conn)
+    monkeypatch.setattr(pipeline.db, "search_case_entry", search)
+    monkeypatch.setattr(pipeline.db, "case_briefs", lambda conn, ws, ids: {i: {"title": "t", "summary": "s", "root_id": i, "root_title": "r"} for i in ids})
+    hits = pipeline._case_candidates(1, "q", [0.1], None, FLOOR)
+    assert asked == [pipeline.CASE_POOL] and [h["node_id"] for h in hits] == [1, 2, 3][:pipeline.WEAK_TOP]
+    assert all(h["weak"] and h["root_title"] == "r" for h in hits)
+    near = pipeline._case_candidates(1, "q", [0.1], None, pipeline.CaseFloor(near=0.74, far=0.74, terms=9, sure=0.1))
+    assert [h["node_id"] for h in near] == [1, 2, 3, 4] and not any(h.get("weak") for h in near), "가까운 후보가 있으면 그것만"
+    assert not any(h.get("weak") for h in pipeline._case_candidates(1, "q", None, None, FLOOR)), "벡터가 없으면 넓히지 않는다"
+    assert not any(h.get("weak") for h in pipeline._case_candidates(1, "q", [0.1], None, None))
+
+
 async def test_judge_is_skipped_without_key(fake_mode):
     from app.config import profile
     from app.llm import client as llm
     assert await llm.judge_case(profile(), "q", {"root_title": "r", "title": "t", "summary": "s"}, llm.Usage()) is True
+    assert await llm.pick_case(profile(), "q", [{"root_title": "r", "title": "t"}, {"root_title": "r2", "title": "t2"}], llm.Usage()) == 0
 
 
 @requires_db

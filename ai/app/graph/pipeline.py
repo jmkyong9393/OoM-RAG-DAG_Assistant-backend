@@ -325,6 +325,9 @@ class CaseFloor(NamedTuple):
 CASE_FLOOR = {"text-embedding-3-small": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.45),
               "text-embedding-3-large": CaseFloor(near=0.62, far=0.70, terms=2, sure=0.40)}   # 1536 차원으로 줄여 받은 벡터 기준
 JUDGE_TIMEOUT = 4.0
+CASE_POOL = 6        # 진입 후보 수. 어휘 점수에 밀려 정답 사례가 3위 밖에 있는 경우가 있다
+WEAK_TOP = 3         # 가까운 후보가 하나도 없을 때 판정에 올리는 수
+SURE_MARGIN = 0.05   # 다른 체인의 후보가 이 거리 안에 뒤따르면 1위를 판정 없이 채택하지 않는다
 
 
 def _relevant(hit: dict, floor: CaseFloor | None) -> bool:
@@ -335,33 +338,59 @@ def _relevant(hit: dict, floor: CaseFloor | None) -> bool:
 
 
 def _sure(hit: dict, floor: CaseFloor | None) -> bool:
-    """판정 없이 채택하는 후보: 에러 코드 일치이거나 아주 가깝다. 규정을 거쳐 온 후보(linked)는 항상 판정한다."""
-    if hit.get("linked"):
+    """판정 없이 채택할 수 있는 후보: 에러 코드 일치이거나 아주 가깝다. 규정을 거쳐 온 후보(linked)와 멀리 있는 후보(weak)는 항상 판정한다."""
+    if hit.get("linked") or hit.get("weak"):
         return False
     return floor is None or hit["exact"] or hit["distance"] is None or hit["distance"] <= floor.sure
 
 
+def _chain_of(hit: dict) -> int:
+    return hit.get("root_id") or hit["node_id"]
+
+
+def _settled(hits: list[dict], floor: CaseFloor | None) -> bool:
+    """1위를 판정 없이 채택해도 되는가. 가깝더라도 다른 체인의 후보가 근소하게 뒤따르면 판정에 맡긴다 — 거리만으로는 둘을 가르지 못한다."""
+    top = hits[0]
+    if not _sure(top, floor):
+        return False
+    if floor is None or top["exact"] or top["distance"] is None:
+        return True
+    return not any(_chain_of(h) != _chain_of(top) and h["distance"] is not None and h["distance"] <= top["distance"] + SURE_MARGIN
+                   for h in hits[1:])
+
+
+def _with_briefs(conn, ws: int, hits: list[dict]) -> list[dict]:
+    """판정에 보여 줄 제목 · 요약과 체인 루트를 붙인다."""
+    briefs = db.case_briefs(conn, ws, [h["node_id"] for h in hits])
+    return [{**h, **briefs[h["node_id"]]} for h in hits if h["node_id"] in briefs]
+
+
 def _case_candidates(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None, floor: CaseFloor | None,
                      linked_to: list[tuple[str, str]] | None = None) -> list[dict]:
+    judged = floor is not None and q_vec is not None   # 판정할 수 있는가(보정된 모델 + 벡터) — 판정 없이는 후보를 넓히지 않는다
     with db.connect() as conn:
-        hits = [h for h in db.search_case_entry(conn, ws, q_tokens, q_vec, error_code, 3) if _relevant(h, floor)]
-        # 검색된 조문을 근거로 적어 둔 사례를 뒤에 더한다. 판정할 수 있을 때만(보정된 모델 + 벡터) — 판정 없이 채택하지 않는다
-        if linked_to and floor is not None and q_vec is not None and not (hits and _sure(hits[0], floor)):
+        found = db.search_case_entry(conn, ws, q_tokens, q_vec, error_code, CASE_POOL)
+        hits = [h for h in found if _relevant(h, floor)]
+        # 가까운 후보가 없으면 상위 몇 건을 판정에 맡긴다. 질문이 기록과 다른 말(줄임말 · 업계 용어 · 구어)을 쓰면 같은 문제도 멀게 나온다
+        if not hits and judged:
+            hits = [{**h, "weak": True} for h in found[:WEAK_TOP]]
+        if hits and judged:
+            hits = _with_briefs(conn, ws, hits)
+        # 검색된 조문을 근거로 적어 둔 사례를 뒤에 더한다
+        if linked_to and judged and not (hits and _settled(hits, floor)):
             have = {h["node_id"] for h in hits}
-            hits += [{"node_id": i, "score": 0.0, "exact": False, "lex_terms": 0, "distance": None, "linked": True}
-                     for i in db.cases_linked_to(conn, ws, linked_to) if i not in have]
-        if hits and not _sure(hits[0], floor):   # 판정에 보여 줄 제목·요약
-            briefs = db.case_briefs(conn, ws, [h["node_id"] for h in hits])
-            hits = [{**h, **briefs[h["node_id"]]} for h in hits if h["node_id"] in briefs]
+            hits += _with_briefs(conn, ws, [{"node_id": i, "score": 0.0, "exact": False, "lex_terms": 0, "distance": None, "linked": True}
+                                            for i in db.cases_linked_to(conn, ws, linked_to) if i not in have])
     return hits
 
 
 async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | None, usage) -> int | None:
-    """후보 중 진입 노드. 경계선 후보(주제만 비슷할 수 있다)는 가벼운 모델이 후보마다 같은 문제인지 보고(병렬), 통과한 첫 후보를 쓴다.
-    1위 후보의 판정이 실패하면 순위를 그대로 믿는다."""
+    """후보 중 진입 노드. 확실한 1위가 아니면 가벼운 모델이 후보마다 같은 문제인지 본다(병렬).
+    통과한 후보가 여러 체인에 걸치면 질문과 가장 가까운 것을 한 번 더 고르게 하고, 그 밖에는 통과한 첫 후보를 쓴다.
+    1위 후보의 판정이 실패하면 순위를 그대로 믿는다 — 멀리 있는 후보(weak)는 판정 없이 채택하지 않는다."""
     if not hits:
         return None
-    if _sure(hits[0], floor):
+    if _settled(hits, floor):
         return hits[0]["node_id"]
 
     async def judge(h: dict) -> bool | None:
@@ -372,8 +401,14 @@ async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | N
 
     verdicts = await asyncio.gather(*(judge(h) for h in hits))
     if verdicts[0] is None:
-        return hits[0]["node_id"]
-    return next((h["node_id"] for h, v in zip(hits, verdicts) if v), None)
+        return None if hits[0].get("weak") else hits[0]["node_id"]
+    passed = [h for h, v in zip(hits, verdicts) if v]
+    if len({_chain_of(h) for h in passed}) > 1:
+        try:
+            return passed[await asyncio.wait_for(llm.pick_case(prof, query, passed, usage), JUDGE_TIMEOUT)]["node_id"]
+        except Exception:  # noqa: BLE001 — 고르지 못하면 순위대로
+            pass
+    return passed[0]["node_id"] if passed else None
 
 
 async def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,

@@ -6,6 +6,7 @@
   uncited  정답이 근거에 있는데 인용하지 않았다(다른 근거로 답함)
   missed   정답이 근거에 없다(검색 · 진입점 선택 단계의 실패)
 그 밖에: bare_gap(답변이 '기준 없음' 두 문장 이하 — 관련 조문 안내가 없는 빈 답), 인용 없는 답변, 검증 안 된 마커.
+사례 진입점만 따로 볼 때는 data/case_entry/ 의 두 묶음을 준다 — 구어체 질문(정답 체인의 루트가 expect)과, 맞는 사례가 없는 질문("no_case": 사례가 붙으면 안 된다).
 
 실행: set -a; . deploy/.env; set +a; cd ai && uv run --extra graph python ../eval/answer_on_evalset.py [평가셋…] [--json 결과] [--concurrency 6] [--kind policy|troubleshoot]
 """
@@ -86,6 +87,8 @@ async def run_one(item: dict) -> dict:
            "intent": (d.get("intent") or {}).get("intent"), "answer": answer, "error": (d.get("error") or {}).get("message"),
            "sec": round(time.perf_counter() - t0, 1)}
     row.update(classify(item["expect"], row["retrieved"], row["verified"], answer))
+    row["no_case"] = bool(item.get("no_case"))
+    row["case_attached"] = any(i.startswith("n:") for i in row["retrieved"])
     return row
 
 
@@ -103,6 +106,9 @@ def summarize(rows: list[dict]) -> dict:
                      "gap_then_cited": sum(r["gap_then_cited"] for r in rs),
                      "no_citation": sum(r["no_citation"] for r in rs), "unverified_markers": sum(bool(r["unverified"]) for r in rs),
                      "errors": sum(bool(r["error"]) for r in rs)}
+    none = [r for r in rows if r.get("no_case")]
+    if none:
+        out["no_case"] = {"n": len(none), "case_attached": sum(r["case_attached"] for r in none)}
     return out
 
 
@@ -132,7 +138,7 @@ async def main() -> int:
             except Exception as e:  # noqa: BLE001 — 한 문항 실패로 전체를 멈추지 않는다
                 r = {"workspace_id": it["workspace_id"], "query": it["query"], "kind": it.get("kind", "policy"), "expect": it["expect"],
                      "retrieved": [], "verified": [], "unverified": [], "intent": None, "answer": "", "error": f"{type(e).__name__}: {e}", "sec": 0,
-                     **classify(it["expect"], [], [], "")}
+                     **classify(it["expect"], [], [], ""), "no_case": bool(it.get("no_case")), "case_attached": False}
             done += 1
             if done % 25 == 0:
                 print(f"  … {done}/{len(items)}", flush=True)
@@ -141,7 +147,11 @@ async def main() -> int:
     rows = await asyncio.gather(*(guarded(it) for it in items))
     s = summarize(rows)
     print(f"답변 {len(rows)}건 · {time.perf_counter() - t0:.0f}초 (동시 {a.concurrency})")
-    for kind, v in s.items():
+    if "no_case" in s:
+        print(f"[맞는 사례가 없는 질문] 사례가 붙음 {s['no_case']['case_attached']}/{s['no_case']['n']}")
+        for r in [r for r in rows if r.get("no_case") and r["case_attached"]]:
+            print(f"  [잘못 붙음] ws{r['workspace_id']} {r['query']} → {[i for i in r['retrieved'] if i.startswith('n:')][:3]}")
+    for kind, v in ((k, v) for k, v in s.items() if k != "no_case"):
         print(f"[{kind}] 정답이 근거에 {v['in_context']}/{v['n']} — 인용 {v['cited']} · 거짓 거절 {v['refused']} · 인용 안 함 {v['uncited']} | 놓침 {v['missed']}"
               f" | 빈 답 {v['bare_gap']} · 없다고 시작하고 인용 {v['gap_then_cited']} · 인용 없는 답변 {v['no_citation']} · 검증 안 된 마커 {v['unverified_markers']} · 오류 {v['errors']}")
     for label, key in (("거짓 거절", "refused"), ("인용 안 함", "uncited")):
