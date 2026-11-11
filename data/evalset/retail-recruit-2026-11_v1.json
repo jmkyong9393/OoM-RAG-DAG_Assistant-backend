@@ -12,6 +12,6 @@
   {"workspace_id": 2, "kind": "policy", "query": "탈락자 지원 내역은 몇년 갖고 있다가 지우면 되요?", "expect": ["c:retail-recruit-2026-11-a23-1"], "note": "의역(오타) | 제23조 ① | 입사지원 정보는 지원서 접수일부터 3년 동안 보유"},
   {"workspace_id": 2, "kind": "policy", "query": "계약직은 합격 발표가 어느 단계 끝나고 나가?", "expect": ["c:retail-recruit-2026-11-s15-1"], "note": "표 | 별표 1 합격 발표 행 | 계약직은 채용검진 뒤"},
   {"workspace_id": 2, "kind": "policy", "query": "적성검사 녹화 영상이랑 신분증 사본은 얼마나 보관해?", "expect": ["c:retail-recruit-2026-11-s26-1"], "note": "표 | 별표 2 검사 영상·신분증 사본 행 | 1개월"},
-  {"workspace_id": 2, "kind": "policy", "query": "계약직 전형은 정규직 전형이랑 뭐가 달라요?", "expect": ["c:retail-recruit-2026-11-a17-1"], "note": "비교 | 제17조 ③ | 계약직은 서류전형·직무면접·인성검사·채용검진 순, 정규직과 달리 임원면접 없음"},
+  {"workspace_id": 2, "kind": "policy", "query": "계약직 전형은 정규직 전형이랑 뭐가 달라요?", "expect": ["c:retail-recruit-2026-11-a17-1"], "expect_alt": ["c:retail-recruit-2026-11-s15-1"], "note": "비교 | 제17조 ③ | 계약직은 서류전형·직무면접·인성검사·채용검진 순, 정규직과 달리 임원면접 없음"},
   {"workspace_id": 2, "kind": "policy", "query": "신입 공채랑 경력 채용은 보는 검사가 서로 달라?", "expect": ["c:retail-recruit-2026-11-a10-1"], "note": "비교 | 제10조 ①③ | 신입 공채·인턴십은 직무적성검사, 경력·수시는 온라인 인성검사 약 45분~1시간"}
 ]

@@ -6,9 +6,11 @@
   uncited  정답이 근거에 있는데 인용하지 않았다(다른 근거로 답함)
   missed   정답이 근거에 없다(검색 · 진입점 선택 단계의 실패)
 그 밖에: bare_gap(답변이 '기준 없음' 두 문장 이하 — 관련 조문 안내가 없는 빈 답), 인용 없는 답변, 검증 안 된 마커.
+`expect_alt` 가 있는 문항은 그 조각을 인용해도 인용으로 센다 — 같은 값이 조문과 별표 양쪽에 적힌 경우다. 검색 지표(hit_at_k)는 `expect` 만 본다.
 사례 진입점만 따로 볼 때는 data/case_entry/ 의 두 묶음을 준다 — 구어체 질문(정답 체인의 루트가 expect)과, 맞는 사례가 없는 질문("no_case": 사례가 붙으면 안 된다).
 
 실행: set -a; . deploy/.env; set +a; cd ai && uv run --extra graph python ../eval/answer_on_evalset.py [평가셋…] [--json 결과] [--concurrency 6] [--kind policy|troubleshoot]
+      --regrade 결과.json : 저장된 답변을 지금 평가셋의 정답(expect + expect_alt)으로 다시 분류만 한다(LLM 호출 없음)
 """
 from __future__ import annotations
 
@@ -86,7 +88,8 @@ async def run_one(item: dict) -> dict:
            "retrieved": done.get("retrieved_ids", []), "verified": done.get("verified_ids", []), "unverified": done.get("unverified_ids", []),
            "intent": (d.get("intent") or {}).get("intent"), "answer": answer, "error": (d.get("error") or {}).get("message"),
            "sec": round(time.perf_counter() - t0, 1)}
-    row.update(classify(item["expect"], row["retrieved"], row["verified"], answer))
+    row["expect_alt"] = item.get("expect_alt", [])
+    row.update(classify(item["expect"] + row["expect_alt"], row["retrieved"], row["verified"], answer))
     row["no_case"] = bool(item.get("no_case"))
     row["case_attached"] = any(i.startswith("n:") for i in row["retrieved"])
     return row
@@ -103,13 +106,37 @@ def summarize(rows: list[dict]) -> dict:
         out[kind] = {"n": len(rs), "in_context": in_ctx, **{k: c[k] for k in ("cited", "refused", "uncited", "missed")},
                      "cited_of_in_context": round(c["cited"] / in_ctx, 4) if in_ctx else None,
                      "bare_gap": sum(r["bare_gap"] for r in rs), "gap_any": sum(r["gap_any"] for r in rs),
-                     "gap_then_cited": sum(r["gap_then_cited"] for r in rs),
+                     "gap_then_cited": sum(r.get("gap_then_cited", False) for r in rs),
                      "no_citation": sum(r["no_citation"] for r in rs), "unverified_markers": sum(bool(r["unverified"]) for r in rs),
                      "errors": sum(bool(r["error"]) for r in rs)}
     none = [r for r in rows if r.get("no_case")]
     if none:
         out["no_case"] = {"n": len(none), "case_attached": sum(r["case_attached"] for r in none)}
     return out
+
+
+def regrade(path: Path, files: list[Path]) -> int:
+    alt = {(it["workspace_id"], it["query"]): it.get("expect_alt", []) for f in files for it in json.loads(f.read_text(encoding="utf-8"))}
+    rows = json.loads(path.read_text(encoding="utf-8"))["rows"]
+    for r in rows:
+        r["expect_alt"] = alt.get((r["workspace_id"], r["query"]), [])
+        r.update(classify(r["expect"] + r["expect_alt"], r["retrieved"], r["verified"], r["answer"]))
+    print(f"다시 분류: {path} ({len(rows)}건, 대체 정답이 있는 문항 {sum(bool(r['expect_alt']) for r in rows)})")
+    report(summarize(rows), rows)
+    return 0
+
+
+def report(s: dict, rows: list[dict]) -> None:
+    if "no_case" in s:
+        print(f"[맞는 사례가 없는 질문] 사례가 붙음 {s['no_case']['case_attached']}/{s['no_case']['n']}")
+        for r in [r for r in rows if r.get("no_case") and r["case_attached"]]:
+            print(f"  [잘못 붙음] ws{r['workspace_id']} {r['query']} → {[i for i in r['retrieved'] if i.startswith('n:')][:3]}")
+    for kind, v in ((k, v) for k, v in s.items() if k != "no_case"):
+        print(f"[{kind}] 정답이 근거에 {v['in_context']}/{v['n']} — 인용 {v['cited']} · 거짓 거절 {v['refused']} · 인용 안 함 {v['uncited']} | 놓침 {v['missed']}"
+              f" | 빈 답 {v['bare_gap']} · 없다고 시작하고 인용 {v.get('gap_then_cited', 0)} · 인용 없는 답변 {v['no_citation']} · 검증 안 된 마커 {v['unverified_markers']} · 오류 {v['errors']}")
+    for label, key in (("거짓 거절", "refused"), ("인용 안 함", "uncited")):
+        for r in [r for r in rows if r["class"] == key][:60]:
+            print(f"  [{label}] ws{r['workspace_id']} {r['query']} → {MARK.sub('', r['answer'])[:90]!r}")
 
 
 async def main() -> int:
@@ -120,7 +147,10 @@ async def main() -> int:
     ap.add_argument("--concurrency", type=int, default=6)
     ap.add_argument("--kind", choices=["policy", "troubleshoot"], default=None)
     ap.add_argument("--allow-stale-schema", action="store_true", help="DB 스키마가 레포보다 옛 판이어도 돌린다")
+    ap.add_argument("--regrade", type=Path, default=None, help="저장된 결과를 지금 평가셋의 정답으로 다시 분류만 한다")
     a = ap.parse_args()
+    if a.regrade:
+        return regrade(a.regrade, a.files or sorted((ROOT / "data" / "evalset").glob("*.json")))
     import schema_check
     schema_check.ensure_current(a.allow_stale_schema)
     if ai_mode() != "openai" or not profile().has_key:
@@ -147,16 +177,7 @@ async def main() -> int:
     rows = await asyncio.gather(*(guarded(it) for it in items))
     s = summarize(rows)
     print(f"답변 {len(rows)}건 · {time.perf_counter() - t0:.0f}초 (동시 {a.concurrency})")
-    if "no_case" in s:
-        print(f"[맞는 사례가 없는 질문] 사례가 붙음 {s['no_case']['case_attached']}/{s['no_case']['n']}")
-        for r in [r for r in rows if r.get("no_case") and r["case_attached"]]:
-            print(f"  [잘못 붙음] ws{r['workspace_id']} {r['query']} → {[i for i in r['retrieved'] if i.startswith('n:')][:3]}")
-    for kind, v in ((k, v) for k, v in s.items() if k != "no_case"):
-        print(f"[{kind}] 정답이 근거에 {v['in_context']}/{v['n']} — 인용 {v['cited']} · 거짓 거절 {v['refused']} · 인용 안 함 {v['uncited']} | 놓침 {v['missed']}"
-              f" | 빈 답 {v['bare_gap']} · 없다고 시작하고 인용 {v['gap_then_cited']} · 인용 없는 답변 {v['no_citation']} · 검증 안 된 마커 {v['unverified_markers']} · 오류 {v['errors']}")
-    for label, key in (("거짓 거절", "refused"), ("인용 안 함", "uncited")):
-        for r in [r for r in rows if r["class"] == key][:60]:
-            print(f"  [{label}] ws{r['workspace_id']} {r['query']} → {MARK.sub('', r['answer'])[:90]!r}")
+    report(s, rows)
     if a.json:
         a.json.parent.mkdir(parents=True, exist_ok=True)
         a.json.write_text(json.dumps({"summary": s, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")

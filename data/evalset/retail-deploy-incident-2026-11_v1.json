@@ -1,7 +1,7 @@
 [
   {"workspace_id": 1, "kind": "policy", "query": "운영 배포는 무슨 요일 몇 시에 할 수 있어?", "expect": ["c:retail-deploy-incident-2026-11-a3-1"], "note": "기본 | 제3조 ① | 화요일부터 목요일까지 10:00부터 16:00 사이"},
   {"workspace_id": 1, "kind": "policy", "query": "배포하고 에러율이 얼마 넘으면 롤백해야 돼?", "expect": ["c:retail-deploy-incident-2026-11-a5-1"], "note": "기본 | 제5조 ①② | 배포 후 5분 관찰 중 에러율 1% 초과 또는 p95 응답 시간 2배 초과면 즉시 롤백"},
-  {"workspace_id": 1, "kind": "policy", "query": "외부 API 호출 타임아웃은 몇 초로 잡아야 해?", "expect": ["c:retail-deploy-incident-2026-11-a7-1"], "note": "기본 | 제7조 ① | 10초"},
+  {"workspace_id": 1, "kind": "policy", "query": "외부 API 호출 타임아웃은 몇 초로 잡아야 해?", "expect": ["c:retail-deploy-incident-2026-11-a7-1"], "expect_alt": ["c:retail-deploy-incident-2026-11-s25-1"], "note": "기본 | 제7조 ① | 10초"},
   {"workspace_id": 1, "kind": "policy", "query": "커넥션 풀 최대 크기랑 대기 타임아웃 기준이 뭐야?", "expect": ["c:retail-deploy-incident-2026-11-a9-1"], "note": "기본 | 제9조 ① | 풀 최대 크기 20, 커넥션 대기 타임아웃 3초"},
   {"workspace_id": 1, "kind": "policy", "query": "레지스트리 토큰 유효기간이 얼마고 언제 갱신돼?", "expect": ["c:retail-deploy-incident-2026-11-a12-1"], "note": "기본 | 제12조 ② | 유효기간 90일, 만료 7일 전에 자동 재발급"},
   {"workspace_id": 1, "kind": "policy", "query": "리프레시 토큰 회전할 때 이전 토큰은 얼마나 살려둬?", "expect": ["c:retail-deploy-incident-2026-11-a13-1"], "note": "기본 | 제13조 ① | 이전 토큰을 30초 동안 유예"},
@@ -11,7 +11,7 @@
   {"workspace_id": 1, "kind": "policy", "query": "배치가 메모리 터져서 자꾸 죽으면 장애로 올려야 해?", "expect": ["c:retail-deploy-incident-2026-11-a10-1"], "note": "의역 | 제10조 ⑤ | 같은 컨테이너가 메모리 부족으로 2회 이상 재시작되면 장애로 기록"},
   {"workspace_id": 1, "kind": "policy", "query": "한번 나고 끝난 가벼운 장애도 로그 꼭 등록해야 되요?", "expect": ["c:retail-deploy-incident-2026-11-a17-1"], "note": "의역(오타) | 제17조 ①④ | 1급·2급과 2회 이상 되풀이된 장애는 등록 의무, 한 번으로 끝난 3급 장애는 생략 가능"},
   {"workspace_id": 1, "kind": "policy", "query": "빌드 캐시는 얼마까지 저장하게 돼 있어?", "expect": ["c:retail-deploy-incident-2026-11-s25-1", "c:retail-deploy-incident-2026-11-a11-1"], "note": "표 | 별표 3 빌드 캐시 상한 행 (+ 제11조 ②) | 2GB"},
-  {"workspace_id": 1, "kind": "policy", "query": "배포 전에 pull 시크릿 만료일은 얼마나 남아 있어야 해?", "expect": ["c:retail-deploy-incident-2026-11-s24-1"], "note": "표 | 별표 2 pull 시크릿 만료일 행 | 30일 이상 남음"},
-  {"workspace_id": 1, "kind": "policy", "query": "1급 장애랑 3급 장애는 보고 시한이 어떻게 달라?", "expect": ["c:retail-deploy-incident-2026-11-a15-1"], "note": "비교 | 제15조 ① | 1급은 15분 안, 3급은 당일 안"},
+  {"workspace_id": 1, "kind": "policy", "query": "배포 전에 pull 시크릿 만료일은 얼마나 남아 있어야 해?", "expect": ["c:retail-deploy-incident-2026-11-s24-1"], "expect_alt": ["c:retail-deploy-incident-2026-11-a4-1"], "note": "표 | 별표 2 pull 시크릿 만료일 행 | 30일 이상 남음"},
+  {"workspace_id": 1, "kind": "policy", "query": "1급 장애랑 3급 장애는 보고 시한이 어떻게 달라?", "expect": ["c:retail-deploy-incident-2026-11-a15-1"], "expect_alt": ["c:retail-deploy-incident-2026-11-s23-1"], "note": "비교 | 제15조 ① | 1급은 15분 안, 3급은 당일 안"},
   {"workspace_id": 1, "kind": "policy", "query": "롤백 기준에 못 미칠 때도 롤백할 수 있어? 넘을 때랑 뭐가 달라?", "expect": ["c:retail-deploy-incident-2026-11-a5-1"], "note": "비교 | 제5조 ②③ | 기준을 넘으면 즉시 롤백, 미달이어도 담당자 판단으로 롤백할 수 있고 사유를 기록"}
 ]
