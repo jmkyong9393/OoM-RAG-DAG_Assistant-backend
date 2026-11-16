@@ -1,9 +1,26 @@
 {
  "tenant": "retail",
- "description": "OoM 리테일 — 시연용 사례 체인 기록: 장애 건을 실제로 해결한 기록과 연결 사유. 해결 기록과 후속·보조 조치가 갈리는 체인만 적는다.",
+ "description": "OoM 리테일 — 시연용 사례 체인 기록: 장애 건을 실제로 해결한 기록과 연결 사유. 해결(success) 기록이 있는 장애 건은 모두 적는다 — 지정이 없으면 화면과 보고서가 해결 기록이 없는 것으로 본다. 후속·보조 조치는 넣지 않는다.",
  "resolutions": [
   {"log": "hr-ga_v1", "root": "h2-root", "resolved_by": ["h2-saved-fix", "h2-self"], "why": "두 원인(옛 비밀번호 자동 재시도·망각)을 각각 고친 조치. 안내문 통합(h2-guide)은 보조 조치"},
-  {"log": "cs_v1", "root": "s6-root", "resolved_by": ["s6-fix"], "why": "재민원을 정리한 조치. 특별관리고객 지정(s6-special)은 후속 조치"}
+  {"log": "cs_v1", "root": "s6-root", "resolved_by": ["s6-fix"], "why": "재민원을 정리한 조치. 특별관리고객 지정(s6-special)은 후속 조치"},
+  {"log": "sw-dev_v1", "root": "c1-root", "resolved_by": ["c1-cron", "c1-iac"], "why": "두 원인(접근 토큰 90일 만료·저장소 읽기 권한 누락)을 각각 없앤 조치. 수동 재발급(c1-manual)은 폐기된 옛 조치, 계정 발급 표준화(c1-std)는 후속 정리"},
+  {"log": "sw-dev_v1", "root": "c2-root", "resolved_by": ["c2-tx-fix", "c2-size-fix", "c2-leak-fix"], "why": "세 원인(트랜잭션 안 외부 호출·풀 크기 부족·커넥션 반납 누락)을 각각 없앤 조치"},
+  {"log": "sw-dev_v1", "root": "c3-root", "resolved_by": ["c3-grace", "c3-jwks-fix", "c3-skew"], "why": "세 원인(리프레시 토큰 즉시 폐기·만료된 공개키 캐시·기기 시각 오차)을 각각 없앤 조치"},
+  {"log": "sw-dev_v1", "root": "c4-root", "resolved_by": ["c4-key-fix", "c4-disk-fix"], "why": "두 원인(브랜치명만 든 캐시 키·러너 디스크 부족)을 각각 없앤 조치. 캐시 운영 표준(c4-std)은 후속 정리"},
+  {"log": "sw-dev_v1", "root": "c5-root", "resolved_by": ["c5-heap-fix", "c5-page", "c5-limit-fix"], "why": "세 원인(메모리 제한 미인식·전체 결과 적재·제한 과소 설정)을 각각 없앤 조치. 메타스페이스 상한(c5-meta-fix)은 힙 조정 뒤 새로 생긴 문제의 조치"},
+  {"log": "sw-dev_v1", "root": "c6-root", "resolved_by": ["c6-cb", "c6-backoff"], "why": "두 원인(점검 공지 누락·즉시 재시도 폭주)을 각각 고친 조치. 롤백(c6-rollback)과 배포 검증 단계(c6-gate)는 배포 뒤 드러난 다른 문제의 조치"},
+  {"log": "hr-ga_v1", "root": "h1-root", "resolved_by": ["h1-edu-fix", "h1-cert-fix"], "why": "두 원인(보안교육 미이수·인증서 만료)을 각각 고친 조치. 공용 와이파이 포트 차단(h1-wifi)은 조치 기록이 없다"},
+  {"log": "hr-ga_v1", "root": "h3-root", "resolved_by": ["h3-attach-fix", "h3-trash-fix"], "why": "두 원인(대용량 첨부 보관·휴지통 90일 보관)을 각각 없앤 조치"},
+  {"log": "hr-ga_v1", "root": "h4-root", "resolved_by": ["h4-date-fix", "h4-reissue"], "why": "두 원인(발령일과 카드 활성일 불일치·카드 자성 손상)을 각각 고친 조치"},
+  {"log": "hr-ga_v1", "root": "h5-root", "resolved_by": ["h5-tns-fix", "h5-deputy-fix"], "why": "두 원인(DB 접속 설정 미반영·대결자 미지정)을 각각 고친 조치. 결재 기한 알림 봇(h5-bot)은 보조 조치"},
+  {"log": "hr-ga_v1", "root": "h6-root", "resolved_by": ["h6-list-fix", "h6-pack"], "why": "두 원인(퇴사 체크리스트에 장비 항목 없음·반납 택배 파손)을 각각 고친 조치"},
+  {"log": "cs_v1", "root": "s1-root", "resolved_by": ["s1-goodwill"], "why": "하자 반품 불가를 안내하되 배송 지연을 확인해 예외 환불로 민원을 마무리한 조치"},
+  {"log": "cs_v1", "root": "s2-root", "resolved_by": ["s2-fix", "s2-auto"], "why": "판매자에게 반품 승인을 요청하고, 환불이 미뤄지자 회사가 자동 환불한 조치"},
+  {"log": "cs_v1", "root": "s3-root", "resolved_by": ["s3-fix"], "why": "철거·회수비 부담 기준이 없는 쟁점을 반품 승인과 비용 부담 결정으로 마무리한 조치"},
+  {"log": "cs_v1", "root": "s4-root", "resolved_by": ["s4-fix"], "why": "잘못된 첫 안내를 바로잡아 반품 라벨 발급·검수·전액 환불로 처리한 조치"},
+  {"log": "cs_v1", "root": "s5-root", "resolved_by": ["s5-fix"], "why": "영수증 대신 멤버십 구매 이력으로 구매를 확인해 환불한 조치"},
+  {"log": "cs_v1", "root": "s7-root", "resolved_by": ["s7-fix"], "why": "본인인증 결과를 가입 당시 연계정보와 대조해 연락처와 비밀번호를 복구한 조치"}
  ],
  "edge_reasons": [
   {"log": "hr-ga_v1", "parent": "h2-saved", "child": "h2-saved-fix", "reason": "옛 비밀번호 자동 재시도를 변경 직후 기기별 안내와 3회 사전 경고로 막는다"},
