@@ -74,3 +74,13 @@ def test_template_answer_lists_marked_causes_not_reference_logs(monkeypatch):
     ctx, _ = pipeline._load_chain(1, 1)
     text = "".join(llm._template_answer("잠겼어", [], ctx))
     assert "원인: n2 [N2], n3 [N3]" in text
+
+
+def test_template_answer_drops_title_heads():
+    """시드 제목이 '원인: …' · '해결: …'으로 시작해도 틀 답변이 같은 머리를 두 번 쓰지 않는다."""
+    ctx = [{"ref": "N1", "type": "fail", "status": "active", "title": "로그인 실패", "resolution_summary": None, "depth": 0},
+           {"ref": "N2", "type": "fail", "status": "active", "title": "원인: 캐시 동시 만료", "resolution_summary": None, "depth": 1, "cause": True},
+           {"ref": "N3", "type": "success", "status": "active", "title": "해결: 만료 시각 분산", "resolution_summary": None, "depth": 2}]
+    text = "".join(llm._template_answer("왜 그래", [], ctx))
+    assert "원인: 캐시 동시 만료 [N2]" in text and "해결: 만료 시각 분산 [N3]" in text
+    assert "원인: 원인:" not in text and "해결: 해결:" not in text
