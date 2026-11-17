@@ -65,6 +65,11 @@ class Handler(BaseHTTPRequestHandler):
                 content = json.dumps({"error_code": None, "keywords": ["스텁", "키워드", "정제"], "resolution_summary": "스텁이 정리한 해결 요약."})
             elif "트러블슈팅 기록 묶음" in system:
                 content = json.dumps({"summary": "스텁 체인 요약입니다."})
+            elif "장애 보고서의 문장 칸" in system:   # 근거 없는 문장 · 없는 번호를 섞어 검증을 시험한다
+                content = json.dumps({"summary": [{"text": "스텁 보고서 요약입니다.", "refs": ["N1", "N99"]}, {"text": "근거 없는 문장입니다.", "refs": []}],
+                                      "impact": [], "causes": {"N2": {"text": "스텁 원인 설명입니다.", "refs": ["N2"]}}, "resolution_note": None,
+                                      "side_issues": {}, "prevention": [{"text": "스텁 재발 방지입니다.", "refs": ["N3"], "owner": "홍길동", "due": None}],
+                                      "open_items": "없음"})
             else:
                 content = json.dumps({})
             return self._json(200, {"id": "stub", "object": "chat.completion", "model": req.get("model"),

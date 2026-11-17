@@ -69,9 +69,9 @@
 
 **답변** — 점검표 4종(유통 13 · IT 11 · 부서별 추천 질문 18 · 어려운 질문 6)을 실제 답변으로 돌려 통과. 점검은 인용한 조문·사례, 들어 있어야 할 말, 들어 있으면 안 되는 말을 본다.
 
-**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인(`GET /chains/{id}` 의 `summary` = 장애 건 AI 요약, `?summarize=false` 면 저장된 요약만), 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 규정 문서 관리(`/documents`), 규정 파일 업로드 · 자동 변환 · 검수(`/documents/uploads`), 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
+**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인(`GET /chains/{id}` 의 `summary` = 장애 건 AI 요약, `?summarize=false` 면 저장된 요약만), 장애 보고서(`POST /reports` · `GET /reports/{id}` · `GET /reports?root_id=` — 사실 칸은 DB 에서, AI 칸은 워커가 채운다), 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 규정 문서 관리(`/documents`), 규정 파일 업로드 · 자동 변환 · 검수(`/documents/uploads`), 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 166, Python 227(DB 통합 포함).
+**테스트** — Spring 173, Python 237(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과(빈 DB → `bootstrap.sh` 데이터 적재 → Caddy 경유 로그인·SSE). Lightsail 기동은 아직.
 
@@ -134,6 +134,7 @@ python scripts/validate_policy_pack.py --require-questions    # 형식 · 조문
 - 검색 품질: `cd ai && uv run python ../eval/hit_at_k.py` (평가셋 `data/evalset/*.json`, 어휘/벡터/하이브리드 hit@k·MRR, 두 문서에 걸친 질의의 동시 적중). `--record` 를 붙이면 결과를 `eval_runs` 에 남겨 대시보드(`GET /dashboard/summary` 의 `retrieval`)에 실측값이 나온다.
 - 답변 점검: `cd ai && uv run python ../eval/answer_checks.py --runs 2` (점검표 `data/answer_checks/*.json`, 실제 답변 생성 — LLM 호출 있음). 지시문이나 모델을 바꾼 뒤에는 이것을 돌린다.
 - 답변 품질: `cd ai && uv run python ../eval/answer_quality.py --judge-model <채점 모델>` — 같은 점검표의 질문으로 답변을 만들고, 채점 모델이 충실도(답변 문장 중 컨텍스트로 뒷받침되는 비율)와 관련성(답변에서 되짚어 만든 질문과 원래 질문의 임베딩 유사도)을 낸다. 정의는 RAGAS 를 따른다. `--record` 를 붙이면 `eval_runs` 에 남아 대시보드(`eval`)에 나온다. 관련성은 임베딩 모델마다 척도가 달라, 무관한 질문끼리의 유사도(기준선)를 함께 출력한다.
+- 장애 보고서 AI 칸 점검: `cd ai && uv run python ../eval/report_checks.py --list --json <결과 경로>` (api 가 떠 있어야 한다, LLM 호출 있음). 장애 건마다 보고서를 만들어 한눈에 보기가 원인 · 해결 기록을 빠뜨렸는지 세고 입력 · 출력을 남긴다. `ai/app/report.py` 의 지시문을 고친 뒤에는 `--refill` 로 같은 입력에 다시 돌린다.
 - 평가셋 문항으로 답변 점검: `cd ai && uv run python ../eval/answer_on_evalset.py <평가셋 파일>` — 평가셋 질문으로 답변을 만들어 정답 인용 · 거짓 거절 · 빈 답을 센다(LLM 호출 있음). `--regrade <결과.json>` 은 저장된 답변을 호출 없이 다시 분류한다.
 - 변경 확인은 대표 묶음으로: `data/eval_sample/`(평가셋 43문항 · 핵심 점검 11항목, 전체의 약 10%). 전체 452문항을 매번 돌리지 않는다.
 - 저장된 결과 → 대시보드: `eval/export_eval_runs.py` 가 두 도구의 `--json` 결과를 `--record` 와 같은 행(+ 측정 시각)으로 바꿔 `data/eval/eval_runs.json` 에 쓰고, `make load-eval`(운영은 `bootstrap.sh` 의 `eval` 단계)이 넣는다. LLM 호출 없이 멱등 — 서버에서 평가를 다시 돌리지 않고 로컬 실측을 옮겨, 운영 대시보드가 "측정 전"으로 뜨지 않는다.
