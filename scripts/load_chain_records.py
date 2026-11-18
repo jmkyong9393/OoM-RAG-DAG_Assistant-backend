@@ -4,6 +4,7 @@
   "edge_reasons": [{"log": "it-dev_v1", "parent": "d6-ttl", "child": "d6-jitter", "reason": "…"}]
 노드 id 는 data/logs/<파일>.ids.json 에서 찾는다. 재실행하면 같은 값으로 덮어쓴다(멱등) — 적힌 장애 건의 해결 기록은 통째로 바뀐다.
 해결 기록은 그 장애 건의 활성 success 자손만, 연결 사유는 이미 있는 간선에만 쓴다. 맞지 않으면 경고하고 그 줄은 건너뛴다.
+완료된 장애 건은 완료 시각(resolved_at)을 마지막 해결 기록의 시각으로 맞춘다 — 완료되지 않은 장애 건은 건드리지 않는다.
 
 사용: python scripts/load_chain_records.py [파일...] [--dry-run]    (먼저 make load-logs 로 *.ids.json 을 만든다)
 환경: DATABASE_URL (기본 postgresql://oom:oom@localhost:5432/oom) — make link-chains 는 deploy/.env 를 읽는다
@@ -49,6 +50,9 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
             conn.execute("DELETE FROM log_resolutions WHERE root_id = %s", (root,))
             for i in nodes:
                 conn.execute("INSERT INTO log_resolutions (workspace_id, root_id, node_id) VALUES (%s, %s, %s)", (ws, root, i))
+            # 완료 시각 = 마지막 해결 기록의 시각. bulk 적재는 첫 success 시각으로 채워, 그대로 두면 완료가 해결 기록보다 앞선다
+            conn.execute("""UPDATE log_nodes SET resolved_at = (SELECT max(created_at) FROM log_nodes WHERE id = ANY(%s))
+                            WHERE id = %s AND resolved_at IS NOT NULL""", (nodes, root))
         roots += 1
     for e in doc.get("edge_reasons", []):
         ids = node_ids(e["log"], cache)

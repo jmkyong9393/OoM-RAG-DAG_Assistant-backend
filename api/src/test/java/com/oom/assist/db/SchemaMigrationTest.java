@@ -20,7 +20,8 @@ class SchemaMigrationTest extends AbstractDbTest {
         "log_resolutions",                                 // V10 장애 건을 해결한 기록
         "user_consents",                                   // V13 처리방침 판 단위 동의
         "policy_uploads",                                  // V14 규정 업로드 · 변환 · 검수
-        "chain_summaries");                                // V15 장애 건 AI 요약 · 지문
+        "chain_summaries",                                 // V15 장애 건 AI 요약 · 지문
+        "incident_reports");                               // V16 장애 보고서(R1)
   }
 
   @Test
@@ -69,6 +70,13 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tablePriv("oom_api", "chain_summaries", "UPDATE")).isTrue();
     assertThat(tablePriv("oom_api", "chain_summaries", "DELETE")).isTrue();   // 루트가 아니게 된 기록의 요약 정리
     assertThat(tablePriv("oom_ai", "chain_summaries", "UPDATE")).isFalse();
+    // V16: 보고서 행은 Spring 이 넣고(사실 칸) AI 워커가 AI 칸 · 상태를 고친다
+    assertThat(tablePriv("oom_api", "incident_reports", "INSERT")).isTrue();
+    assertThat(tablePriv("oom_api", "incident_reports", "UPDATE")).isFalse();
+    assertThat(tablePriv("oom_ai", "incident_reports", "UPDATE")).isTrue();
+    assertThat(tablePriv("oom_ai", "incident_reports", "INSERT")).isFalse();
+    assertThat(tablePriv("oom_api", "incident_reports", "DELETE")).isTrue();    // 새 보고서가 done 이 되면 이전 행을 지운다
+    assertThat(tablePriv("oom_ai", "incident_reports", "DELETE")).isTrue();
     // R__ 로 나중에 만든 뷰·함수에도 기본 권한이 적용된다
     assertThat(tablePriv("oom_api", "v_log_nodes", "SELECT")).isTrue();
     assertThat(jdbc.sql("SELECT has_function_privilege('oom_ai', 'get_chain(bigint,bigint,int,int)', 'EXECUTE')").query(Boolean.class).single()).isTrue();

@@ -1,6 +1,7 @@
 """정제 워커. log_nodes.refine_status = pending 을 폴링해(SKIP LOCKED) LLM 정제 → kiwi 토큰 → 임베딩 → UPDATE.
 실패는 attempts+1, 3회면 failed. 분석기가 쪼개는 키워드와 에러 코드는 workspace_terms(auto) 에 누적한다.
 부수 작업: tokens 가 비어 있는 policy_chunks·log_nodes(정제 완료분)도 토크나이징·임베딩한다(시드 직후 어휘 검색이 바로 되게).
+          규정 업로드(변환 · 등록, app.ingest.jobs)와 장애 보고서의 AI 칸(app.report)도 같은 주기에 처리한다.
 
 실행: uv run python -m app.worker            (무한 루프)
       uv run python -m app.worker --once     (대기 작업만 처리하고 종료 — 테스트·시드 후 1회)
@@ -13,6 +14,7 @@ import sys
 import time
 
 from app.config import ai_mode, profile as load_profile, worker_poll_sec
+from app import report
 from app.ingest import jobs as ingest
 from app.llm import client as llm
 from app.retrieval import db, embed
@@ -98,6 +100,7 @@ async def run_once(reindex: bool = False) -> dict:
             db.reset_tokens(conn, load_profile().embedding_model if ai_mode() == "openai" else None)
         # 규정 업로드(변환 · 등록)를 먼저 — 새로 등록된 조문의 토큰 · 임베딩을 같은 주기의 백필이 채운다
         stats.update(ingest.run_pending(conn))
+        stats.update(await report.run_pending(conn))   # 장애 보고서의 AI 칸
         # 한 번에 200건씩(임베딩 요청 크기) 비어 있는 행이 없을 때까지 반복 — --reindex 직후 수백 건도 한 주기에 끝낸다
         while (n := await backfill_chunk_tokens(conn, cache)) > 0:
             stats["chunks"] += n

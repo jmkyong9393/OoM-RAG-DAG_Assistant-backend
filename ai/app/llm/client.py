@@ -162,9 +162,9 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
         if fails:
             parts.append(f"유사 사례: {fails[0]['title']} [{fails[0]['ref']}]. ")
         if causes:
-            parts.append("원인: " + ", ".join(f"{c['title']} [{c['ref']}]" for c in causes[:2]) + ". ")
+            parts.append("원인: " + ", ".join(f"{_bare(c['title'])} [{c['ref']}]" for c in causes[:2]) + ". ")
         if fixes:
-            parts.append("해결: " + ", ".join(f"{f['resolution_summary'] or f['title']} [{f['ref']}]" for f in fixes[:2]) + ". ")
+            parts.append("해결: " + ", ".join(f"{f['resolution_summary'] or _bare(f['title'])} [{f['ref']}]" for f in fixes[:2]) + ". ")
     if policy_ctx:
         parts.append("규정 근거: " + " ".join(f"{p['doc_title']} {p['article_label']} — {p['text'][:80].rstrip()}… [{p['ref']}]" for p in policy_ctx[:3]))
     if not parts:
@@ -255,13 +255,18 @@ def _cause_pairs(live: list[dict], fix_refs: list[str]) -> str:
     return "이 장애는 원인이 여럿이다: " + ", ".join(pairs) + ". 해결 방법은 그 원인과 함께 쓰고, 한 원인의 해결을 다른 원인에 붙이지 않는다."
 
 
-def _action(n: dict) -> str:
-    """사례 줄의 조치 이름: 제목에서 '해결:' 같은 머리를 뗀다."""
-    t = n.get("title") or ""
+def _bare(title: str | None) -> str:
+    """제목에서 '원인:' · '해결:' 같은 머리를 뗀다 — 답변이 같은 말을 앞에 붙이므로 '원인: 원인: …'이 되지 않게."""
+    t = title or ""
     for head in ("해결(구):", "해결:", "원인:", "참고:"):
         if t.startswith(head):
             t = t[len(head):]
-    t = t.strip()
+    return t.strip()
+
+
+def _action(n: dict) -> str:
+    """사례 줄의 조치 이름: 제목에서 '해결:' 같은 머리를 떼고 40자까지."""
+    t = _bare(n.get("title"))
     return t if len(t) <= 40 else t[:40] + "…"
 
 
