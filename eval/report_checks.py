@@ -60,6 +60,14 @@ def facts_only(content: dict) -> dict:
             "resolution": {**content["resolution"], "note": None}}
 
 
+def without_fixes(content: dict) -> dict:
+    """해결 기록 지정을 뺀 사본 — 진행 중인 장애 건을 흉내 낸다(해결 기록은 조치로, 상태는 진행 중으로). DB 는 건드리지 않는다."""
+    fixed = {i["ref"] for i in content["resolution"]["items"]}
+    return {**content, "meta": {**content["meta"], "status": "open", "interim": True, "resolved_at": None},
+            "records": [{**r, "kind": "action"} if r["ref"] in fixed else r for r in content["records"]],
+            "resolution": {**content["resolution"], "items": []}}
+
+
 def mentions(title: str, text: str) -> bool:
     """제목의 낱말(2자 이상) 절반 이상이 글에 그대로 나온다."""
     words = WORD.findall(title)
@@ -75,6 +83,10 @@ def score(content: dict) -> dict:
     cited = {r for s in content["summary"] for r in s["refs"]}
     missing = lambda refs, by_ref: [r for r in refs if not (r in cited if by_ref else (r in cited or mentions(title[r], text)))]  # noqa: E731
     sentences = content["summary"] + content["impact"] + content["prevention"] + content["open_items"]
+    # AI 가 쓴 문장 전부(한눈에 보기 · 영향 · 재발 방지 · 원인 설명 · 추가 문제 메모 · 해결 요약) — 남은 확인(open_items)은 사실 칸이라 뺀다
+    written = (content["summary"] + content["impact"] + content["prevention"]
+               + [x for x in [c.get("explanation") for c in content["causes"]] + [s.get("note") for s in content["side_issues"]]
+                  + [content["resolution"].get("note")] if x])
     return {"records": len(content["records"]), "causes": len(causes), "fixes": len(fixes),
             "causes_explained": sum(1 for c in content["causes"] if c.get("explanation")),
             "side_issues": len(content["side_issues"]), "side_issues_noted": sum(1 for s in content["side_issues"] if s.get("note")),
@@ -82,8 +94,14 @@ def score(content: dict) -> dict:
             "fixes_missing_by_ref": missing(fixes, True), "fixes_missing_by_text": missing(fixes, False),
             "resolution_note": bool(content["resolution"].get("note")) if fixes else None,
             "multi_sentence_items": sum(1 for s in sentences if len(SENTENCE_END.findall(s["text"])) > 1),
+            # 메모 말투('~안 됨.' · '~있었음.' · 명사로 끝남) — 기록 제목을 그대로 옮기면 생긴다
+            "not_polite_ending": sum(1 for s in written if not s["text"].rstrip().rstrip(".").endswith("니다")),
             "summary_items": len(content["summary"]), "summary_chars": len(text),
-            "prevention": len(content["prevention"]), "open_items": len(content["open_items"]), "impact": len(content["impact"])}
+            "prevention": len(content["prevention"]), "open_items": len(content["open_items"]), "impact": len(content["impact"]),
+            # 쓰지 말아야 할 문장 — 원인 기록이 없는데 한눈에 보기가 세 문장(원인 문장이 낌) · 해결 기록이 없는데 고정 문장이 아니거나 해결 요약이 있음
+            "cause_without_record": int(not causes and len(content["summary"]) > 2),
+            "fix_without_record": int(not fixes and bool(content["summary"]) and (content["summary"][-1]["text"] not in (report.NO_FIX_OPEN, report.NO_FIX_DONE)
+                                                                                 or content["resolution"].get("note") is not None))}
 
 
 def totals(rows: list[dict]) -> dict:
@@ -95,7 +113,10 @@ def totals(rows: list[dict]) -> dict:
             "fixes": add("fixes"), "fixes_missing_by_ref": add("fixes_missing_by_ref"), "fixes_missing_by_text": add("fixes_missing_by_text"),
             "full_by_text": sum(1 for s in ok if s["summary_items"] and not s["causes_missing_by_text"] and not s["fixes_missing_by_text"]),
             "side_issues": add("side_issues"), "side_issues_noted": add("side_issues_noted"),
-            "multi_sentence_items": add("multi_sentence_items"),
+            "multi_sentence_items": add("multi_sentence_items"), "not_polite_ending": add("not_polite_ending"),
+            "prevention": add("prevention"), "prevention_reports": sum(1 for s in ok if s["prevention"]), "impact": add("impact"),
+            "no_cause_reports": sum(1 for s in ok if not s["causes"]), "cause_without_record": add("cause_without_record"),
+            "no_fix_reports": sum(1 for s in ok if not s["fixes"]), "fix_without_record": add("fix_without_record"),
             "summary_chars_avg": round(sum(s["summary_chars"] for s in ok) / len(ok)) if ok else 0,
             "prompt_tokens": sum(r.get("prompt_tokens") or 0 for r in rows), "completion_tokens": sum(r.get("completion_tokens") or 0 for r in rows)}
 
@@ -107,6 +128,7 @@ async def main() -> int:
     ap.add_argument("--ws", type=int, default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--list", action="store_true", help="빠짐으로 나온 기록과 한눈에 보기를 건마다 찍는다")
+    ap.add_argument("--open-sample", type=int, default=0, help="완료된 장애 건 N개에서 해결 기록 지정을 뺀 사본으로 AI 칸을 만들어 본다(진행 중 표본, DB 에 쓰지 않음)")
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--base", default=f"http://localhost:{os.environ.get('PORT', '8080')}/api/v1")
     ap.add_argument("--allow-stale-schema", action="store_true")
@@ -116,6 +138,16 @@ async def main() -> int:
     password = os.environ.get("SEED_PASSWORD", "Oom!demo-2026")
     apis: dict[str, Api] = {}
     rows: list[dict] = []
+    raw: dict = {}
+    chat = llm._chat_json
+
+    async def capture(*args, **kw):   # 검증(merge)을 거치기 전의 AI 응답을 남긴다 — 칸이 비었을 때 AI 가 안 쓴 것인지 검증이 버린 것인지 가린다
+        raw["last"] = await chat(*args, **kw)
+        return raw["last"]
+
+    llm._chat_json = capture
+    open_rows: list[dict] = []
+    kept: list[tuple] = []   # (row, 사실 칸, 본문) — 진행 중 표본용
     with db.connect() as conn:
         roots = conn.execute("""
             SELECT v.id, v.workspace_id, v.title,
@@ -150,6 +182,7 @@ async def main() -> int:
             ids = [x["id"] for x in facts["records"]]
             bodies = {x["id"]: x["body"] for x in conn.execute("SELECT id, body FROM log_nodes WHERE id = ANY(%s)", (ids,)).fetchall()}
             row["input"] = report.render(facts, bodies)
+            kept.append((row, facts, bodies))
             if a.refill:
                 usage = llm.Usage()
                 prof = load_profile(db.workspace_settings(conn, row["workspace_id"])["settings"].get("llm_profile", "default"))
@@ -160,7 +193,7 @@ async def main() -> int:
                     continue
                 if content is None:
                     sys.exit("LLM 키가 없어 AI 칸을 만들 수 없습니다 (AI_MODE · LLM_PROFILE_DEFAULT_API_KEY)")
-                row.update(model=prof.model_answer, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens)
+                row.update(model=prof.model_answer, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens, raw=raw.pop("last", None))
             else:
                 content = rec["content"]
                 row.update(status=rec["status"], model=rec["model"], prompt_version=rec["prompt_version"],
@@ -173,6 +206,16 @@ async def main() -> int:
                          "causes": {c["ref"]: c["explanation"] for c in content["causes"]},
                          "side_issues": {s["ref"]: s["note"] for s in content["side_issues"]}, "resolution_note": content["resolution"]["note"]}
             row["score"] = score(content)
+        for row, facts, bodies in [k for k in kept if k[1]["resolution"]["items"]][: a.open_sample]:
+            sample, usage = without_fixes(facts), llm.Usage()
+            prof = load_profile(db.workspace_settings(conn, row["workspace_id"])["settings"].get("llm_profile", "default"))
+            conn.rollback()
+            content = await report.fill(prof, sample, bodies, False, usage)
+            if content is None:
+                sys.exit("LLM 키가 없어 AI 칸을 만들 수 없습니다 (AI_MODE · LLM_PROFILE_DEFAULT_API_KEY)")
+            open_rows.append({"root_id": row["root_id"], "workspace_id": row["workspace_id"], "title": row["title"], "input": report.render(sample, bodies),
+                              "prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens, "raw": raw.pop("last", None),
+                              "ai": {"summary": content["summary"], "resolution_note": content["resolution"]["note"]}, "score": score(content)})
 
     t = totals(rows)
     for row in rows:
@@ -196,10 +239,19 @@ async def main() -> int:
     print(f"한눈에 보기가 언급한 해결  번호 {t['fixes'] - t['fixes_missing_by_ref']}/{t['fixes']}  낱말 {t['fixes'] - t['fixes_missing_by_text']}/{t['fixes']}")
     print(f"원인 · 해결을 모두 언급한 보고서(낱말) {t['full_by_text']}/{t['reports'] - t['failed']}   여러 문장 항목 {t['multi_sentence_items']}   "
           f"한눈에 보기 평균 {t['summary_chars_avg']}자   토큰 입력 {t['prompt_tokens']} · 출력 {t['completion_tokens']}")
+    print(f"재발 방지 문장 {t['prevention']}(보고서 {t['prevention_reports']}건)   영향 문장 {t['impact']}")
+    print(f"원인 기록이 없는데 원인 문장 {t['cause_without_record']}/{t['no_cause_reports']}   해결 기록이 없는데 해결 문장 {t['fix_without_record']}/{t['no_fix_reports']}")
+    print(f"'~니다'로 끝나지 않는 문장 {t['not_polite_ending']}")
+    if open_rows:
+        o = totals(open_rows)
+        print(f"진행 중 표본 {o['reports']}건(해결 기록 지정을 뺀 사본): 해결 기록이 없는데 해결 문장 {o['fix_without_record']}/{o['no_fix_reports']}   "
+              f"원인 빠짐 {o['causes_missing_by_text']}/{o['causes']}   토큰 입력 {o['prompt_tokens']} · 출력 {o['completion_tokens']}")
+        for r in open_rows:
+            print(f"    #{r['root_id']} " + " ".join(x["text"] for x in r["ai"]["summary"]))
     if a.json:
         meta = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "refill": a.refill, "prompt_version": report.PROMPT_VERSION,
                 "prompt_md5": hashlib.md5(report.SYSTEM.encode("utf-8")).hexdigest(), "prompt": report.SYSTEM}
-        a.json.write_text(json.dumps({"meta": meta, "summary": t, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+        a.json.write_text(json.dumps({"meta": meta, "summary": t, "rows": rows, "open_sample": open_rows}, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"wrote {a.json}")
     return 0
 
