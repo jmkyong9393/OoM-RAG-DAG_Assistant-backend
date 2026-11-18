@@ -32,7 +32,7 @@ import tools.jackson.databind.ObjectMapper;
  * 장애 보고서(템플릿 R1, FE-REQ-005) — 장애 건(루트) 하나를 보고서 모양으로 만들어 incident_reports 에 저장한다.
  *   POST /reports {root_id, audience, force}   만들기. 같은 장애 건 · 같은 공개 범위 · 같은 내용의 보고서가 있으면 그것을 돌려준다(force=true 면 새로 만든다)
  *   GET  /reports/{id}                         한 건
- *   GET  /reports?root_id=                     그 장애 건의 보고서(최신순)
+ *   GET  /reports?root_id=                     그 장애 건의 보고서 — 공개 범위마다 한 건(가장 최근에 완료된 것, 없으면 최신 요청) + pending_status
  * content 는 프론트 lib/types/report.ts 의 ReportContent. 사실 칸은 여기서 DB 로 조립한다(프론트 lib/report/assemble.ts 와 같은 규칙):
  *   근거 = 루트 + 그 아래 활성 기록, 번호 N1… = 작성 시각 오름차순(같으면 id), 구분 = 루트 발생 / 원인 표시 원인 / 해결 기록 해결 / 그 밖의 성공 조치 /
  *   그 밖의 실패 추가 문제 / 참고. 하위 기록 제목의 '원인:' · '해결:' 머리는 뗀다. external 은 작성자 · 보고자를 비운다(부서 관리자만 생성).
@@ -65,7 +65,8 @@ public class ReportController {
   public record Report(long id, long rootId, String status, String audience, String templateVersion, String promptVersion, String model,
                        OffsetDateTime generatedAt, String error, boolean stale, String pendingStatus, Object content) {}
 
-  /** 보고서 행 + 응답에 보일 상태 — 10분 넘게 generating 이면 멈춘 것이라 failed 로 보인다(DB 값은 그대로). */
+  /** 보고서 행 + 응답에 보일 상태 — 10분 넘게 generating 이면 멈춘 것이라 failed 로 보인다(DB 값은 AI 워커가 돌 때 바꾼다).
+   *  10분은 아래 재사용 쿼리 · ai/app/report.py 의 STUCK_MINUTES 와 같은 값이어야 한다. */
   private static final String ROWS = """
       SELECT *, CASE WHEN status = 'generating' AND created_at <= now() - interval '10 minutes' THEN 'failed' ELSE status END AS shown_status
       FROM incident_reports""";
