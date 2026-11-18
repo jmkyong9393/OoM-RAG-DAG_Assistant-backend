@@ -40,6 +40,41 @@ class AccountAdminApiTest extends AbstractApiTest {
         .query(String.class).list()).containsExactly("grade,email", "grade");
   }
 
+  private org.springframework.test.web.servlet.ResultActions setPrimary(long user, long ws) throws Exception {
+    return mvc.perform(asUser(patch("/me"), user).contentType(MediaType.APPLICATION_JSON).content("{\"primary_workspace_id\": " + ws + "}"));
+  }
+
+  @Test
+  void primaryWorkspaceBecomesHomeAndLogsFieldName() throws Exception {
+    // 장문경: 경영지원 admin, SW 개발 member — 지정한 적이 없으면 계산값(관리자인 부서)
+    mvc.perform(asUser(get("/me"), userBackend)).andExpect(jsonPath("$.workspace_id").value(wsHr));
+    setPrimary(userBackend, wsSw).andExpect(status().isOk()).andExpect(jsonPath("$.workspace_id").value(wsSw));
+    mvc.perform(asUser(get("/me"), userBackend)).andExpect(jsonPath("$.workspace_id").value(wsSw));
+    mvc.perform(asUser(patch("/me"), userBackend).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"장문경\"}"))
+        .andExpect(jsonPath("$.workspace_id").value(wsSw));   // 안 보내면 그대로
+    mvc.perform(asUser(patch("/me"), userBackend).contentType(MediaType.APPLICATION_JSON).content("{\"primary_workspace_id\": null}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.workspace_id").value(wsSw));   // null 도 그대로 — 지정을 비우는 방법은 없다
+    // 값이 아니라 바뀐 항목 이름만 남는다
+    org.assertj.core.api.Assertions.assertThat(jdbc.sql("SELECT label FROM audit_log WHERE table_name = 'auth' AND action = 'profile_changed' ORDER BY id")
+        .query(String.class).list()).containsExactly("primary_workspace_id");
+  }
+
+  @Test
+  void primaryWorkspaceMustBeOwnDepartment() throws Exception {
+    setPrimary(userLead, wsHr).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"));   // 배종현은 경영지원 소속이 아니다
+    member(company, userLead, "admin");
+    setPrimary(userLead, company).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"));   // 전사 공통은 부서가 아니다
+    setPrimary(userLead, 999_999_999L).andExpect(status().isBadRequest());
+    mvc.perform(asUser(get("/me"), userLead)).andExpect(jsonPath("$.workspace_id").value(wsSw));
+  }
+
+  @Test
+  void primaryWorkspaceFallsBackAfterLeavingIt() throws Exception {
+    setPrimary(userBackend, wsSw).andExpect(status().isOk());
+    jdbc.sql("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?").params(wsSw, userBackend).update();   // 그 부서에서 제외됨
+    mvc.perform(asUser(get("/me"), userBackend)).andExpect(status().isOk()).andExpect(jsonPath("$.workspace_id").value(wsHr));   // 오류 없이 계산값으로
+  }
+
   @Test
   void meCarriesPermissionsPerWorkspaceAndCompany() throws Exception {
     mvc.perform(asUser(get("/me"), userLead)).andExpect(status().isOk())
