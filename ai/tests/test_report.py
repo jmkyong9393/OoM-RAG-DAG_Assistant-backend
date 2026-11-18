@@ -174,6 +174,31 @@ async def test_job_marks_failed_and_keeps_facts(monkeypatch, admin_conn):
         admin_conn.execute("DELETE FROM incident_reports WHERE id = %s", (rid,))
 
 
+@requires_db
+@pytest.mark.parametrize("answer", [{}, {"summary": [{"text": "근거 번호가 없는 문장입니다.", "refs": []}], "impact": [{"text": "없는 번호입니다.", "refs": ["N9"]}]}])
+async def test_job_fails_on_empty_output_and_keeps_previous_report(monkeypatch, admin_conn, answer):
+    """AI 가 빈 결과(또는 근거 번호 없는 문장뿐)를 내면 failed — 문장 없는 보고서가 멀쩡한 이전 보고서를 지우지 않는다."""
+    from app.retrieval import db
+
+    async def empty(*a, **k):
+        return answer
+
+    monkeypatch.setenv("AI_MODE", "openai")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+    monkeypatch.setattr(llm, "_chat_json", empty)
+    old = _insert(admin_conn, report.merge(CONTENT, {"summary": [{"text": "풀이 고갈됐습니다.", "refs": ["N1"]}]}))
+    admin_conn.execute("UPDATE incident_reports SET status = 'done' WHERE id = %s", (old,))
+    rid = _insert(admin_conn, CONTENT)
+    try:
+        with db.connect() as conn:
+            assert await report.run_pending(conn) == {"reports": 0, "report_failed": 1}
+        row = admin_conn.execute("SELECT status, error, content FROM incident_reports WHERE id = %s", (rid,)).fetchone()
+        assert row["status"] == "failed" and "AI_EMPTY_OUTPUT" in row["error"] and row["content"] == CONTENT
+        assert admin_conn.execute("SELECT status FROM incident_reports WHERE id = %s", (old,)).fetchone()["status"] == "done"
+    finally:
+        admin_conn.execute("DELETE FROM incident_reports WHERE id = ANY(%s)", ([old, rid],))
+
+
 def test_check_script_counts_missing_causes_and_fixes():
     """eval/report_checks.py 의 계산 — 한눈에 보기가 언급한 원인 · 해결을 근거 번호와 제목 낱말로 센다."""
     import sys

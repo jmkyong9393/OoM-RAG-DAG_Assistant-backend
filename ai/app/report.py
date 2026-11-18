@@ -141,7 +141,7 @@ def reuse(content: dict, src: dict, bodies: dict[int, str]) -> dict | None:
             "causes": {c["ref"]: c.get("explanation") for c in src.get("causes", [])},
             "side_issues": {s["ref"]: s.get("note") for s in src.get("side_issues", [])},
             "resolution_note": src.get("resolution", {}).get("note")}
-    names = {r.get("author") for r in src.get("records", [])} | {src.get("meta", {}).get("reported_by")}
+    names = {r.get("author") for r in src.get("records", [])}   # 보고자는 루트 기록의 작성자라 여기에 들어 있다
     written = json.dumps(data, ensure_ascii=False)
     if any(n and n in written for n in names):
         return None
@@ -169,6 +169,8 @@ async def fill_one(conn) -> str | None:
         model = src["model"] if filled else prof.model_answer   # 옮겨 쓴 보고서는 토큰 0 · 내부용을 만든 모델
         if filled is None:
             filled = await fill(prof, content, bodies, row["audience"] == "external", usage)
+        if filled is not None and not filled["summary"]:   # 한눈에 보기는 늘 한 문장 이상 — 비었으면 빈 결과다. 실패로 남겨 이전 보고서를 지우지 않는다
+            raise ValueError("AI_EMPTY_OUTPUT: no summary sentence with a known ref")
         if filled is None:
             conn.execute("UPDATE incident_reports SET status = 'done', error = NULL, generated_at = now() WHERE id = %s", (row["id"],))
         else:

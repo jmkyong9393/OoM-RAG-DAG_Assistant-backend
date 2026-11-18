@@ -63,12 +63,18 @@ public class ReportController {
   public record CreateRequest(Long rootId, String audience, Boolean force) {}
 
   public record Report(long id, long rootId, String status, String audience, String templateVersion, String promptVersion, String model,
-                       OffsetDateTime generatedAt, String error, boolean stale, Object content) {}
+                       OffsetDateTime generatedAt, String error, boolean stale, String pendingStatus, Object content) {}
+
+  /** 보고서 행 + 응답에 보일 상태 — 10분 넘게 generating 이면 멈춘 것이라 failed 로 보인다(DB 값은 그대로). */
+  private static final String ROWS = """
+      SELECT *, CASE WHEN status = 'generating' AND created_at <= now() - interval '10 minutes' THEN 'failed' ELSE status END AS shown_status
+      FROM incident_reports""";
 
   private record Facts(String content, String sig) {}
 
   @PostMapping("/reports")
   public Report create(@RequestBody CreateRequest req, TenantContext ctx) {
+    if ("viewer".equals(ctx.role())) throw ApiException.forbidden("viewer cannot create a report");   // AI 비용이 드는 쓰기
     if (req.rootId() == null) throw ApiException.badRequest("VALIDATION", "root_id is required");
     String audience = req.audience() == null ? "internal" : req.audience();
     if (!audience.equals("internal") && !audience.equals("external")) throw ApiException.badRequest("VALIDATION", "audience must be internal or external");
@@ -85,12 +91,13 @@ public class ReportController {
         ORDER BY id DESC LIMIT 1
         """).params(ws, req.rootId(), audience, facts.sig(), force).query(Long.class).optional().orElse(null);
     if (same != null) return read(ws, same, facts.sig());
-    // 이전 보고서는 새 것이 done 이 될 때 지운다 — AI 를 쓰면 AI 워커가, 끄면(바로 done) 여기서
+    // 끝나지 않은 이전 요청(멈춘 generating · failed)은 여기서 지운다 — 남겨 두면 워커가 그 수만큼 AI 를 부른다.
+    // 완료된 이전 보고서는 새 것이 done 이 될 때 지운다 — AI 를 쓰면 AI 워커가, 끄면(바로 done) 여기서
     long id = jdbc.sql("""
-        WITH gone AS (DELETE FROM incident_reports WHERE NOT ? AND workspace_id = ? AND root_id = ? AND audience = ?)
+        WITH gone AS (DELETE FROM incident_reports WHERE workspace_id = ? AND root_id = ? AND audience = ? AND (NOT ? OR status <> 'done'))
         INSERT INTO incident_reports (workspace_id, root_id, audience, status, sig, content, requested_by, generated_at)
         VALUES (?, ?, ?, ?, ?, ?::jsonb, ?, CASE WHEN ? THEN NULL ELSE now() END) RETURNING id
-        """).params(aiEnabled, ws, req.rootId(), audience,
+        """).params(ws, req.rootId(), audience, aiEnabled,
             ws, req.rootId(), audience, aiEnabled ? "generating" : "done", facts.sig(), facts.content(), ctx.userId(), aiEnabled)
         .query(Long.class).single();
     return read(ws, id, facts.sig());
@@ -104,16 +111,23 @@ public class ReportController {
   @GetMapping("/reports")
   public List<Report> list(@RequestParam("root_id") long rootId, TenantContext ctx) {
     long ws = ctx.workspaceId();
-    List<Map<String, Object>> rows = jdbc.sql("SELECT * FROM incident_reports WHERE workspace_id = ? AND root_id = ? ORDER BY id DESC")
-        .params(ws, rootId).query().listOfRows();
-    Map<String, String> now = new HashMap<>();   // 공개 범위마다 지금 지문은 한 번만 계산한다
-    return rows.stream().map(r -> report(r, now.computeIfAbsent((String) r.get("audience"), a -> sigNow(ws, rootId, a)))).toList();
+    Map<String, List<Map<String, Object>>> byAudience = new LinkedHashMap<>();   // 공개 범위마다 최신순
+    for (Map<String, Object> r : jdbc.sql(ROWS + " WHERE workspace_id = ? AND root_id = ? ORDER BY id DESC").params(ws, rootId).query().listOfRows())
+      byAudience.computeIfAbsent((String) r.get("audience"), a -> new ArrayList<>()).add(r);
+    // 공개 범위마다 지금 보여 줄 한 건 = 가장 최근에 완료된 것(없으면 가장 최근 행). 그보다 새 요청이 있으면 그 상태를 pending_status 로 알린다
+    List<Report> out = new ArrayList<>();
+    for (Map.Entry<String, List<Map<String, Object>>> e : byAudience.entrySet()) {
+      Map<String, Object> latest = e.getValue().get(0);
+      Map<String, Object> shown = e.getValue().stream().filter(r -> "done".equals(r.get("shown_status"))).findFirst().orElse(latest);
+      out.add(report(shown, sigNow(ws, rootId, e.getKey()), shown == latest ? null : (String) latest.get("shown_status")));
+    }
+    return out;
   }
 
   private Report read(long ws, long id, String sigNow) {
-    Map<String, Object> r = jdbc.sql("SELECT * FROM incident_reports WHERE id = ? AND workspace_id = ?").params(id, ws)
+    Map<String, Object> r = jdbc.sql(ROWS + " WHERE id = ? AND workspace_id = ?").params(id, ws)
         .query().listOfRows().stream().findFirst().orElseThrow(() -> ApiException.notFound("report"));
-    return report(r, sigNow != null ? sigNow : sigNow(ws, ((Number) r.get("root_id")).longValue(), (String) r.get("audience")));
+    return report(r, sigNow != null ? sigNow : sigNow(ws, ((Number) r.get("root_id")).longValue(), (String) r.get("audience")), null);
   }
 
   /** 지금 장애 건의 지문. 더 이상 장애 건이 아니면(상위가 생김) 빈 값 — 저장된 보고서는 stale 로 보인다. */
@@ -125,10 +139,10 @@ public class ReportController {
     }
   }
 
-  private Report report(Map<String, Object> r, String sigNow) {
-    return new Report(((Number) r.get("id")).longValue(), ((Number) r.get("root_id")).longValue(), (String) r.get("status"), (String) r.get("audience"),
+  private Report report(Map<String, Object> r, String sigNow, String pendingStatus) {
+    return new Report(((Number) r.get("id")).longValue(), ((Number) r.get("root_id")).longValue(), (String) r.get("shown_status"), (String) r.get("audience"),
         (String) r.get("template_version"), (String) r.get("prompt_version"), (String) r.get("model"), Times.offset(r.get("generated_at")),
-        (String) r.get("error"), !sigNow.equals(r.get("sig")), json.readValue(r.get("content").toString(), Object.class));
+        (String) r.get("error"), !sigNow.equals(r.get("sig")), pendingStatus, json.readValue(r.get("content").toString(), Object.class));
   }
 
   /** 사실 칸을 조립한 content(JSON)와 그 지문. AI 칸은 빈 값으로 둔다. */

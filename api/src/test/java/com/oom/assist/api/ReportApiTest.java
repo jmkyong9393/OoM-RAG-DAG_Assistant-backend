@@ -15,6 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * 장애 보고서(R1) — POST /reports 가 사실 칸을 DB 에서 조립해 generating 으로 저장하고(AI 칸은 AI 워커 몫), GET 이 그 행을 돌려준다.
  * 번호(시각순) · 구분 · 제목 머리 떼기 · 외부판(관리자만, 작성자 비움) · 같은 내용이면 재사용(force 면 새로) · 기록이 바뀌면 stale · 루트가 아니면 400 · 다른 부서 404.
+ * 목록은 공개 범위마다 한 건(가장 최근에 완료된 것) + pending_status · 멈춘 요청은 failed 로 보인다 · 새 요청은 끝나지 않은 이전 요청을 지운다 · viewer 는 403.
  */
 class ReportApiTest extends AbstractApiTest {
 
@@ -108,11 +109,101 @@ class ReportApiTest extends AbstractApiTest {
     jdbc.sql("UPDATE incident_reports SET generated_at = now() - interval '2 minutes' WHERE id = ?").param(first).update();
     assertThat(idOf(create(userBackend, wsSw, root, "internal", true))).isNotEqualTo(first);
     jdbc.sql("UPDATE incident_reports SET created_at = now() - interval '11 minutes' WHERE root_id = ? AND status = 'generating'").param(root).update();
-    create(userBackend, wsSw, root, "internal", true);                                         // 10분 넘게 만드는 중이면 멈춘 것 — 새로 만든다
-    assertThat(jdbc.sql("SELECT count(*) FROM incident_reports WHERE root_id = ? AND audience = 'internal'").param(root).query(Long.class).single()).isEqualTo(3);
+    create(userBackend, wsSw, root, "internal", true);                                         // 10분 넘게 만드는 중이면 멈춘 것 — 지우고 새로 만든다
+    assertThat(jdbc.sql("SELECT count(*) FROM incident_reports WHERE root_id = ? AND audience = 'internal'").param(root).query(Long.class).single()).isEqualTo(2);
     assertThat(idOf(create(userLead, wsSw, root, "external", false))).isNotEqualTo(first);   // 공개 범위가 다르면 다른 보고서
     mvc.perform(as(get("/reports").param("root_id", String.valueOf(root)), userBackend, wsSw)).andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(4)).andExpect(jsonPath("$[3].id").value(first));   // 최신순
+        .andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[1].id").value(first));   // 공개 범위마다 한 건
+  }
+
+  /** 보고서 행의 상태와 만든 시각을 바꾼다(AI 워커가 한 일 · 시간이 지난 것을 흉내). done · failed 는 2분 전에 끝난 것으로 둔다. */
+  private void set(long id, String status, int createdMinutesAgo) {
+    jdbc.sql("""
+        UPDATE incident_reports SET status = ?, created_at = now() - make_interval(mins => ?),
+               generated_at = CASE WHEN ? THEN NULL ELSE now() - interval '2 minutes' END WHERE id = ?
+        """).params(status, createdMinutesAgo, status.equals("generating"), id).update();
+  }
+
+  /** 목록의 내부용 한 건 — 길이 1 을 함께 확인한다. */
+  private ResultActions listed() throws Exception {
+    return mvc.perform(as(get("/reports").param("root_id", String.valueOf(root)), userBackend, wsSw)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1));
+  }
+
+  /** 완료된 보고서를 두고 다시 요청한다 — {완료된 것, 새 요청}. */
+  private long[] doneThenRequestedAgain() throws Exception {
+    long first = idOf(create(userBackend, wsSw, root, "internal", false));
+    set(first, "done", 5);
+    return new long[] {first, idOf(create(userBackend, wsSw, root, "internal", true))};
+  }
+
+  @Test
+  void listShowsFirstRequestWhileGenerating() throws Exception {
+    long first = idOf(create(userBackend, wsSw, root, "internal", false));
+    listed().andExpect(jsonPath("$[0].id").value(first)).andExpect(jsonPath("$[0].status").value("generating"))
+        .andExpect(jsonPath("$[0].pending_status").doesNotExist());
+  }
+
+  @Test
+  void listShowsFirstRequestThatFailed() throws Exception {
+    long first = idOf(create(userBackend, wsSw, root, "internal", false));
+    set(first, "failed", 0);
+    listed().andExpect(jsonPath("$[0].id").value(first)).andExpect(jsonPath("$[0].status").value("failed"))
+        .andExpect(jsonPath("$[0].pending_status").doesNotExist());
+  }
+
+  @Test
+  void stuckFirstRequestReadsAsFailed() throws Exception {
+    long first = idOf(create(userBackend, wsSw, root, "internal", false));
+    set(first, "generating", 11);   // DB 값은 generating 그대로
+    listed().andExpect(jsonPath("$[0].id").value(first)).andExpect(jsonPath("$[0].status").value("failed"))
+        .andExpect(jsonPath("$[0].pending_status").doesNotExist());
+    mvc.perform(as(get("/reports/" + first), userBackend, wsSw)).andExpect(jsonPath("$.status").value("failed"));
+  }
+
+  @Test
+  void listKeepsDoneReportWhileRegenerating() throws Exception {
+    long[] ids = doneThenRequestedAgain();
+    listed().andExpect(jsonPath("$[0].id").value(ids[0])).andExpect(jsonPath("$[0].status").value("done"))
+        .andExpect(jsonPath("$[0].pending_status").value("generating"));
+    mvc.perform(as(get("/reports/" + ids[1]), userBackend, wsSw)).andExpect(jsonPath("$.status").value("generating"))
+        .andExpect(jsonPath("$.pending_status").doesNotExist());   // 한 건 조회는 그 행 하나
+  }
+
+  @Test
+  void listKeepsDoneReportWhenRegenerationFailed() throws Exception {
+    long[] ids = doneThenRequestedAgain();
+    set(ids[1], "failed", 0);
+    listed().andExpect(jsonPath("$[0].id").value(ids[0])).andExpect(jsonPath("$[0].status").value("done"))
+        .andExpect(jsonPath("$[0].pending_status").value("failed"));
+  }
+
+  @Test
+  void listKeepsDoneReportWhenRegenerationIsStuck() throws Exception {
+    long[] ids = doneThenRequestedAgain();
+    set(ids[1], "generating", 11);
+    listed().andExpect(jsonPath("$[0].id").value(ids[0])).andExpect(jsonPath("$[0].status").value("done"))
+        .andExpect(jsonPath("$[0].pending_status").value("failed"));
+  }
+
+  @Test
+  void newRequestReplacesStuckAndFailedOnes() throws Exception {
+    long first = idOf(create(userBackend, wsSw, root, "internal", false));
+    set(first, "generating", 11);
+    long second = idOf(create(userBackend, wsSw, root, "internal", false));   // 멈춘 것을 지우고 새로 — 워커가 AI 를 두 번 부르지 않게
+    assertThat(second).isNotEqualTo(first);
+    assertThat(jdbc.sql("SELECT count(*) || ':' || max(id) FROM incident_reports WHERE root_id = ?").param(root).query(String.class).single()).isEqualTo("1:" + second);
+    set(second, "failed", 0);
+    long third = idOf(create(userBackend, wsSw, root, "internal", false));   // 실패한 것도 새 요청 때 지운다
+    assertThat(jdbc.sql("SELECT count(*) || ':' || max(id) FROM incident_reports WHERE root_id = ?").param(root).query(String.class).single()).isEqualTo("1:" + third);
+  }
+
+  @Test
+  void viewerCannotCreateReport() throws Exception {
+    long viewer = user("열람자", "사원", "T0009", "viewer@test.local");
+    member(wsSw, viewer, "viewer");
+    create(viewer, wsSw, root, "internal", false).andExpect(status().isForbidden());
+    mvc.perform(as(get("/reports").param("root_id", String.valueOf(root)), viewer, wsSw)).andExpect(status().isOk());   // 읽기는 된다
   }
 
   @Test
