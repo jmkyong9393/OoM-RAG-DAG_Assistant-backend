@@ -69,9 +69,9 @@
 
 **답변** — 점검표 4종(유통 13 · IT 11 · 부서별 추천 질문 18 · 어려운 질문 6)을 실제 답변으로 돌려 통과. 점검은 인용한 조문·사례, 들어 있어야 할 말, 들어 있으면 안 되는 말을 본다.
 
-**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 로그/간선/체인(`GET /chains/{id}` 의 `summary` = 장애 건 AI 요약, `?summarize=false` 면 저장된 요약만), 장애 보고서(`POST /reports` · `GET /reports/{id}` · `GET /reports?root_id=` — 사실 칸은 DB 에서, AI 칸은 워커가 채운다), 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 규정 문서 관리(`/documents`), 규정 파일 업로드 · 자동 변환 · 검수(`/documents/uploads`), 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
+**API** — 사번+비밀번호 로그인(5회 실패 15분 잠금, 180일 만료, 첫 로그인 동의·비밀번호 변경), 부서 목록·설정(`GET /workspaces` · `/workspaces/manageable` · `PATCH /workspaces/{id}`), 계정 관리(임시 비밀번호 재발급 `POST /users/{id}/reset-password` · 비활성화 · 재활성화 `/users/{id}/deactivate` · `/reactivate` · 비활성 목록 `GET /users/inactive`, 메인 부서는 `PATCH /me` 의 `primary_workspace_id`), 로그/간선/체인(`GET /chains/{id}` 의 `summary` = 장애 건 AI 요약, `?summarize=false` 면 저장된 요약만), 장애 보고서(`POST /reports` · `GET /reports/{id}` · `GET /reports?root_id=` — 사실 칸은 DB 에서, AI 칸은 워커가 채운다), 사례의 근거 조문(`/logs/{id}/policy-refs`, `/logs/policy-articles`), 규정 개정 영향(`/policy-revisions/impact`), 규정 문서 관리(`/documents`), 규정 파일 업로드 · 자동 변환 · 검수(`/documents/uploads`), 피드백, 대시보드(`retrieval` = 검색 품질 실측), SSE 릴레이. 계약은 개발문서 `06`.
 
-**테스트** — Spring 181, Python 247(DB 통합 포함).
+**테스트** — Spring 202, Python 247(DB 통합 포함).
 
 **배포** — 운영 compose 로컬 스모크 통과(빈 DB → `bootstrap.sh` 데이터 적재 → Caddy 경유 로그인·SSE). Lightsail 기동은 아직.
 

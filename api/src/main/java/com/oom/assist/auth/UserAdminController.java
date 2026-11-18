@@ -63,8 +63,8 @@ public class UserAdminController {
 
     Optional<Long> existing = jdbc.sql("SELECT id FROM users WHERE tenant_id = ? AND lower(employee_no) = lower(?)").params(ctx.tenantId(), empNo)
         .query(Long.class).optional();
-    if (existing.isPresent() && !"active".equals(jdbc.sql("SELECT status FROM users WHERE id = ?").param(existing.get()).query(String.class).single()))
-      throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");   // 비활성(퇴사 처리) 계정이 그 상태로 다른 부서에 들어가지 않게
+    if (existing.isPresent() && !"active".equals(jdbc.sql("SELECT status FROM users WHERE id = ? FOR SHARE").param(existing.get()).query(String.class).single()))
+      throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");   // 비활성(퇴사 처리) 계정이 그 상태로 다른 부서에 들어가지 않게. FOR SHARE = 확인과 소속 추가 사이에 비활성화가 끼어들지 못하게(lockUser 와 같은 줄)
     boolean created = existing.isEmpty();
     String temp = null;
     long userId;
@@ -165,21 +165,13 @@ public class UserAdminController {
     if (reason.isEmpty()) throw ApiException.badRequest("REASON_REQUIRED", "reason is required");
     lockCompany(actor.tenantId());
     if (!"active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ALREADY_INACTIVE", "already inactive");
-    // 대상이 admin 인 부서를 잠가 역할 변경 · 제외와 줄을 세운다. 조회와 잠금 사이에 대상이 다른 부서의 admin 이 될 수 있으므로
-    // (그 부서는 잠기지도 확인되지도 않는다) 잠근 뒤 다시 조회해, 새로 잠글 부서가 없을 때까지 반복한다
-    List<Map<String, Object>> adminOf;
-    java.util.Set<Long> locked = new java.util.HashSet<>();
-    boolean added;
-    do {
-      adminOf = jdbc.sql("""
-            SELECT m.workspace_id, w.kind FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
-            WHERE m.user_id = ? AND m.role = 'admin' ORDER BY m.workspace_id""").param(id).query().listOfRows();
-      added = false;
-      for (Map<String, Object> w : adminOf) {
-        long ws = ((Number) w.get("workspace_id")).longValue();
-        if (locked.add(ws)) { lockMembers(ws); added = true; }
-      }
-    } while (added);
+    // 위 status() 가 대상 계정의 행을 잠갔으므로(FOR UPDATE) 여기서부터 대상의 역할 · 소속은 바뀌지 않는다 — 역할 변경 · 제외 · 초대가
+    // 같은 행을 FOR SHARE 로 잡는다(lockUser). 그래서 대상이 admin 인 부서는 한 번만 조회하면 된다.
+    // 그 부서들은 잠가서, 같은 부서의 다른 admin 을 강등 · 제외하는 요청과 줄을 세운 뒤 인원을 센다
+    List<Map<String, Object>> adminOf = jdbc.sql("""
+          SELECT m.workspace_id, w.kind FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+          WHERE m.user_id = ? AND m.role = 'admin' ORDER BY m.workspace_id""").param(id).query().listOfRows();
+    for (Map<String, Object> w : adminOf) lockMembers(((Number) w.get("workspace_id")).longValue());
     if (adminOf.stream().anyMatch(w -> !"dept".equals(w.get("kind"))) && companyAdminCount(actor.tenantId()) <= 1)
       throw ApiException.conflict("LAST_COMPANY_ADMIN", "company needs at least one admin");
     if (id == actor.id()) throw ApiException.conflict("SELF_DEACTIVATION", "cannot deactivate yourself");
@@ -242,9 +234,12 @@ public class UserAdminController {
           WHERE w.tenant_id = ? AND w.kind <> 'dept' AND m.role = 'admin' AND u.status = 'active'""").param(tenantId).query(Long.class).single();
   }
 
-  /** 대상 계정의 상태. 다른 회사의 계정 · 없는 번호는 같은 404 — 있는지를 알리지 않는다. */
+  /**
+   * 대상 계정의 상태 — 그 행을 잠그고 읽는다(FOR UPDATE): 비활성화 · 재활성화끼리, 그리고 그 계정의 역할 변경 · 제외 · 초대(lockUser)와 줄을 선다.
+   * 다른 회사의 계정 · 없는 번호는 같은 404 — 있는지를 알리지 않는다.
+   */
   private String status(long id, long tenantId) {
-    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ?").params(id, tenantId).query(String.class).optional()
+    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ? FOR UPDATE").params(id, tenantId).query(String.class).optional()
         .orElseThrow(() -> ApiException.notFound("user"));
   }
 
@@ -270,6 +265,7 @@ public class UserAdminController {
     if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
     String role = body == null ? null : body.role();
     if (!"member".equals(role) && !"admin".equals(role)) throw ApiException.badRequest("VALIDATION", "role must be member|admin");
+    lockUser(id, ctx.tenantId());
     lockMembers(ctx.workspaceId());
     String cur = memberRole(ctx.workspaceId(), id);
     if (!cur.equals(role)) {
@@ -289,6 +285,7 @@ public class UserAdminController {
   public ResponseEntity<Void> removeMember(@PathVariable long ws, @PathVariable long uid, TenantContext ctx) {
     if (ws != ctx.workspaceId()) throw ApiException.badRequest("VALIDATION", "path workspace must match X-Workspace-Id");
     if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    lockUser(uid, ctx.tenantId());
     lockMembers(ws);
     String cur = memberRole(ws, uid);
     if (uid == ctx.userId()) throw ApiException.conflict("SELF_REMOVAL", "cannot remove yourself");
@@ -301,6 +298,16 @@ public class UserAdminController {
   /** 같은 부서의 역할 변경 · 제외를 줄 세운다 — 관리자 둘이 서로를 동시에 강등해 admin 이 0명이 되는 틈을 막는다. */
   private void lockMembers(long ws) {
     jdbc.sql("SELECT pg_advisory_xact_lock(?, ?)").params(7, (int) ws).query(Object.class).optional();
+  }
+
+  /**
+   * 대상 계정의 행을 공유 잠금(FOR SHARE) — 그 계정의 비활성화(status() 의 FOR UPDATE)와 줄을 세운다. 비활성화가 대상이 admin 인 부서를
+   * 조회한 뒤에 대상이 다른 부서의 admin 으로 올라가고 기존 admin 이 내려가면, 그 부서는 확인 없이 admin 0명이 된다.
+   * 잠그는 순서는 어디서나 계정 → 부서(lockMembers) — 순서가 같아야 서로 기다리다 멈추지 않는다.
+   * 같은 회사의 계정만 잠근다 — 없는 번호 · 다른 회사의 계정은 아무것도 잠그지 않고 뒤에서 404.
+   */
+  private void lockUser(long uid, long tenantId) {
+    jdbc.sql("SELECT 1 FROM users WHERE id = ? AND tenant_id = ? FOR SHARE").params(uid, tenantId).query(Integer.class).optional();
   }
 
   private String memberRole(long ws, long uid) {
