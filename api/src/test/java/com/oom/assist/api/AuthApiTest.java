@@ -193,7 +193,7 @@ class AuthApiTest extends AbstractApiTest {
     assertThat((boolean) JsonPath.read(body(login), "$.must_change_password")).isTrue();
     Cookie c = sessionCookie(login);
     mvc.perform(get("/logs").cookie(c).header(TenantContextFilter.WORKSPACE_HEADER, wsSw)).andExpect(status().isOk());
-    mvc.perform(get("/logs").cookie(c).header(TenantContextFilter.WORKSPACE_HEADER, wsHr)).andExpect(status().isUnauthorized());
+    mvc.perform(get("/logs").cookie(c).header(TenantContextFilter.WORKSPACE_HEADER, wsHr)).andExpect(status().isForbidden());   // 소속이 아닌 부서 — 로그아웃되지 않게 403
     assertThat(jdbc.sql("SELECT count(*) FROM audit_log WHERE table_name = 'users' AND row_id = ? AND action = 'invite'").param(String.valueOf(newId))
         .query(Long.class).single()).isEqualTo(1L);
     // 같은 사번을 HR 로 다시 초대하면 계정 재사용, 멤버십만 추가 (임시 비밀번호 없음) → 또 초대하면 409

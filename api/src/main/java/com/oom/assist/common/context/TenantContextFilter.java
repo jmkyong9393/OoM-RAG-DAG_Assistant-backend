@@ -14,7 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * 세션에서 복원된 로그인 사용자 + 헤더 X-Workspace-Id → workspace_members 조회 → TenantContext 를 요청 속성에 둔다.
  * Spring Security 필터 체인 안(익명 처리 뒤)에 끼워 넣는다(SecurityConfig). 헤더가 없거나 소속이 아니면 속성을 비워 두고,
- * 컨트롤러가 TenantContext 를 요구할 때 401 이 난다. 규칙 R1: 소속이 아닌 워크스페이스는 존재 자체를 숨긴다.
+ * 컨트롤러가 TenantContext 를 요구할 때 403 이 난다(로그인하지 않았으면 401). 규칙 R1: 소속이 아닌 워크스페이스는 존재 자체를 숨긴다.
  */
 public class TenantContextFilter extends OncePerRequestFilter {
   public static final String WORKSPACE_HEADER = "X-Workspace-Id";
@@ -41,7 +41,7 @@ public class TenantContextFilter extends OncePerRequestFilter {
               """).params(wsId, userId.get()).query().listOfRows().stream().findFirst()
             .ifPresent(r -> req.setAttribute(TenantContextArgumentResolver.ATTR, toContext(r)));
       } catch (NumberFormatException ignored) {
-        // 잘못된 헤더는 컨텍스트 없음. 보호된 엔드포인트에서 401.
+        // 잘못된 헤더는 컨텍스트 없음. 보호된 엔드포인트에서 403.
       }
     }
     chain.doFilter(req, res);
