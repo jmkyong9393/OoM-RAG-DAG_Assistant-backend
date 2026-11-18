@@ -83,6 +83,10 @@ def score(content: dict) -> dict:
     cited = {r for s in content["summary"] for r in s["refs"]}
     missing = lambda refs, by_ref: [r for r in refs if not (r in cited if by_ref else (r in cited or mentions(title[r], text)))]  # noqa: E731
     sentences = content["summary"] + content["impact"] + content["prevention"] + content["open_items"]
+    # AI 가 쓴 문장 전부(한눈에 보기 · 영향 · 재발 방지 · 원인 설명 · 추가 문제 메모 · 해결 요약) — 남은 확인(open_items)은 사실 칸이라 뺀다
+    written = (content["summary"] + content["impact"] + content["prevention"]
+               + [x for x in [c.get("explanation") for c in content["causes"]] + [s.get("note") for s in content["side_issues"]]
+                  + [content["resolution"].get("note")] if x])
     return {"records": len(content["records"]), "causes": len(causes), "fixes": len(fixes),
             "causes_explained": sum(1 for c in content["causes"] if c.get("explanation")),
             "side_issues": len(content["side_issues"]), "side_issues_noted": sum(1 for s in content["side_issues"] if s.get("note")),
@@ -90,6 +94,8 @@ def score(content: dict) -> dict:
             "fixes_missing_by_ref": missing(fixes, True), "fixes_missing_by_text": missing(fixes, False),
             "resolution_note": bool(content["resolution"].get("note")) if fixes else None,
             "multi_sentence_items": sum(1 for s in sentences if len(SENTENCE_END.findall(s["text"])) > 1),
+            # 메모 말투('~안 됨.' · '~있었음.' · 명사로 끝남) — 기록 제목을 그대로 옮기면 생긴다
+            "not_polite_ending": sum(1 for s in written if not s["text"].rstrip().rstrip(".").endswith("니다")),
             "summary_items": len(content["summary"]), "summary_chars": len(text),
             "prevention": len(content["prevention"]), "open_items": len(content["open_items"]), "impact": len(content["impact"]),
             # 쓰지 말아야 할 문장 — 원인 기록이 없는데 한눈에 보기가 세 문장(원인 문장이 낌) · 해결 기록이 없는데 고정 문장이 아니거나 해결 요약이 있음
@@ -107,7 +113,7 @@ def totals(rows: list[dict]) -> dict:
             "fixes": add("fixes"), "fixes_missing_by_ref": add("fixes_missing_by_ref"), "fixes_missing_by_text": add("fixes_missing_by_text"),
             "full_by_text": sum(1 for s in ok if s["summary_items"] and not s["causes_missing_by_text"] and not s["fixes_missing_by_text"]),
             "side_issues": add("side_issues"), "side_issues_noted": add("side_issues_noted"),
-            "multi_sentence_items": add("multi_sentence_items"),
+            "multi_sentence_items": add("multi_sentence_items"), "not_polite_ending": add("not_polite_ending"),
             "prevention": add("prevention"), "prevention_reports": sum(1 for s in ok if s["prevention"]), "impact": add("impact"),
             "no_cause_reports": sum(1 for s in ok if not s["causes"]), "cause_without_record": add("cause_without_record"),
             "no_fix_reports": sum(1 for s in ok if not s["fixes"]), "fix_without_record": add("fix_without_record"),
@@ -235,6 +241,7 @@ async def main() -> int:
           f"한눈에 보기 평균 {t['summary_chars_avg']}자   토큰 입력 {t['prompt_tokens']} · 출력 {t['completion_tokens']}")
     print(f"재발 방지 문장 {t['prevention']}(보고서 {t['prevention_reports']}건)   영향 문장 {t['impact']}")
     print(f"원인 기록이 없는데 원인 문장 {t['cause_without_record']}/{t['no_cause_reports']}   해결 기록이 없는데 해결 문장 {t['fix_without_record']}/{t['no_fix_reports']}")
+    print(f"'~니다'로 끝나지 않는 문장 {t['not_polite_ending']}")
     if open_rows:
         o = totals(open_rows)
         print(f"진행 중 표본 {o['reports']}건(해결 기록 지정을 뺀 사본): 해결 기록이 없는데 해결 문장 {o['fix_without_record']}/{o['no_fix_reports']}   "

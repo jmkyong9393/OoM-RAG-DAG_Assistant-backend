@@ -299,6 +299,8 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert s["fixes_missing_by_ref"] == ["N3"] and s["fixes_missing_by_text"] == ["N3"]   # 해결 기록은 어디에도 없다
     assert s["multi_sentence_items"] == 1 and s["resolution_note"] is False
     assert (s["cause_without_record"], s["fix_without_record"]) == (0, 0)
+    memo = report.merge(CONTENT, {**data, "impact": [{"text": "결제 안 됨.", "refs": ["N1"]}], "causes": {"N2": {"text": "풀 크기 10 고정", "refs": ["N2"]}}})
+    assert (s["not_polite_ending"], rc.score(memo)["not_polite_ending"]) == (0, 2)   # 메모 말투 · 명사로 끝난 문장
     stale = {**CONTENT, "causes": [], "resolution": {**CONTENT["resolution"], "items": []},   # 옛 판이 만든 모양 — 기록에 없는 원인 · 해결 문장
              "summary": [{"text": "문제입니다.", "refs": ["N1"]}, {"text": "원인은 풀입니다.", "refs": ["N2"]}, {"text": "해결됐습니다.", "refs": ["N3"]}]}
     assert (rc.score(stale)["cause_without_record"], rc.score(stale)["fix_without_record"]) == (1, 1)
