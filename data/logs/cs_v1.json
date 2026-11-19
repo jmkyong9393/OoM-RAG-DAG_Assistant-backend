@@ -489,6 +489,7 @@
       "parent_ref": "s6-root",
       "source": "synthetic",
       "source_ref": "syn-cs-026",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "특별관리고객",

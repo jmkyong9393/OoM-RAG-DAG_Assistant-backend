@@ -53,6 +53,7 @@
       "parent_ref": "d1-page",
       "source": "synthetic",
       "source_ref": "syn-itdev-003",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "자동 이관",
@@ -148,6 +149,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-itdev-008",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "사후분석",
@@ -210,6 +212,7 @@
       "parent_ref": "d2-origin",
       "source": "synthetic",
       "source_ref": "syn-itdev-011",
+      "category": "prevention",
       "error_code": "HTTP 503",
       "keywords": [
         "수동 전환",
@@ -246,6 +249,7 @@
       "parent_ref": "d2-cmd",
       "source": "synthetic",
       "source_ref": "syn-itdev-013",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "장애 지휘자",
@@ -286,6 +290,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-itdev-015",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "사후분석",
@@ -380,6 +385,7 @@
       "parent_ref": "d3-retry",
       "source": "synthetic",
       "source_ref": "syn-itdev-020",
+      "category": "prevention",
       "error_code": "HTTP 504",
       "keywords": [
         "멱등 키",
@@ -511,6 +517,7 @@
       "parent_ref": "d4-conf",
       "source": "synthetic",
       "source_ref": "syn-itdev-027",
+      "category": "prevention",
       "error_code": null,
       "keywords": [],
       "resolution_summary": null,
@@ -641,6 +648,7 @@
       "parent_ref": "d5-db",
       "source": "synthetic",
       "source_ref": "syn-itdev-034",
+      "category": "prevention",
       "error_code": "E-408",
       "keywords": [
         "주 DB 읽기",
@@ -818,6 +826,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-itdev-043",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "사후분석",
@@ -896,6 +905,7 @@
       "parent_ref": "d7-rotate",
       "source": "synthetic",
       "source_ref": "syn-itdev-047",
+      "category": "prevention",
       "error_code": "HTTP 401",
       "keywords": [
         "키 교체 런북",
@@ -932,6 +942,7 @@
       "parent_ref": "d7-ip",
       "source": "synthetic",
       "source_ref": "syn-itdev-049",
+      "category": "prevention",
       "error_code": "-401",
       "keywords": [
         "호출 허용 IP",
@@ -1032,6 +1043,7 @@
       "parent_ref": "d8-change",
       "source": "synthetic",
       "source_ref": "syn-itdev-054",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "변경 등급 판정",
@@ -1052,6 +1064,7 @@
       "parent_ref": "d8-change",
       "source": "synthetic",
       "source_ref": "syn-itdev-055",
+      "category": "prevention",
       "error_code": null,
       "keywords": [],
       "resolution_summary": null,

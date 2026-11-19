@@ -53,6 +53,7 @@
       "parent_ref": "c1-token",
       "source": "synthetic",
       "source_ref": "syn-sw-003",
+      "category": "prevention",
       "error_code": "HTTP 403",
       "keywords": [
         "자동 갱신",
@@ -111,6 +112,7 @@
       "parent_ref": "c1-perm",
       "source": "synthetic",
       "source_ref": "syn-sw-006",
+      "category": "prevention",
       "error_code": "HTTP 403",
       "keywords": [
         "IaC",
@@ -151,6 +153,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-sw-008",
+      "category": "prevention",
       "error_code": "HTTP 403",
       "keywords": [
         "서비스 계정",
@@ -342,6 +345,7 @@
       "parent_ref": "c2-leak",
       "source": "synthetic",
       "source_ref": "syn-sw-018",
+      "category": "prevention",
       "error_code": "TimeoutException",
       "keywords": [
         "try-with-resources",
@@ -637,6 +641,7 @@
       "parent_ref": "c4-disk",
       "source": "synthetic",
       "source_ref": "syn-sw-034",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "디스크 정리",
@@ -694,6 +699,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-sw-037",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "운영 표준",
@@ -954,6 +960,7 @@
       "parent_ref": "c6-notice",
       "source": "synthetic",
       "source_ref": "syn-sw-051",
+      "category": "prevention",
       "error_code": "HTTP 502",
       "keywords": [
         "서킷브레이커",
@@ -1089,6 +1096,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-sw-058",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "배포 검증",

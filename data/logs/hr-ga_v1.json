@@ -52,6 +52,7 @@
       "parent_ref": "h1-edu",
       "source": "synthetic",
       "source_ref": "syn-hr-003",
+      "category": "prevention",
       "error_code": "E-403",
       "keywords": [
         "권한 재부여",
@@ -181,6 +182,7 @@
       "parent_ref": "h2-saved",
       "source": "synthetic",
       "source_ref": "syn-hr-010",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "사전 경고",
@@ -257,6 +259,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-hr-014",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "안내문",
@@ -315,6 +318,7 @@
       "parent_ref": "h3-attach",
       "source": "synthetic",
       "source_ref": "syn-hr-017",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "첨부 분리",
@@ -353,6 +357,7 @@
       "parent_ref": "h3-trash",
       "source": "synthetic",
       "source_ref": "syn-hr-019",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "휴지통",
@@ -433,6 +438,7 @@
       "parent_ref": "h4-date",
       "source": "synthetic",
       "source_ref": "syn-hr-023",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "자동 활성화",
@@ -583,6 +589,7 @@
       "parent_ref": "h5-deputy",
       "source": "synthetic",
       "source_ref": "syn-hr-031",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "대결자",
@@ -622,6 +629,7 @@
       "parent_ref": "h5-deputy",
       "source": "synthetic",
       "source_ref": "syn-hr-033",
+      "category": "prevention",
       "error_code": null,
       "keywords": [],
       "resolution_summary": null,
@@ -677,6 +685,7 @@
       "parent_ref": "h6-list",
       "source": "synthetic",
       "source_ref": "syn-hr-036",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "체크리스트",
@@ -715,6 +724,7 @@
       "parent_ref": "h6-broken",
       "source": "synthetic",
       "source_ref": "syn-hr-038",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "지정 포장재",

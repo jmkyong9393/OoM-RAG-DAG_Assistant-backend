@@ -53,6 +53,7 @@
       "parent_ref": "s1-calc",
       "source": "synthetic",
       "source_ref": "syn-itcs-003",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "환불 계산기",
@@ -107,6 +108,7 @@
       "parent_ref": "s1-root",
       "source": "synthetic",
       "source_ref": "syn-itcs-006",
+      "category": "prevention",
       "error_code": null,
       "keywords": [],
       "resolution_summary": null,
@@ -198,6 +200,7 @@
       "parent_ref": "s2-market",
       "source": "synthetic",
       "source_ref": "syn-itcs-011",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "앱마켓 환불",
@@ -310,6 +313,7 @@
       "parent_ref": "s3-hold",
       "source": "synthetic",
       "source_ref": "syn-itcs-017",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "복구 안내 문자",
@@ -347,6 +351,7 @@
       "parent_ref": "s3-bypass",
       "source": "synthetic",
       "source_ref": "syn-itcs-019",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "권한 회수",
@@ -402,6 +407,7 @@
       "parent_ref": "s3-hold",
       "source": "synthetic",
       "source_ref": "syn-itcs-022",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "이용 기간 연장",
@@ -561,6 +567,7 @@
       "parent_ref": "s5-queue",
       "source": "synthetic",
       "source_ref": "syn-itcs-030",
+      "category": "prevention",
       "error_code": "CANCEL_PERIOD_EXPIRED",
       "keywords": [
         "우선 처리",
@@ -599,6 +606,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-itcs-032",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "3영업일",
