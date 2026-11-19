@@ -49,8 +49,9 @@ public class UserAdminController {
   public record InviteRequest(@NotBlank @Pattern(regexp = "[A-Za-z0-9-]{3,32}") String employeeNo, @NotBlank String name,
                               @Email String email, String grade, String position, String title, String role) {}
   public record InviteResponse(long id, String employeeNo, String name, long workspaceId, String role, boolean created, String tempPassword) {}
-  /** title = 표시용 "직급 · 직책"(예전 화면 호환). */
-  public record MemberDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked, String role, boolean locked) {}
+  /** title = 표시용 "직급 · 직책"(예전 화면 호환). canManageAccount = 요청한 사람이 이 계정을 재발급 · 잠금 해제할 수 있는가(화면이 버튼을 미리 끄는 데 쓴다). */
+  public record MemberDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked, String role, boolean locked,
+                          boolean canManageAccount) {}
 
   @PostMapping("/users")
   @Transactional
@@ -98,17 +99,23 @@ public class UserAdminController {
         .body(new InviteResponse(userId, empNo, body.name().trim(), ctx.workspaceId(), role, created, temp));
   }
 
-  /** 현재 워크스페이스 멤버 목록 (초대 화면·작성자 선택용). 이메일은 마스킹. */
+  /**
+   * 현재 워크스페이스 멤버 목록 (초대 화면·작성자 선택용). 이메일은 마스킹.
+   * can_manage_account 는 재발급 · 잠금 해제가 거치는 두 확인(requireMemberAdmin · requireManagesAccount)과 같은 조건이다. 본인 재발급의 400 은 여기에 담지 않는다.
+   */
   @GetMapping("/users")
   public List<MemberDto> members(TenantContext ctx) {
     return jdbc.sql("""
           SELECT u.id, u.employee_no, u.email, u.name, u.grade, u.duty, coalesce(nullif(concat_ws(' · ', u.grade, u.duty), ''), u.title) AS title,
-                 m.role, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked
+                 m.role, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked,
+                 (? OR (? AND NOT (""" + outsideMyAdmin("u.id") + """
+                 ))) AS can_manage_account
           FROM workspace_members m JOIN users u ON u.id = m.user_id
           WHERE m.workspace_id = ? AND u.status = 'active' ORDER BY (m.role = 'admin') DESC, u.name""")
-        .param(ctx.workspaceId())
+        .params(companyAdmin(ctx.userId()), ctx.isAdmin(), ctx.userId(), ctx.workspaceId())
         .query((rs, i) -> new MemberDto(rs.getLong("id"), rs.getString("employee_no"), rs.getString("name"), rs.getString("title"),
-            rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"))).list();
+            rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"),
+            rs.getBoolean("can_manage_account"))).list();
   }
 
   /**
@@ -253,12 +260,14 @@ public class UserAdminController {
    * 초대 · 역할 변경 · 제외는 계정에 들어가는 일이 아니라 쓰지 않는다(requireMemberAdmin 만).
    */
   private void requireManagesAccount(long requester, long target) {
-    if (!companyAdmin(requester) && jdbc.sql("""
-          SELECT EXISTS (SELECT 1 FROM workspace_members t
-                         WHERE t.user_id = ? AND NOT EXISTS (SELECT 1 FROM workspace_members r
-                                                             WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))""")
-        .params(target, requester).query(Boolean.class).single())
+    if (!companyAdmin(requester) && jdbc.sql("SELECT " + outsideMyAdmin("?")).params(target, requester).query(Boolean.class).single())
       throw ApiException.forbidden("the account belongs to a workspace you do not manage");
+  }
+
+  /** SQL 조건: 대상(target 식)이 속한 워크스페이스 가운데 요청한 사람(? 하나)이 admin 이 아닌 곳이 있다. 재발급 · 잠금 해제의 확인과 멤버 목록이 같이 쓴다. */
+  private static String outsideMyAdmin(String target) {
+    return "EXISTS (SELECT 1 FROM workspace_members t WHERE t.user_id = " + target
+        + " AND NOT EXISTS (SELECT 1 FROM workspace_members r WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))";
   }
 
   /** 회사 관리자 = 부서가 아닌 상위(전사 공통) 워크스페이스의 admin 인 활성 계정 (AuditController 와 같은 판정). */

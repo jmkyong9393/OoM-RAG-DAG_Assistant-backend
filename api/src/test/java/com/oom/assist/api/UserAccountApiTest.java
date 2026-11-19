@@ -1,6 +1,9 @@
 package com.oom.assist.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -191,6 +194,22 @@ class UserAccountApiTest extends AbstractApiTest {
     mvc.perform(as(delete("/workspaces/" + wsSw + "/members/" + userBackend), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/reset-password"), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/unlock"), userNew, wsSw)).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void memberListTellsWhoseAccountTheRequesterCanManage() throws Exception {
+    long hrOnly = hrOnlyMember();   // 경영지원: 장문경 admin · 배종현 member · hrOnly member. 배종현 · 장문경은 SW 에도 속해 있다
+    // 부서 관리자 장문경 — 경영지원에만 속한 계정만 된다(실제 호출의 결과와 같다)
+    mvc.perform(as(get("/users"), userBackend, wsHr)).andExpect(status().isOk())
+        .andExpect(jsonPath("$[?(@.id == " + hrOnly + ")].can_manage_account").value(contains(true)))
+        .andExpect(jsonPath("$[?(@.id == " + userLead + ")].can_manage_account").value(contains(false)))
+        .andExpect(jsonPath("$[?(@.id == " + userBackend + ")].can_manage_account").value(contains(false)));
+    mvc.perform(as(post("/users/" + hrOnly + "/unlock"), userBackend, wsHr)).andExpect(status().isNoContent());
+    mvc.perform(as(post("/users/" + userLead + "/unlock"), userBackend, wsHr)).andExpect(status().isForbidden());
+    // 일반 멤버 — 모두 안 된다
+    mvc.perform(as(get("/users"), hrOnly, wsHr)).andExpect(jsonPath("$[*].can_manage_account").value(everyItem(is(false))));
+    // 회사 관리자 배종현 — 일반 멤버로 속한 부서에서도 모두 된다
+    mvc.perform(as(get("/users"), userLead, wsHr)).andExpect(jsonPath("$[*].can_manage_account").value(everyItem(is(true))));
   }
 
   // ── 잠금 해제 — 재발급과 같은 조건 ───────────────────────────────────
