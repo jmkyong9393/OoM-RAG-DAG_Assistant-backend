@@ -64,7 +64,10 @@ public class UserAdminController {
 
     Optional<Long> existing = jdbc.sql("SELECT id FROM users WHERE tenant_id = ? AND lower(employee_no) = lower(?)").params(ctx.tenantId(), empNo)
         .query(Long.class).optional();
-    if (existing.isPresent() && !"active".equals(jdbc.sql("SELECT status FROM users WHERE id = ? FOR SHARE").param(existing.get()).query(String.class).single()))
+    String existingStatus = existing.map(id -> jdbc.sql("SELECT status FROM users WHERE id = ? FOR SHARE").param(id).query(String.class).single()).orElse("active");
+    // 삭제된 계정의 사번은 다른 사람에게 다시 주지 않는다 — 접속기록이 사번으로 사람을 가리킨다
+    if ("deleted".equals(existingStatus)) throw ApiException.conflict("EMPLOYEE_NO_DELETED", "employee_no belonged to a deleted account and is not reused");
+    if (!"active".equals(existingStatus))
       throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");   // 비활성(퇴사 처리) 계정이 그 상태로 다른 부서에 들어가지 않게. FOR SHARE = 확인과 소속 추가 사이에 비활성화가 끼어들지 못하게(lockUser 와 같은 줄)
     boolean created = existing.isEmpty();
     String temp = null;
@@ -220,26 +223,24 @@ public class UserAdminController {
   }
 
   /**
-   * 계정 삭제(회사 관리자) — 비활성 계정의 개인정보 · 소속 · 동의 이력을 지운다. 되돌릴 수 없고, 사번은 비워져 다시 쓸 수 있다.
-   * 행은 자리 표시로 남긴다(작성한 기록이 작성자를 참조한다). 활성 계정은 409 — 마지막 관리자 · 본인 확인과 세션 종료가 비활성화에 있다.
+   * 계정 삭제(회사 관리자) — 비활성 계정의 개인정보 · 소속 · 동의 이력을 지운다. 되돌릴 수 없다. 행은 자리 표시로 남긴다(작성한 기록이 작성자를 참조한다).
+   * 사번만 남겨 묶어 둔다 — 같은 사번을 다른 사람에게 주면 사번으로 적힌 접속기록이 두 사람의 것으로 섞인다. 활성 계정은 409(확인과 세션 종료가 비활성화에 있다).
    */
   @DeleteMapping("/users/{id}")
   @Transactional
   public ResponseEntity<Void> delete(@PathVariable long id, @RequestBody(required = false) DeactivateRequest body) {
     Actor actor = companyActor();
     if ("active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ACCOUNT_ACTIVE", "deactivate the account first");
-    String empNo = jdbc.sql("SELECT employee_no FROM users WHERE id = ?").param(id).query(String.class).optional().orElse(null);
     String reason = body == null || body.reason() == null ? "" : body.reason().strip();
-    endSessions(id);   // 사번을 비우기 전에 — 세션은 사번으로 찾는다
+    endSessions(id);
     jdbc.sql("DELETE FROM workspace_members WHERE user_id = ?").param(id).update();
     jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(id).update();
     jdbc.sql("""
-          UPDATE users SET status = 'deleted', deleted_at = now(), name = '삭제된 계정', employee_no = NULL, email = NULL, title = NULL, grade = NULL, duty = NULL,
+          UPDATE users SET status = 'deleted', deleted_at = now(), name = '삭제된 계정', email = NULL, title = NULL, grade = NULL, duty = NULL,
                  external_id = NULL, auth_provider = NULL, password_hash = NULL, must_change_password = false, failed_attempts = 0, locked_until = NULL,
                  last_login_at = NULL, password_changed_at = NULL, consented_at = NULL, primary_workspace_id = NULL
           WHERE id = ?""").param(id).update();
-    // 접속기록은 보관 대상이라 지우지 않는다. 삭제한 뒤에는 사번을 계정에서 찾을 수 없으므로 이 기록에 적어 둔다
-    auditCompany(actor, id, "user_deleted", reason.isEmpty() ? "사번 " + empNo : "사번 " + empNo + " — " + reason);
+    auditCompany(actor, id, "user_deleted", reason.isEmpty() ? null : reason);   // 접속기록은 보관 대상이라 지우지 않는다
     return ResponseEntity.noContent().build();
   }
 

@@ -3,7 +3,8 @@ package com.oom.assist.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.equalToIgnoringCase;
+import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
@@ -218,7 +219,8 @@ class UserAccountApiTest extends AbstractApiTest {
     assertThat(row.get("name")).isEqualTo("삭제된 계정");
     assertThat(row.get("status")).isEqualTo("deleted");
     assertThat(row.get("stamped")).isEqualTo(true);
-    for (String col : new String[] {"employee_no", "email", "title", "grade", "duty", "password_hash"}) assertThat(row.get(col)).as(col).isNull();
+    for (String col : new String[] {"email", "title", "grade", "duty", "password_hash"}) assertThat(row.get(col)).as(col).isNull();
+    assertThat(row.get("employee_no")).isEqualTo(empNew);   // 사번만 남겨 묶어 둔다
     assertThat(jdbc.sql("SELECT count(*) FROM workspace_members WHERE user_id = ?").param(userNew).query(Long.class).single()).isZero();
     assertThat(jdbc.sql("SELECT count(*) FROM user_consents WHERE user_id = ?").param(userNew).query(Long.class).single()).isZero();
     assertThat(jdbc.sql("SELECT author_id FROM log_nodes WHERE id = ?").param(written).query(Long.class).single()).isEqualTo(userNew);   // 작성한 기록은 남는다
@@ -228,10 +230,29 @@ class UserAccountApiTest extends AbstractApiTest {
     mvc.perform(asUser(post("/users/" + userNew + "/reactivate"), userLead)).andExpect(status().isNotFound());
     deleteAccount(userLead, userNew).andExpect(status().isNotFound());
     assertThat(jdbc.sql("SELECT reason FROM audit_log WHERE table_name = 'users' AND action = 'user_deleted' AND row_id = ?").param(String.valueOf(userNew))
-        .query(String.class).single()).isEqualTo("사번 " + empNew + " — 퇴사 후 파기");
-    // 사번은 다시 쓸 수 있다 — 새 계정으로 만들어진다
-    mvc.perform(as(post("/users"), userLead, wsSw).content("{\"employee_no\": \"" + empNew + "\", \"name\": \"새 사람\"}")).andExpect(status().isCreated())
-        .andExpect(jsonPath("$.created").value(true)).andExpect(jsonPath("$.id").value(not((int) userNew)));
+        .query(String.class).single()).isEqualTo("퇴사 후 파기");
+  }
+
+  @Test
+  void employeeNoOfADeletedAccountIsNeverGivenToSomeoneElse() throws Exception {
+    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(200);   // 삭제 전의 로그인 기록이 사번으로 남는다
+    deactivate(userLead, userNew, "{\"reason\": \"퇴사\"}").andExpect(status().isNoContent());
+    deleteAccount(userLead, userNew).andExpect(status().isNoContent());
+    // 같은 사번으로 초대할 수 없다 — 다른 부서에서도, 대소문자를 바꿔도
+    mvc.perform(as(post("/users"), userLead, wsSw).content("{\"employee_no\": \"" + empNew + "\", \"name\": \"새 사람\"}"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EMPLOYEE_NO_DELETED"));
+    mvc.perform(as(post("/users"), userBackend, wsHr).content("{\"employee_no\": \"" + empNew.toLowerCase() + "\", \"name\": \"새 사람\"}"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EMPLOYEE_NO_DELETED"));
+    assertThat(jdbc.sql("SELECT count(*) FROM users WHERE lower(employee_no) = lower(?)").param(empNew).query(Long.class).single()).isEqualTo(1L);
+    // 접속기록은 삭제 뒤에도 그 사번으로 찾아진다 — 로그인 기록과 계정 관리 기록이 같은 사람의 것으로
+    mvc.perform(asUser(get("/audit?employee_no=" + empNew), userLead)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].action").value(hasItems("login_success", "user_deactivated", "user_deleted")))
+        .andExpect(jsonPath("$.items[*].employee_no").value(everyItem(equalToIgnoringCase(empNew))));
+    // 삭제된 계정의 사번으로 로그인을 여러 번 틀려도 잠기지 않는다 — 없는 사번과 같은 401 이고 자리 표시 행은 그대로다
+    for (int i = 0; i < 6; i++) assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(401);
+    var row = jdbc.sql("SELECT failed_attempts, locked_until FROM users WHERE id = ?").param(userNew).query().singleRow();
+    assertThat(row.get("failed_attempts")).isEqualTo(0);
+    assertThat(row.get("locked_until")).isNull();
   }
 
   @Test
