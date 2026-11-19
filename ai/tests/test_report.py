@@ -486,6 +486,9 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert s["fixes_missing_by_ref"] == ["N3"] and s["fixes_missing_by_text"] == ["N3"]   # 해결 기록은 어디에도 없다
     assert s["multi_sentence_items"] == 1 and s["resolution_note"] is False
     assert (s["cause_without_record"], s["fix_without_record"]) == (0, 0)
+    note = lambda refs: rc.score({**TWO_FIXES, "resolution": {**TWO_FIXES["resolution"], "note": {"text": "지연이 사라졌습니다.", "refs": refs}}})  # noqa: E731
+    assert (s["note_without_fix_ref"], s["multi_fix"], s["note_partial_fix_refs"]) == (0, 0, 0)                 # 해결 요약이 없으면 세지 않는다
+    assert (note(["N2"])["note_without_fix_ref"], note(["N3"])["note_partial_fix_refs"], note(["N3", "N5"])["note_partial_fix_refs"]) == (1, 1, 0)
     memo = report.merge(CONTENT, {**data, "impact": [{"text": "결제 안 됨.", "refs": ["N1"]}], "causes": {"N2": {"text": "풀 크기 10 고정", "refs": ["N2"]}}})
     assert (s["not_polite_ending"], rc.score(memo)["not_polite_ending"]) == (0, 2)   # 메모 말투 · 명사로 끝난 문장
     stale = {**CONTENT, "causes": [], "resolution": {**CONTENT["resolution"], "items": []},   # 옛 판이 만든 모양 — 기록에 없는 원인 · 해결 문장
@@ -496,5 +499,11 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert report.merge(opened, {"summary": SUMMARY})["summary"][-1]["text"] == report.NO_FIX_OPEN
     t = rc.totals([{"score": s, "prompt_tokens": 10, "completion_tokens": 5}, {"error": "x"}])
     assert (t["reports"], t["failed"], t["full_by_text"], t["fixes_missing_by_text"], t["prompt_tokens"]) == (2, 1, 0, 1, 10)
+    assert (t["fix_refetched"], t["prevention_supplemented"], t["prevention_added"], t["prevention_dropped"]) == (0, 0, 0, {})   # 작은 호출 기록이 없는 행
+    small = rc.totals([{"score": s, "small_calls": {"fix": {"accepted": True}, "prevention": {"added": [1, 2], "dropped": [["기록에 없는 낱말", "…"]]}}},
+                       {"score": s, "small_calls": {"prevention": {"added": [], "dropped": [["기록에 없는 낱말", "…"], ["같은 기록의 둘째 문장", "…"]], "error": "x"}}},
+                       {"score": s, "small_calls": {}}])
+    assert (small["fix_refetched"], small["fix_refetch_accepted"], small["prevention_supplemented"], small["prevention_added"]) == (1, 1, 2, 2)
+    assert small["prevention_dropped"] == {"기록에 없는 낱말": 2, "같은 기록의 둘째 문장": 1} and small["small_call_errors"] == 1
     blank = rc.facts_only(report.merge(CONTENT, data))
     assert blank["summary"] == [] and blank["causes"][0]["explanation"] is None and blank["records"] == CONTENT["records"]

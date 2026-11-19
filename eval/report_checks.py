@@ -4,6 +4,8 @@
 --refill: 저장된 보고서의 사실 칸으로 AI 칸만 다시 만든다(DB 에 쓰지 않는다) — ai/app/report.py 의 지시문을 고친 뒤 같은 입력으로 비교할 때.
 세는 것(호출 없음): 원인 설명이 붙은 원인 기록 수, 한눈에 보기가 언급한 원인 · 해결 기록 수(근거 번호 기준 / 제목 낱말 기준), 한 항목에 여러 문장을 넣은 수, 길이, 토큰.
   제목 낱말 기준은 바꿔 말한 표현을 놓친다 — 빠짐으로 나온 것은 --list 로 뽑아 요약과 대조해 확정한다. 기록에 없는 말은 세지 못한다: --json 파일의 input · ai 를 읽어 확인한다.
+  해결 요약의 근거(해결 기록이 없음 · 일부만 댐)도 센다. 작은 호출(해결 문장 다시 받기 · 재발 방지 보완)이 돈 수와 더한 문장 · 버린 문장은 --refill 일 때만 센다
+  (저장된 보고서에는 그 기록이 없다) — --json 의 small_calls 에 건마다 넘긴 기록 · 더한 문장 · 버린 문장과 이유가 남는다.
 
 실행: set -a; . deploy/.env; set +a; cd ai && uv run python ../eval/report_checks.py [--refill] [--ws 1] [--limit 5] [--list] [--json 결과경로]
       (api 가 떠 있어야 한다. PORT · SEED_PASSWORD 는 deploy/.env)
@@ -83,6 +85,7 @@ def score(content: dict) -> dict:
     cited = {r for s in content["summary"] for r in s["refs"]}
     missing = lambda refs, by_ref: [r for r in refs if not (r in cited if by_ref else (r in cited or mentions(title[r], text)))]  # noqa: E731
     sentences = content["summary"] + content["impact"] + content["prevention"] + content["open_items"]
+    note_refs = set((content["resolution"].get("note") or {}).get("refs") or [])
     # AI 가 쓴 문장 전부(한눈에 보기 · 영향 · 재발 방지 · 원인 설명 · 추가 문제 메모 · 해결 요약) — 남은 확인(open_items)은 사실 칸이라 뺀다
     written = (content["summary"] + content["impact"] + content["prevention"]
                + [x for x in [c.get("explanation") for c in content["causes"]] + [s.get("note") for s in content["side_issues"]]
@@ -93,6 +96,9 @@ def score(content: dict) -> dict:
             "causes_missing_by_ref": missing(causes, True), "causes_missing_by_text": missing(causes, False),
             "fixes_missing_by_ref": missing(fixes, True), "fixes_missing_by_text": missing(fixes, False),
             "resolution_note": bool(content["resolution"].get("note")) if fixes else None,
+            # 해결 요약의 근거 — 해결 기록이 하나도 없는 것(싣지 않아야 한다) · 해결 기록이 여럿인데 일부만 댄 것(참고용)
+            "note_without_fix_ref": int(bool(note_refs) and not note_refs.intersection(fixes)),
+            "multi_fix": int(len(fixes) > 1), "note_partial_fix_refs": int(len(fixes) > 1 and bool(note_refs) and not note_refs.issuperset(fixes)),
             "multi_sentence_items": sum(1 for s in sentences if len(SENTENCE_END.findall(s["text"])) > 1),
             # 메모 말투('~안 됨.' · '~있었음.' · 명사로 끝남) — 기록 제목을 그대로 옮기면 생긴다
             "not_polite_ending": sum(1 for s in written if not s["text"].rstrip().rstrip(".").endswith("니다")),
@@ -104,10 +110,25 @@ def score(content: dict) -> dict:
                                                                                  or content["resolution"].get("note") is not None))}
 
 
+def small_call_totals(rows: list[dict]) -> dict:
+    """작은 호출의 집계 — report.fill 에 넘긴 trace(row["small_calls"])에서 센다. trace 가 없는 행(저장된 보고서)은 0 으로 센다."""
+    fix = [r["small_calls"]["fix"] for r in rows if (r.get("small_calls") or {}).get("fix")]
+    more = [r["small_calls"]["prevention"] for r in rows if (r.get("small_calls") or {}).get("prevention")]
+    dropped: dict[str, int] = {}
+    for m in more:
+        for why, _ in m["dropped"]:
+            dropped[why] = dropped.get(why, 0) + 1
+    return {"fix_refetched": len(fix), "fix_refetch_accepted": sum(1 for f in fix if f["accepted"]),
+            "prevention_supplemented": len(more), "prevention_added": sum(len(m["added"]) for m in more), "prevention_dropped": dropped,
+            "small_call_errors": sum(1 for x in fix + more if x.get("error"))}
+
+
 def totals(rows: list[dict]) -> dict:
     ok = [r["score"] for r in rows if r.get("score")]
     add = lambda k: sum(len(s[k]) if isinstance(s[k], list) else int(s[k] or 0) for s in ok)  # noqa: E731
-    return {"reports": len(rows), "failed": sum(1 for r in rows if r.get("error")), "empty": sum(1 for s in ok if not s["summary_items"]),
+    return {**small_call_totals(rows), "note_without_fix_ref": add("note_without_fix_ref"), "multi_fix": add("multi_fix"),
+            "note_partial_fix_refs": add("note_partial_fix_refs"),
+            "reports": len(rows), "failed": sum(1 for r in rows if r.get("error")), "empty": sum(1 for s in ok if not s["summary_items"]),
             "causes": add("causes"), "causes_explained": add("causes_explained"),
             "causes_missing_by_ref": add("causes_missing_by_ref"), "causes_missing_by_text": add("causes_missing_by_text"),
             "fixes": add("fixes"), "fixes_missing_by_ref": add("fixes_missing_by_ref"), "fixes_missing_by_text": add("fixes_missing_by_text"),
@@ -141,9 +162,10 @@ async def main() -> int:
     raw: dict = {}
     chat = llm._chat_json
 
-    async def capture(*args, **kw):   # 검증(merge)을 거치기 전의 AI 응답을 남긴다 — 칸이 비었을 때 AI 가 안 쓴 것인지 검증이 버린 것인지 가린다
-        raw["last"] = await chat(*args, **kw)
-        return raw["last"]
+    async def capture(*args, **kw):   # 검증(merge)을 거치기 전의 본 호출 응답을 남긴다 — 칸이 비었을 때 AI 가 안 쓴 것인지 검증이 버린 것인지 가린다
+        answer = await chat(*args, **kw)
+        raw.setdefault("main", answer)   # 한 보고서의 첫 호출이 본 호출이다. 작은 호출의 응답은 trace 에 남는다
+        return answer
 
     llm._chat_json = capture
     open_rows: list[dict] = []
@@ -184,16 +206,18 @@ async def main() -> int:
             row["input"] = report.render(facts, bodies)
             kept.append((row, facts, bodies))
             if a.refill:
-                usage = llm.Usage()
+                usage, trace = llm.Usage(), {}
                 prof = load_profile(db.workspace_settings(conn, row["workspace_id"])["settings"].get("llm_profile", "default"))
+                raw.pop("main", None)
                 try:
-                    content = await report.fill(prof, facts, bodies, False, usage)
+                    content = await report.fill(prof, facts, bodies, False, usage, trace)
                 except Exception as e:  # noqa: BLE001
                     row["error"] = f"{type(e).__name__}: {e}"[:300]
                     continue
                 if content is None:
                     sys.exit("LLM 키가 없어 AI 칸을 만들 수 없습니다 (AI_MODE · LLM_PROFILE_DEFAULT_API_KEY)")
-                row.update(model=prof.model_answer, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens, raw=raw.pop("last", None))
+                row.update(model=prof.model_answer, prompt_tokens=usage.prompt_tokens, completion_tokens=usage.completion_tokens, raw=raw.pop("main", None),
+                           small_calls=trace)
             else:
                 content = rec["content"]
                 row.update(status=rec["status"], model=rec["model"], prompt_version=rec["prompt_version"],
@@ -207,14 +231,15 @@ async def main() -> int:
                          "side_issues": {s["ref"]: s["note"] for s in content["side_issues"]}, "resolution_note": content["resolution"]["note"]}
             row["score"] = score(content)
         for row, facts, bodies in [k for k in kept if k[1]["resolution"]["items"]][: a.open_sample]:
-            sample, usage = without_fixes(facts), llm.Usage()
+            sample, usage, trace = without_fixes(facts), llm.Usage(), {}
             prof = load_profile(db.workspace_settings(conn, row["workspace_id"])["settings"].get("llm_profile", "default"))
             conn.rollback()
-            content = await report.fill(prof, sample, bodies, False, usage)
+            raw.pop("main", None)
+            content = await report.fill(prof, sample, bodies, False, usage, trace)
             if content is None:
                 sys.exit("LLM 키가 없어 AI 칸을 만들 수 없습니다 (AI_MODE · LLM_PROFILE_DEFAULT_API_KEY)")
             open_rows.append({"root_id": row["root_id"], "workspace_id": row["workspace_id"], "title": row["title"], "input": report.render(sample, bodies),
-                              "prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens, "raw": raw.pop("last", None),
+                              "prompt_tokens": usage.prompt_tokens, "completion_tokens": usage.completion_tokens, "raw": raw.pop("main", None), "small_calls": trace,
                               "ai": {"summary": content["summary"], "resolution_note": content["resolution"]["note"]}, "score": score(content)})
 
     t = totals(rows)
@@ -242,6 +267,11 @@ async def main() -> int:
     print(f"재발 방지 문장 {t['prevention']}(보고서 {t['prevention_reports']}건)   영향 문장 {t['impact']}")
     print(f"원인 기록이 없는데 원인 문장 {t['cause_without_record']}/{t['no_cause_reports']}   해결 기록이 없는데 해결 문장 {t['fix_without_record']}/{t['no_fix_reports']}")
     print(f"'~니다'로 끝나지 않는 문장 {t['not_polite_ending']}")
+    print(f"해결 요약의 근거에 해결 기록이 없음 {t['note_without_fix_ref']}   해결 기록이 여럿인데 일부만 근거로 댐 {t['note_partial_fix_refs']}/{t['multi_fix']}")
+    if a.refill:
+        why = " · ".join(f"{k} {v}" for k, v in t["prevention_dropped"].items()) or "없음"
+        print(f"해결 문장을 따로 다시 받은 보고서 {t['fix_refetched']}건(받아들인 것 {t['fix_refetch_accepted']})   "
+              f"재발 방지 보완 호출 {t['prevention_supplemented']}건 · 더한 문장 {t['prevention_added']} · 버린 문장: {why}   작은 호출 실패 {t['small_call_errors']}")
     if open_rows:
         o = totals(open_rows)
         print(f"진행 중 표본 {o['reports']}건(해결 기록 지정을 뺀 사본): 해결 기록이 없는데 해결 문장 {o['fix_without_record']}/{o['no_fix_reports']}   "
@@ -249,8 +279,10 @@ async def main() -> int:
         for r in open_rows:
             print(f"    #{r['root_id']} " + " ".join(x["text"] for x in r["ai"]["summary"]))
     if a.json:
+        md5 = lambda s: hashlib.md5(s.encode("utf-8")).hexdigest()  # noqa: E731
         meta = {"at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "refill": a.refill, "prompt_version": report.PROMPT_VERSION,
-                "prompt_md5": hashlib.md5(report.SYSTEM.encode("utf-8")).hexdigest(), "prompt": report.SYSTEM}
+                "prompt_md5": md5(report.SYSTEM), "prompt": report.SYSTEM, "fix_prompt_md5": md5(report.SYSTEM_FIX),
+                "prevention_prompt_md5": md5(report.SYSTEM_PREVENTION), "signals": report.SIGNALS}
         a.json.write_text(json.dumps({"meta": meta, "summary": t, "rows": rows, "open_sample": open_rows}, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"wrote {a.json}")
     return 0
