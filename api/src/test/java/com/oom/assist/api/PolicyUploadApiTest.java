@@ -95,6 +95,11 @@ class PolicyUploadApiTest extends AbstractApiTest {
     mvc.perform(as(put("/documents/uploads/" + id + "/markdown"), userBackend, wsHr).content("{\"markdown\":\"제1조(목적) 고친 본문\"}"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("converting")).andExpect(jsonPath("$.markdown").value("제1조(목적) 고친 본문"));
     workerConverted(id, 2);
+    // 쪽 번호 줄을 지우라고 고르면 워커가 볼 표시를 변환 보고에 남긴다(고르지 않으면 남기지 않는다 — 위의 저장)
+    assertThat(jdbc.sql("SELECT coalesce(jsonb_exists(report, 'strip_page_numbers'), false) FROM policy_uploads WHERE id = ?").param(id).query(Boolean.class).single()).isFalse();
+    mvc.perform(as(put("/documents/uploads/" + id + "/markdown"), userBackend, wsHr).content("{\"markdown\":\"제1조(목적) 고친 본문\",\"strip_page_numbers\":true}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("converting")).andExpect(jsonPath("$.report.strip_page_numbers").value(true));
+    workerConverted(id, 2);
     mvc.perform(as(post("/documents/uploads/" + id + "/approve"), userLead, wsSw)).andExpect(status().isNotFound());   // 다른 부서 사람에게는 없는 업로드
     mvc.perform(as(post("/documents/uploads/" + id + "/approve"), userBackend, wsHr)).andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("indexing")).andExpect(jsonPath("$.reviewed_by").value("장문경"));
@@ -115,7 +120,7 @@ class PolicyUploadApiTest extends AbstractApiTest {
     jdbc.sql("SELECT original_path FROM policy_uploads WHERE slug = 'test-rule-v9' AND status = 'converting'").query(String.class).list()
         .forEach(rel -> created.add(Path.of(uploadsDir).toAbsolutePath().normalize().resolve(rel)));
     assertThat(jdbc.sql("SELECT action FROM audit_log WHERE table_name = 'policy_uploads' AND row_id = ? ORDER BY id").param(String.valueOf(id)).query(String.class).list())
-        .containsExactly("uploaded", "edited", "approved");
+        .containsExactly("uploaded", "edited", "edited", "approved");
   }
 
   @Test

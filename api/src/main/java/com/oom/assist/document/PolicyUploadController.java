@@ -68,7 +68,8 @@ public class PolicyUploadController {
                           String slug, String title, String version, String docType, String supersedes, Object report, String error,
                           String rejectReason, Long documentId, String uploadedBy, String reviewedBy, OffsetDateTime reviewedAt,
                           OffsetDateTime createdAt, OffsetDateTime updatedAt, boolean canManage, String markdown) {}
-  public record MarkdownRequest(String markdown) {}
+  /** stripPageNumbers = 쪽 번호로 보이는 줄(변환 보고의 page_numbers)을 지우라는 선택. */
+  public record MarkdownRequest(String markdown, Boolean stripPageNumbers) {}
   public record RejectRequest(String reason) {}
 
   /** 업로드. scope = dept(이 부서 규정, 기본) · company(전사 공통 규정). 변환은 워커가 이어서 한다(status converting → review). */
@@ -130,15 +131,20 @@ public class PolicyUploadController {
     return find(id, ctx, true);
   }
 
-  /** 검수 중 변환본을 고친다. 조문 미리보기는 워커가 다시 만든다(status review → converting → review, 글자 추출은 다시 하지 않음). */
+  /** 검수 중 변환본을 고친다. 조문 미리보기는 워커가 다시 만든다(status review → converting → review, 글자 추출은 다시 하지 않음).
+   *  strip_page_numbers 가 참이면 워커가 미리보기를 만들 때 쪽 번호 줄을 지운다 — 지우는 규칙은 워커(Python)에만 둔다. */
   @PutMapping("/documents/uploads/{id}/markdown")
   @Transactional
   public UploadDto saveMarkdown(@PathVariable long id, @RequestBody MarkdownRequest body, TenantContext ctx) {
     UploadDto u = managed(id, ctx);
     if (!"review".equals(u.status())) throw ApiException.conflict("NOT_IN_REVIEW", "status is " + u.status());
     if (body == null || body.markdown() == null || body.markdown().isBlank()) throw ApiException.badRequest("VALIDATION", "markdown is required");
-    jdbc.sql("UPDATE policy_uploads SET markdown = ?, status = 'converting', updated_at = now() WHERE id = ?").params(body.markdown(), id).update();
-    audit(ctx, u.workspaceId(), id, "edited", null);
+    boolean strip = Boolean.TRUE.equals(body.stripPageNumbers());
+    jdbc.sql("""
+        UPDATE policy_uploads SET markdown = ?, status = 'converting', updated_at = now(),
+               report = CASE WHEN ? THEN coalesce(report, '{}'::jsonb) || '{"strip_page_numbers": true}'::jsonb ELSE report END
+        WHERE id = ?""").params(body.markdown(), strip, id).update();
+    audit(ctx, u.workspaceId(), id, "edited", strip ? "쪽 번호 줄 지우기" : null);
     return find(id, ctx, true);
   }
 
