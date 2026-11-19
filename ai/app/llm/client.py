@@ -506,8 +506,11 @@ async def summarize_chain(profile: LlmProfile, nodes: list[dict], edges: list[di
 
 # ── OpenAI 호환 호출 ─────────────────────────────────────────────────────────
 
-async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage, max_tokens: int | None = None) -> dict:
-    body = {"model": model, "temperature": 0, "response_format": {"type": "json_object"},
+async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage, max_tokens: int | None = None,
+                     schema: dict | None = None) -> dict:
+    """schema 를 주면 그 JSON 스키마를 지키는 응답만 받는다(strict — 없는 키 · 목록 밖의 값을 낼 수 없다). 없으면 JSON 이기만 하면 된다."""
+    fmt = {"type": "json_schema", "json_schema": {"name": "answer", "strict": True, "schema": schema}} if schema else {"type": "json_object"}
+    body = {"model": model, "temperature": 0, "response_format": fmt,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     if max_tokens:
         body["max_tokens"] = max_tokens

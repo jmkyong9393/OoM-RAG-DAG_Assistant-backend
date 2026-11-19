@@ -9,6 +9,7 @@ content 에 없는 번호는 지운다. 키가 없으면(fake) AI 칸 없이 don
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -290,12 +291,32 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
     return {**out, "prevention": [*out["prevention"], *note["added"]]}
 
 
+def report_schema(content: dict) -> dict:
+    """본 호출의 응답 스키마 — 이 장애 건의 기록 번호로 만든다. 근거 번호는 [기록]의 번호만, 원인 설명 · 추가 문제 메모의 키는 그 기록 번호 전부.
+    모델이 지시문의 예시 번호를 키로 쓰거나 없는 번호를 근거로 대지 못하게 응답의 모양을 묶는다."""
+    ref = {"type": "string", "enum": [r["ref"] for r in content["records"]]}
+    sentence = {"type": "object", "properties": {"text": {"type": "string"}, "refs": {"type": "array", "items": ref}},
+                "required": ["text", "refs"], "additionalProperties": False}
+    maybe = {"anyOf": [sentence, {"type": "null"}]}
+    text_or_null = {"type": ["string", "null"]}
+
+    def obj(props: dict) -> dict:
+        return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
+
+    return obj({"summary": obj({"problem": sentence, "cause": maybe, "resolution": maybe}), "impact": {"type": "array", "items": sentence},
+                "causes": obj({c["ref"]: sentence for c in content["causes"]}), "resolution_note": maybe,
+                "side_issues": obj({s["ref"]: sentence for s in content["side_issues"]}),
+                "prevention": {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": ref},
+                                                              "owner": text_or_null, "due": text_or_null})}})
+
+
 def missing_notes(out: dict) -> list[str]:
     """번호별 칸이 빈 기록 번호 — 설명이 없는 원인 기록, 메모가 없는 추가 문제 기록."""
     return ([c["ref"] for c in out["causes"] if not c.get("explanation")] + [s["ref"] for s in out["side_issues"] if not s.get("note")])
 
 
-async def refill_notes(profile, content: dict, out: dict, system: str, user: str, external: bool, usage: llm.Usage, trace: dict | None = None) -> dict:
+async def refill_notes(profile, content: dict, out: dict, system: str, user: str, external: bool, usage: llm.Usage, trace: dict | None = None,
+                       schema: dict | None = None) -> dict:
     """번호별 칸(원인 설명 · 추가 문제 메모)이 비었으면 본 호출을 한 번 더 불러 **빠진 칸만** 채운다. 다른 칸은 첫 응답 그대로 둔다.
     모델이 드물게 지시문의 예시 번호를 키로 써서 그 장애 건의 메모가 통째로 빠진다 — 같은 요청을 다시 보내면 제 번호로 나온다."""
     missing = missing_notes(out)
@@ -305,7 +326,7 @@ async def refill_notes(profile, content: dict, out: dict, system: str, user: str
     if trace is not None:
         trace["notes"] = note
     try:
-        data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS)
+        data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS, schema=schema)
         again = merge(content, data, external) if isinstance(data, dict) else None
     except Exception as e:  # noqa: BLE001 — 보완의 실패는 보고서의 실패가 아니다
         note["error"] = f"{type(e).__name__}: {e}"[:200]
@@ -327,11 +348,12 @@ async def fill(profile, content: dict, bodies: dict[int, str], external: bool, u
     if ai_mode() != "openai" or not profile.has_key:
         return None
     system, user = SYSTEM + (EXTERNAL_RULE if external else ""), render(content, bodies)
-    data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS)
+    schema = report_schema(content) if os.environ.get("REPORT_JSON_SCHEMA", "1") != "0" else None   # 실험: 0 이면 전처럼 JSON 이기만 하면 받는다
+    data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS, schema=schema)
     if not isinstance(data, dict):
         raise ValueError("AI_BAD_OUTPUT: not a JSON object")
     out = merge(content, data, external)
-    out = await refill_notes(profile, content, out, system, user, external, usage, trace)
+    out = await refill_notes(profile, content, out, system, user, external, usage, trace, schema)
     v = data.get("summary")
     has_sentence = isinstance(v, dict) and _sentence(v.get("resolution"), {r["ref"] for r in content["records"]}) is not None
     texts = record_texts(content, bodies)

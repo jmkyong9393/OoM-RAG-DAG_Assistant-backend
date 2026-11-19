@@ -104,7 +104,11 @@ async def test_fill_uses_answer_model_and_validates_output(monkeypatch):
         usage = llm.Usage()
         out = await report.fill(profile(), CONTENT, BODIES, True, usage)
         body = stub.calls[-1]["body"]
-    assert body["model"] == "stub-answer" and body["response_format"] == {"type": "json_object"} and body["max_tokens"] == report.MAX_TOKENS
+    fmt = body["response_format"]
+    assert body["model"] == "stub-answer" and fmt["type"] == "json_schema" and fmt["json_schema"]["strict"] is True and body["max_tokens"] == report.MAX_TOKENS
+    schema = fmt["json_schema"]["schema"]["properties"]
+    assert list(schema["causes"]["properties"]) == ["N2"] and list(schema["side_issues"]["properties"]) == ["N4"]          # 키는 이 장애 건의 기록 번호
+    assert schema["impact"]["items"]["properties"]["refs"]["items"]["enum"] == ["N1", "N2", "N3", "N4"]                       # 근거는 [기록]의 번호만
     assert "외부 공개용" in body["messages"][0]["content"] and body["messages"][1]["content"].startswith("[장애 건] DB 커넥션 풀 고갈")
     assert out["summary"] == [{"text": "스텁 보고서 요약입니다.", "refs": ["N1"]}]
     assert out["causes"][0]["explanation"] == {"text": "스텁 원인 설명입니다.", "refs": ["N2"]}
@@ -146,7 +150,7 @@ def _llm(monkeypatch, main, small: dict | None = None) -> list[dict]:
     calls: list[dict] = []
     mains = list(main) if isinstance(main, list) else [main]
 
-    async def chat(profile, model, system, user, usage, max_tokens=None):
+    async def chat(profile, model, system, user, usage, max_tokens=None, schema=None):
         calls.append({"system": system, "user": user, "max_tokens": max_tokens})
         usage.prompt_tokens += 10
         usage.completion_tokens += 2
