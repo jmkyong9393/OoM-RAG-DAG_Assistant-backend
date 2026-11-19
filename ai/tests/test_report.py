@@ -88,6 +88,13 @@ def test_summary_says_no_fix_without_resolution_records(status, sentence):
     assert out["resolution"]["note"] is None
 
 
+def test_resolution_note_needs_a_fix_record_among_its_refs():
+    """해결 요약의 근거에 해결 기록이 하나도 없으면 싣지 않는다. 해결 기록 일부만 근거로 댄 것은 둔다."""
+    note = lambda refs: report.merge(TWO_FIXES, {"summary": SUMMARY, "resolution_note": {"text": "지연이 사라졌습니다.", "refs": refs}})["resolution"]["note"]  # noqa: E731
+    assert note(["N2"]) is None and note(["N1", "N4"]) is None
+    assert note(["N3"])["refs"] == ["N3"] and note(["N2", "N5"])["refs"] == ["N2", "N5"]
+
+
 async def test_fill_uses_answer_model_and_validates_output(monkeypatch):
     with OpenAIStub() as stub:
         monkeypatch.setenv("AI_MODE", "openai")
@@ -125,6 +132,228 @@ async def test_fill_is_skipped_without_key(monkeypatch):
     monkeypatch.setenv("AI_MODE", "auto")
     monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "")
     assert await report.fill(profile(), CONTENT, BODIES, False, llm.Usage()) is None
+
+
+TWO_FIXES = {**CONTENT,
+             "resolution": {**CONTENT["resolution"], "items": [*CONTENT["resolution"]["items"], {"ref": "N5", "title": "타임아웃 3초", "summary": None}]},
+             "records": [*CONTENT["records"], {"ref": "N5", "id": 5, "kind": "resolution", "title": "타임아웃 3초", "at": "2026-07-13T08:00:00Z"}]}
+BOTH_FIXES = {"text": "풀을 20 으로 늘리고 타임아웃을 3초로 줄였습니다.", "refs": ["N5", "N3"]}
+
+
+def _llm(monkeypatch, main, small: dict | None = None) -> list[dict]:
+    """본 호출에는 main(목록이면 부를 때마다 다음 것, 끝나면 마지막 것), 작은 호출에는 small[그 지시문]을 돌려주는 가짜 LLM(값이 예외면 던진다).
+    부른 호출을 순서대로 남긴다."""
+    calls: list[dict] = []
+    mains = list(main) if isinstance(main, list) else [main]
+
+    async def chat(profile, model, system, user, usage, max_tokens=None):
+        calls.append({"system": system, "user": user, "max_tokens": max_tokens})
+        usage.prompt_tokens += 10
+        usage.completion_tokens += 2
+        if system.startswith(report.SYSTEM):
+            answer = mains.pop(0) if len(mains) > 1 else mains[0]
+        else:
+            answer = next(v for k, v in (small or {}).items() if system.startswith(k))   # 예상하지 않은 작은 호출이면 StopIteration 으로 드러난다
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setenv("AI_MODE", "openai")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+    monkeypatch.setattr(llm, "_chat_json", chat)
+    return calls
+
+
+# 번호별 칸(원인 설명 · 추가 문제 메모)까지 채운 본 호출 응답 — 이것이 빠지면 본 호출을 한 번 더 부른다
+NOTES = {"causes": {"N2": {"text": "풀이 작아 대기가 쌓였습니다.", "refs": ["N2"]}}, "side_issues": {"N4": {"text": "연결 한도를 넘었습니다.", "refs": ["N4"]}}}
+
+
+def _summary(fix) -> dict:
+    return {"summary": {**SUMMARY, "resolution": fix}, **NOTES}
+
+
+async def test_fix_sentence_that_cites_every_fix_is_not_refetched(monkeypatch):
+    calls = _llm(monkeypatch, _summary({"text": "풀을 늘리고 타임아웃을 줄였습니다.", "refs": ["N3", "N5"]}))
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, llm.Usage())
+    assert len(calls) == 1 and out["summary"][-1]["refs"] == ["N3", "N5"]
+
+
+async def test_missing_fix_is_refetched_from_fix_records_only(monkeypatch):
+    """해결 기록 하나가 근거 번호에서 빠지면 해결 기록 줄만 주고 그 문장만 다시 받는다 — 다른 문장은 그대로, 토큰은 더한다."""
+    calls = _llm(monkeypatch, _summary(SUMMARY["resolution"]), {report.SYSTEM_FIX: BOTH_FIXES})
+    usage, trace = llm.Usage(), {}
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, usage, trace)
+    assert [s["refs"] for s in out["summary"]] == [["N1"], ["N2"], ["N3", "N5"]] and out["summary"][-1]["text"] == BOTH_FIXES["text"]
+    assert calls[1]["system"] == report.SYSTEM_FIX and calls[1]["max_tokens"] == report.FIX_MAX_TOKENS
+    assert calls[1]["user"] == f"N3 풀 최대 20 — {'x' * 500}… / 결과: 풀을 20 으로 늘려 해소\nN5 타임아웃 3초"   # 구분 · 날짜 없이 해결 기록만
+    assert (usage.prompt_tokens, usage.completion_tokens) == (20, 4)
+    assert trace["fix"]["accepted"] is True and trace["fix"]["before"]["refs"] == ["N3"]
+
+
+@pytest.mark.parametrize("answer", [{"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"]},                       # 다시 받은 문장도 하나를 빠뜨림
+                                    {**BOTH_FIXES, "refs": ["N3", "N5", "N2"]},                              # 해결 기록이 아닌 번호가 섞임
+                                    {**BOTH_FIXES, "text": "풀을 20 으로 늘리고 타임아웃을 3초로 줄였음."},       # '니다'로 끝나지 않음
+                                    {**BOTH_FIXES, "text": "가" * report.SENTENCE_MAX + "했습니다."},           # 길이 상한 초과
+                                    ["not", "an", "object"], RuntimeError("timeout")])                        # 형식 오류 · 호출 실패
+async def test_refetched_fix_that_fails_a_condition_keeps_the_original(monkeypatch, answer):
+    calls = _llm(monkeypatch, _summary(SUMMARY["resolution"]), {report.SYSTEM_FIX: answer})
+    trace = {}
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, llm.Usage(), trace)
+    assert len(calls) == 2 and out["summary"][-1] == SUMMARY["resolution"] and trace["fix"]["accepted"] is False   # 보고서는 그대로 끝난다
+
+
+async def test_single_fix_is_never_refetched(monkeypatch):
+    calls = _llm(monkeypatch, _summary({"text": "문제를 해결했습니다.", "refs": ["N1"]}))
+    out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage())
+    assert len(calls) == 1 and out["summary"][-1]["refs"] == ["N1"]
+
+
+async def test_absent_fix_sentence_is_refetched_and_appended(monkeypatch):
+    """해결 기록이 둘인데 해결 문장을 아예 쓰지 않았으면 다시 받아 끝에 붙인다(원인 문장을 덮어쓰지 않는다). 외부용이면 외부용 규칙이 붙는다."""
+    calls = _llm(monkeypatch, _summary(None), {report.SYSTEM_FIX: BOTH_FIXES})
+    out = await report.fill(profile(), TWO_FIXES, BODIES, True, llm.Usage())
+    assert [s["refs"] for s in out["summary"]] == [["N1"], ["N2"], ["N3", "N5"]]
+    assert calls[1]["system"] == report.SYSTEM_FIX + report.EXTERNAL_RULE
+
+
+async def test_empty_main_output_is_not_patched_by_a_small_call(monkeypatch):
+    """한눈에 보기가 비면 빈 결과다 — 작은 호출로 문장을 채워 실패를 가리지 않는다."""
+    calls = _llm(monkeypatch, {"summary": {"resolution": SUMMARY["resolution"]}}, {report.SYSTEM_FIX: BOTH_FIXES})
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, llm.Usage())
+    assert len(calls) == 1 and out["summary"] == []
+
+
+ACTED = {**CONTENT, "records": [*CONTENT["records"],
+                                {"ref": "N5", "id": 5, "kind": "action", "title": "풀 사용률 경보 추가", "at": "2026-07-13T08:00:00Z"},
+                                {"ref": "N6", "id": 6, "kind": "action", "title": "고객 공지 발송", "at": "2026-07-14T08:00:00Z"},
+                                {"ref": "N7", "id": 7, "kind": "action", "title": "런북 갱신", "at": "2026-07-15T08:00:00Z"}]}
+ACTED_BODIES = {**BODIES, 3: "풀 최대를 20 으로 조정했다", 5: "풀 사용률 80% 경보를 추가했다", 6: "지연을 겪은 고객에게 사과 공지를 발송했다", 7: "풀 고갈 대응 런북을 갱신했다"}
+ALARM = {"text": "풀 사용률 80% 경보를 추가했습니다.", "refs": ["N5"]}
+NOTICE = {"text": "지연을 겪은 고객에게 사과 공지를 발송했습니다.", "refs": ["N6"]}
+RUNBOOK = {"text": "풀 고갈 대응 런북을 갱신했습니다.", "refs": ["N7"]}
+ACTION_LINES = ["N5 (조치) 풀 사용률 경보 추가 — 풀 사용률 80% 경보를 추가했다", "N6 (조치) 고객 공지 발송 — 지연을 겪은 고객에게 사과 공지를 발송했다",
+                "N7 (조치) 런북 갱신 — 풀 고갈 대응 런북을 갱신했다"]
+
+
+def _main(*prevention) -> dict:
+    return {"summary": SUMMARY, "prevention": list(prevention), **NOTES}
+
+
+async def _fill(content=ACTED, bodies=ACTED_BODIES, external=False):
+    usage, trace = llm.Usage(), {}
+    return await report.fill(profile(), content, bodies, external, usage, trace), usage, trace
+
+
+async def test_prevention_is_not_supplemented_when_main_call_cited_every_candidate(monkeypatch):
+    """조치 기록을 본 호출이 모두 근거로 썼고 해결 기록에 고르는 낱말이 없으면 보완 호출을 부르지 않는다."""
+    calls = _llm(monkeypatch, _main(ALARM, NOTICE, RUNBOOK))
+    out, _, trace = await _fill()
+    assert len(calls) == 1 and len(out["prevention"]) == 3 and "prevention" not in trace
+
+
+async def test_prevention_is_supplemented_from_records_the_main_call_left_out(monkeypatch):
+    """본 호출이 안 쓴 조치 기록만 주고 받은 문장을 뒤에 붙인다 — 토큰은 더하고, 담당자 · 기한은 비운다."""
+    calls = _llm(monkeypatch, _main({**ALARM, "owner": "김담당", "due": "2026-08-01"}), {report.SYSTEM_PREVENTION: {"prevention": [NOTICE]}})
+    out, usage, trace = await _fill()
+    assert out["prevention"] == [{**ALARM, "owner": "김담당", "due": "2026-08-01"}, {**NOTICE, "owner": None, "due": None}]
+    assert calls[1]["system"] == report.SYSTEM_PREVENTION and calls[1]["max_tokens"] == report.PREVENTION_MAX_TOKENS
+    assert calls[1]["user"] == "\n".join(["[기록]", *ACTION_LINES[1:]])   # 이미 근거로 쓴 N5 · 낱말이 없는 해결 기록 N3 · 다른 칸의 문장은 넣지 않는다
+    assert (usage.prompt_tokens, usage.completion_tokens) == (20, 4)
+    assert trace["prevention"]["given"] == ["N6", "N7"] and trace["prevention"]["added"] == [out["prevention"][1]]
+
+
+async def test_prevention_is_not_supplemented_without_fix_records(monkeypatch):
+    """해결 기록이 없는 장애 건의 조치 기록은 대응 그 자체다 — 재발 방지로 싣지 않는다."""
+    open_case = {**ACTED, "resolution": {**ACTED["resolution"], "items": []}, "records": [{**r, "kind": "action"} if r["ref"] == "N3" else r for r in ACTED["records"]]}
+    calls = _llm(monkeypatch, _main())
+    out, _, _ = await _fill(open_case)
+    assert len(calls) == 1 and out["prevention"] == []
+
+
+@pytest.mark.parametrize(("body", "given"), [("풀 최대를 20 으로 조정했다", False), ("풀 최대를 20 으로 조정하고 배포 점검표에 풀 설정 검증을 넣었다", True)])
+async def test_fix_record_is_given_only_when_it_has_a_signal_word(monkeypatch, body, given):
+    calls = _llm(monkeypatch, _main(), {report.SYSTEM_PREVENTION: {"prevention": []}})
+    await _fill(bodies={**ACTED_BODIES, 3: body})
+    assert calls[1]["user"].split("\n")[1:] == ([f"N3 (해결) 풀 최대 20 — {body} / 결과: 풀을 20 으로 늘려 해소"] if given else []) + ACTION_LINES
+
+
+@pytest.mark.parametrize(("answer", "why"), [
+    ([{"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"]}], "입력에 없는 근거 번호"),                 # 넘기지 않은 기록의 번호
+    ([ALARM, {"text": "풀 사용률 경보는 80% 입니다.", "refs": ["N5"]}], "같은 기록의 둘째 문장"),
+    ([{"text": "풀 사용률 80% 경보 추가.", "refs": ["N5"]}], "'니다'로 끝나지 않음"),                  # 기록의 메모 말투 그대로
+    ([{"text": "풀 사용률 경보를 추가해야 합니다.", "refs": ["N5"]}], "권고 · 예정 · 해결 되풀이로 끝남"),
+    ([{"text": "풀 사용률 경보 절차를 마련했습니다.", "refs": ["N5"]}], "기록에 없는 낱말"),
+    ([{"text": "배포 파이프라인 승인 단계를 늘렸습니다.", "refs": ["N5"]}], "근거 기록과 겹침 60% 미만")])   # 다른 내용에 번호만 붙임
+async def test_supplemented_sentence_that_fails_a_check_is_dropped(monkeypatch, answer, why):
+    _llm(monkeypatch, _main(), {report.SYSTEM_PREVENTION: {"prevention": answer}})
+    out, _, trace = await _fill()
+    assert out["prevention"] == ([{**ALARM, "owner": None, "due": None}] if answer[0] == ALARM else [])
+    assert trace["prevention"]["dropped"] == [[why, answer[-1]["text"]]]
+
+
+async def test_supplemented_sentences_stop_at_the_list_limit(monkeypatch):
+    four = [{"text": f"풀 설정을 {n}차로 고쳤습니다.", "refs": ["N3"]} for n in range(1, 5)]
+    _llm(monkeypatch, _main(*four), {report.SYSTEM_PREVENTION: {"prevention": [ALARM, NOTICE, RUNBOOK]}})
+    out, _, _ = await _fill()
+    assert [s["text"] for s in out["prevention"]] == [*(s["text"] for s in four), ALARM["text"]] and len(out["prevention"]) == report.LIST_MAX
+
+
+async def test_external_supplement_carries_the_external_rule(monkeypatch):
+    calls = _llm(monkeypatch, _main(), {report.SYSTEM_PREVENTION: {"prevention": [{**ALARM, "owner": "김담당"}]}})
+    out, _, _ = await _fill(external=True)
+    assert calls[1]["system"] == report.SYSTEM_PREVENTION + report.EXTERNAL_RULE and out["prevention"] == [{**ALARM, "owner": None, "due": None}]
+
+
+@pytest.mark.parametrize("answer", [RuntimeError("timeout"), ["not", "an", "object"]])
+async def test_failed_supplement_keeps_the_main_result(monkeypatch, answer):
+    _llm(monkeypatch, _main(ALARM), {report.SYSTEM_PREVENTION: answer})
+    out, _, trace = await _fill()
+    assert out["prevention"] == [{**ALARM, "owner": None, "due": None}] and trace["prevention"]["added"] == []   # 보고서는 그대로 끝난다
+
+
+async def test_both_small_calls_run_when_both_cells_fall_short(monkeypatch):
+    """해결 문장 다시 받기와 재발 방지 보완은 서로 다른 칸이다 — 둘 다 걸리면 둘 다 부른다."""
+    two = {**ACTED, "resolution": TWO_FIXES["resolution"],
+           "records": [*ACTED["records"], {"ref": "N8", "id": 8, "kind": "resolution", "title": "타임아웃 3초", "at": "2026-07-16T08:00:00Z"}]}
+    two["resolution"] = {**two["resolution"], "items": [two["resolution"]["items"][0], {"ref": "N8", "title": "타임아웃 3초", "summary": None}]}
+    calls = _llm(monkeypatch, _main(), {report.SYSTEM_FIX: {**BOTH_FIXES, "refs": ["N3", "N8"]}, report.SYSTEM_PREVENTION: {"prevention": [NOTICE]}})
+    out, usage, _ = await _fill(two)
+    assert len(calls) == 3 and out["summary"][-1]["refs"] == ["N3", "N8"] and [s["refs"] for s in out["prevention"]] == [["N6"]]
+    assert usage.prompt_tokens == 30
+
+
+WRONG_KEY = {"summary": SUMMARY, "impact": [{"text": "응답이 지연됐습니다.", "refs": ["N1"]}], "causes": NOTES["causes"],
+             "side_issues": {"N6": {"text": "예시 번호를 그대로 쓴 메모입니다.", "refs": ["N5"]}}}   # 지시문의 예시 번호를 키로 쓴 응답 — N4 의 메모가 빠진다
+
+
+async def test_missing_note_is_refilled_by_calling_the_main_prompt_again(monkeypatch):
+    """추가 문제 메모가 빠지면 본 호출을 같은 입력으로 한 번 더 불러 빠진 칸만 채운다 — 다른 칸은 첫 응답 그대로, 토큰은 더한다."""
+    second = {"summary": {"problem": {"text": "다르게 쓴 문제입니다.", "refs": ["N1"]}}, "impact": [],
+              "causes": {"N2": {"text": "다르게 쓴 원인 설명입니다.", "refs": ["N2"]}}, "side_issues": NOTES["side_issues"]}
+    calls = _llm(monkeypatch, [WRONG_KEY, second])
+    usage, trace = llm.Usage(), {}
+    out = await report.fill(profile(), CONTENT, BODIES, True, usage, trace)
+    assert len(calls) == 2 and calls[1] == calls[0] and calls[0]["system"] == report.SYSTEM + report.EXTERNAL_RULE   # 같은 지시문 · 같은 입력
+    assert out["side_issues"][0]["note"] == NOTES["side_issues"]["N4"]
+    assert out["summary"][0]["text"] == SUMMARY["problem"]["text"] and out["impact"] == WRONG_KEY["impact"]        # 첫 응답의 문장은 그대로
+    assert out["causes"][0]["explanation"] == NOTES["causes"]["N2"]                                                 # 이미 있던 칸도 그대로
+    assert (usage.prompt_tokens, usage.completion_tokens) == (20, 4) and trace["notes"] == {"missing": ["N4"], "filled": ["N4"]}
+
+
+async def test_missing_cause_explanation_is_refilled_too(monkeypatch):
+    calls = _llm(monkeypatch, [{"summary": SUMMARY, "side_issues": NOTES["side_issues"]}, {"summary": SUMMARY, **NOTES}])
+    out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage())
+    assert len(calls) == 2 and out["causes"][0]["explanation"] == NOTES["causes"]["N2"] and out["side_issues"][0]["note"] == NOTES["side_issues"]["N4"]
+
+
+@pytest.mark.parametrize("second", [WRONG_KEY, ["not", "an", "object"], RuntimeError("timeout")])
+async def test_note_stays_empty_when_the_second_call_does_not_help(monkeypatch, second):
+    """다시 불러도 빠지거나 그 호출이 실패하면 빈 칸으로 둔다 — 한 번만 다시 부르고, 보고서는 그대로 끝난다."""
+    calls = _llm(monkeypatch, [WRONG_KEY, second])
+    trace = {}
+    out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage(), trace)
+    assert len(calls) == 2 and out["side_issues"][0]["note"] is None and out["summary"][0]["text"] == SUMMARY["problem"]["text"]
+    assert trace["notes"]["filled"] == []
 
 
 def _insert(admin_conn, content: dict, audience: str = "internal") -> int:
@@ -299,6 +528,9 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert s["fixes_missing_by_ref"] == ["N3"] and s["fixes_missing_by_text"] == ["N3"]   # 해결 기록은 어디에도 없다
     assert s["multi_sentence_items"] == 1 and s["resolution_note"] is False
     assert (s["cause_without_record"], s["fix_without_record"]) == (0, 0)
+    note = lambda refs: rc.score({**TWO_FIXES, "resolution": {**TWO_FIXES["resolution"], "note": {"text": "지연이 사라졌습니다.", "refs": refs}}})  # noqa: E731
+    assert (s["note_without_fix_ref"], s["multi_fix"], s["note_partial_fix_refs"]) == (0, 0, 0)                 # 해결 요약이 없으면 세지 않는다
+    assert (note(["N2"])["note_without_fix_ref"], note(["N3"])["note_partial_fix_refs"], note(["N3", "N5"])["note_partial_fix_refs"]) == (1, 1, 0)
     memo = report.merge(CONTENT, {**data, "impact": [{"text": "결제 안 됨.", "refs": ["N1"]}], "causes": {"N2": {"text": "풀 크기 10 고정", "refs": ["N2"]}}})
     assert (s["not_polite_ending"], rc.score(memo)["not_polite_ending"]) == (0, 2)   # 메모 말투 · 명사로 끝난 문장
     stale = {**CONTENT, "causes": [], "resolution": {**CONTENT["resolution"], "items": []},   # 옛 판이 만든 모양 — 기록에 없는 원인 · 해결 문장
@@ -309,5 +541,12 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert report.merge(opened, {"summary": SUMMARY})["summary"][-1]["text"] == report.NO_FIX_OPEN
     t = rc.totals([{"score": s, "prompt_tokens": 10, "completion_tokens": 5}, {"error": "x"}])
     assert (t["reports"], t["failed"], t["full_by_text"], t["fixes_missing_by_text"], t["prompt_tokens"]) == (2, 1, 0, 1, 10)
+    assert (t["fix_refetched"], t["prevention_supplemented"], t["prevention_added"], t["prevention_dropped"]) == (0, 0, 0, {})   # 작은 호출 기록이 없는 행
+    small = rc.totals([{"score": s, "small_calls": {"fix": {"accepted": True}, "prevention": {"added": [1, 2], "dropped": [["기록에 없는 낱말", "…"]]}}},
+                       {"score": s, "small_calls": {"prevention": {"added": [], "dropped": [["기록에 없는 낱말", "…"], ["같은 기록의 둘째 문장", "…"]], "error": "x"}}},
+                       {"score": s, "small_calls": {"notes": {"missing": ["N4", "N5"], "filled": ["N4"]}}}])
+    assert (small["fix_refetched"], small["fix_refetch_accepted"], small["prevention_supplemented"], small["prevention_added"]) == (1, 1, 2, 2)
+    assert small["prevention_dropped"] == {"기록에 없는 낱말": 2, "같은 기록의 둘째 문장": 1} and small["small_call_errors"] == 1
+    assert (small["notes_refilled_reports"], small["notes_missing"], small["notes_filled"], t["notes_refilled_reports"]) == (1, 2, 1, 0)
     blank = rc.facts_only(report.merge(CONTENT, data))
     assert blank["summary"] == [] and blank["causes"][0]["explanation"] is None and blank["records"] == CONTENT["records"]

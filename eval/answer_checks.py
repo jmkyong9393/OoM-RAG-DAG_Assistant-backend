@@ -46,7 +46,10 @@ def node_ids(refs: list[dict], cache: dict) -> set[int]:
     ids = set()
     for r in refs:
         if r["log"] not in cache:
-            cache[r["log"]] = json.loads((ROOT / "data" / "logs" / f"{r['log']}.ids.json").read_text(encoding="utf-8"))["ref"]
+            f = ROOT / "data" / "logs" / f"{r['log']}.ids.json"
+            if not f.exists():
+                sys.exit(f"{f.name} 없음 — 먼저 make load-logs (이 DB 의 번호로 만든다)")
+            cache[r["log"]] = json.loads(f.read_text(encoding="utf-8"))["ref"]
         if r["ref"] in cache[r["log"]]:
             ids.add(cache[r["log"]][r["ref"]])
     return ids
