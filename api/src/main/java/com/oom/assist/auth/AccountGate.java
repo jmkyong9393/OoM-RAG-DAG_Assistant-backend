@@ -100,7 +100,8 @@ public class AccountGate implements HandlerInterceptor {
 
   private static boolean open(HttpServletRequest req) {
     String path = req.getRequestURI().substring(req.getContextPath().length());
-    return OPEN.contains(key(req)) || path.startsWith("/actuator/");
+    // actuator 는 SecurityConfig 가 로그인 없이 열어 둔 것만 — 다른 엔드포인트를 노출해도 여기서 같이 열리지 않게
+    return OPEN.contains(key(req)) || path.equals("/actuator/health") || path.startsWith("/actuator/health/") || path.equals("/actuator/info");
   }
 
   /** 처리방침에 동의해야 하는가 — 지금 판에 대한 동의가 없다. 판을 알 수 없으면(문안 파일 없음 · 판 표시 없음) 동의한 적이 있는지만 본다. */
