@@ -1,7 +1,9 @@
 package com.oom.assist.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -141,6 +143,54 @@ class UserAccountApiTest extends AbstractApiTest {
     MvcResult r = mvc.perform(as(post("/users/" + hrOnly + "/reset-password"), userBackend, wsHr)).andExpect(status().isOk()).andReturn();   // 장문경은 회사 관리자가 아니다
     String temp = JsonPath.read(r.getResponse().getContentAsString(StandardCharsets.UTF_8), "$.temp_password");
     assertThat(login("T0004", temp).getResponse().getStatus()).isEqualTo(200);
+  }
+
+  // ── 회사 관리자의 멤버 관리 — 일반 멤버로 속한 부서에서 ─────────────────
+
+  /** 회사 관리자 배종현을 경영지원의 일반 멤버로 둔다(그 부서의 admin 은 장문경 하나). 경영지원에만 속한 계정 하나를 만들어 돌려준다. */
+  private long hrOnlyMember() {
+    member(wsHr, userLead, "member");
+    long hrOnly = user("경영지원 멤버", "사원", "T0004", "hr-only@test.local");
+    member(wsHr, hrOnly, "member");
+    return hrOnly;
+  }
+
+  private ResultActions changeRole(long actor, long ws, long target, String role) throws Exception {
+    return mvc.perform(as(patch("/users/" + target), actor, ws).content("{\"role\": \"" + role + "\"}"));
+  }
+
+  @Test
+  void companyAdminResetsPasswordWhereOnlyMember() throws Exception {
+    long hrOnly = hrOnlyMember();
+    mvc.perform(as(post("/users/" + hrOnly + "/reset-password"), userLead, wsHr)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.temp_password").isNotEmpty());
+    // 그 부서의 하나뿐인 admin — 전에는 재발급해 줄 사람이 없었다(본인은 400, 회사 관리자는 그 부서의 일반 멤버라 403)
+    mvc.perform(as(post("/users/" + userBackend + "/reset-password"), userLead, wsHr)).andExpect(status().isOk());
+  }
+
+  @Test
+  void companyAdminAppointsSuccessorBeforeDemotingTheOnlyAdmin() throws Exception {
+    long hrOnly = hrOnlyMember();
+    changeRole(userLead, wsHr, userBackend, "member").andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("LAST_ADMIN"));   // 후임 없이 먼저 내리면
+    changeRole(userLead, wsHr, hrOnly, "admin").andExpect(status().isOk()).andExpect(jsonPath("$.role").value("admin"));
+    changeRole(userLead, wsHr, userBackend, "member").andExpect(status().isOk()).andExpect(jsonPath("$.role").value("member"));
+  }
+
+  @Test
+  void companyAdminInvitesAndRemovesWhereOnlyMember() throws Exception {
+    long hrOnly = hrOnlyMember();
+    mvc.perform(as(post("/users"), userLead, wsHr).content("{\"employee_no\": \"" + empNew + "\", \"name\": \"김하늘\"}")).andExpect(status().isCreated());
+    mvc.perform(as(delete("/workspaces/" + wsHr + "/members/" + hrOnly), userLead, wsHr)).andExpect(status().isNoContent());
+  }
+
+  @Test
+  void plainMemberCannotManageMembers() throws Exception {
+    // 김하늘은 SW 의 일반 멤버이고 회사 관리자도 아니다 — 다섯 가지 모두 전과 같이 403
+    mvc.perform(as(post("/users"), userNew, wsSw).content("{\"employee_no\": \"T0008\", \"name\": \"신규\"}")).andExpect(status().isForbidden());
+    changeRole(userNew, wsSw, userBackend, "admin").andExpect(status().isForbidden());
+    mvc.perform(as(delete("/workspaces/" + wsSw + "/members/" + userBackend), userNew, wsSw)).andExpect(status().isForbidden());
+    mvc.perform(as(post("/users/" + userBackend + "/reset-password"), userNew, wsSw)).andExpect(status().isForbidden());
+    mvc.perform(as(post("/users/" + userBackend + "/unlock"), userNew, wsSw)).andExpect(status().isForbidden());
   }
 
   // ── 비활성화 ────────────────────────────────────────────────────────

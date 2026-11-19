@@ -63,7 +63,8 @@ public class AuthController {
   public record LoginRequest(@NotBlank String employeeNo, @NotBlank String password) {}
   public record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {}
   /** canConfigure: 이 부서의 설정(규정 사용·사례 사용)을 바꿀 수 있는가 — 부서 admin 이거나 상위(전사 공통)의 admin. */
-  /** permissions: 이 부서에서 할 수 있는 관리 동작(admin.members · admin.settings · docs.manage). 화면 노출용이고 서버는 요청마다 다시 검사한다. */
+  /** permissions: 이 부서에서 할 수 있는 관리 동작(admin.members · admin.settings · docs.manage). 화면 노출용이고 서버는 요청마다 다시 검사한다.
+   *  admin.members = 그 부서의 admin 이거나 회사 관리자(UserAdminController.requireMemberAdmin 과 같은 조건). role 은 그 부서에서의 역할 그대로다. */
   public record WorkspaceMembership(long id, String name, boolean policyEnabled, boolean caseEnabled, String role, boolean canConfigure, List<String> permissions) {}
   /** permissions: 부서와 무관한 동작(audit.read = 회사 관리자). title = 표시용 "직급 · 직책"(예전 화면 호환).
    *  consentVersion = 지금 처리방침 판, consentedVersion = 이 사용자가 마지막으로 동의한 판. 둘이 다르면 consentRequired. */
@@ -194,6 +195,10 @@ public class AuthController {
           FROM users WHERE id = ? AND status = 'active'""").params(policyVersion(), userId)
         .query().listOfRows().stream().findFirst()
         .map(u -> {
+          // 회사 관리자: 부서가 아닌 상위 워크스페이스(전사 공통)의 admin. 소속 부서 목록에는 넣지 않는다
+          boolean companyAdmin = jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                               WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept')""").param(userId).query(Boolean.class).single();
           List<WorkspaceMembership> ws = jdbc.sql("""
                 SELECT w.id, w.name, w.policy_enabled, w.case_enabled, m.role,
                        EXISTS (SELECT 1 FROM workspace_members a WHERE a.user_id = m.user_id AND a.role = 'admin'
@@ -202,11 +207,7 @@ public class AuthController {
                 WHERE m.user_id = ? AND w.kind = 'dept' ORDER BY (m.role = 'admin') DESC, w.id
                 """).param(userId).query((rs, i) -> new WorkspaceMembership(rs.getLong("id"), rs.getString("name"),
                   rs.getBoolean("policy_enabled"), rs.getBoolean("case_enabled"), rs.getString("role"), rs.getBoolean("can_configure"),
-                  permissions("admin".equals(rs.getString("role")), rs.getBoolean("can_configure")))).list();
-          // 회사 관리자: 부서가 아닌 상위 워크스페이스(전사 공통)의 admin. 소속 부서 목록에는 넣지 않는다
-          boolean companyAdmin = jdbc.sql("""
-                SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
-                               WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept')""").param(userId).query(Boolean.class).single();
+                  permissions("admin".equals(rs.getString("role")) || companyAdmin, rs.getBoolean("can_configure")))).list();
           // 홈 = 본인이 지정한 메인 부서(지금도 소속일 때만). 지정이 없거나 그 부서에서 빠졌으면 계산값 — admin 멤버십이 있으면 그것, 그다음 번호순
           Long chosen = u.get("primary_workspace_id") == null ? null : ((Number) u.get("primary_workspace_id")).longValue();
           Long home = ws.stream().map(WorkspaceMembership::id).filter(id -> id.equals(chosen)).findFirst()
@@ -223,9 +224,9 @@ public class AuthController {
         });
   }
 
-  private static List<String> permissions(boolean wsAdmin, boolean canConfigure) {
+  private static List<String> permissions(boolean memberAdmin, boolean canConfigure) {
     List<String> p = new java.util.ArrayList<>();
-    if (wsAdmin) p.add("admin.members");
+    if (memberAdmin) p.add("admin.members");
     if (canConfigure) { p.add("admin.settings"); p.add("docs.manage"); }
     return p;
   }

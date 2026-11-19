@@ -55,7 +55,7 @@ public class UserAdminController {
   @PostMapping("/users")
   @Transactional
   public ResponseEntity<InviteResponse> invite(@Valid @RequestBody InviteRequest body, TenantContext ctx) {
-    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    requireMemberAdmin(ctx);
     String role = body.role() == null ? "member" : body.role();
     if (!role.equals("member") && !role.equals("admin")) throw ApiException.badRequest("VALIDATION", "role must be member|admin");
     String empNo = body.employeeNo().trim().toUpperCase();
@@ -114,7 +114,7 @@ public class UserAdminController {
   /** 잠금 해제 (현재 워크스페이스 admin, 대상은 그 워크스페이스 멤버). */
   @PostMapping("/users/{id}/unlock")
   public ResponseEntity<Void> unlock(@PathVariable long id, TenantContext ctx) {
-    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    requireMemberAdmin(ctx);
     int n = jdbc.sql("""
           UPDATE users u SET locked_until = NULL, failed_attempts = 0
           FROM workspace_members m WHERE m.user_id = u.id AND m.workspace_id = ? AND u.id = ?""").params(ctx.workspaceId(), id).update();
@@ -138,7 +138,7 @@ public class UserAdminController {
   @PostMapping("/users/{id}/reset-password")
   @Transactional
   public TempPasswordResponse resetPassword(@PathVariable long id, TenantContext ctx) {
-    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    requireMemberAdmin(ctx);
     if (id == ctx.userId()) throw ApiException.badRequest("VALIDATION", "change your own password with PATCH /auth/password");
     Map<String, Object> u = jdbc.sql("""
           SELECT u.employee_no, u.status FROM workspace_members m JOIN users u ON u.id = m.user_id
@@ -233,6 +233,16 @@ public class UserAdminController {
     return new Actor(uid, ((Number) me.get("tenant_id")).longValue(), (String) me.get("name"));
   }
 
+  /**
+   * 이 부서의 멤버를 관리할 수 있는가 — 그 부서의 admin 이거나 회사 관리자. 초대 · 역할 변경 · 제외 · 재발급 · 잠금 해제가 쓴다. 아니면 403.
+   * 회사 관리자를 넣은 이유: 한 부서에만 속한 그 부서의 하나뿐인 admin 은 재발급해 줄 사람이 없었고, 하나뿐인 admin 이 떠난 부서는 후임을 지정할 사람이 없었다.
+   * 회사 관리자도 부서 헤더는 필요하다 — 자기가 속한 부서에서 부른다(속하지 않은 부서는 부서 정보가 만들어지지 않아 여전히 403).
+   * SELF_DEMOTION · SELF_REMOVAL · LAST_ADMIN 은 회사 관리자에게도 그대로다 — 후임을 먼저 지정하고 내린다.
+   */
+  private void requireMemberAdmin(TenantContext ctx) {
+    if (!ctx.isAdmin() && !companyAdmin(ctx.userId())) throw ApiException.forbidden("admin only");
+  }
+
   /** 회사 관리자 = 부서가 아닌 상위(전사 공통) 워크스페이스의 admin 인 활성 계정 (AuditController 와 같은 판정). */
   private boolean companyAdmin(long uid) {
     return jdbc.sql("""
@@ -282,7 +292,7 @@ public class UserAdminController {
   @PatchMapping("/users/{id}")
   @Transactional
   public MemberDto changeRole(@PathVariable long id, @RequestBody RoleRequest body, TenantContext ctx) {
-    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    requireMemberAdmin(ctx);
     String role = body == null ? null : body.role();
     if (!"member".equals(role) && !"admin".equals(role)) throw ApiException.badRequest("VALIDATION", "role must be member|admin");
     lockUser(id, ctx.tenantId());
@@ -304,7 +314,7 @@ public class UserAdminController {
   @Transactional
   public ResponseEntity<Void> removeMember(@PathVariable long ws, @PathVariable long uid, TenantContext ctx) {
     if (ws != ctx.workspaceId()) throw ApiException.badRequest("VALIDATION", "path workspace must match X-Workspace-Id");
-    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    requireMemberAdmin(ctx);
     lockUser(uid, ctx.tenantId());
     lockMembers(ws);
     String cur = memberRole(ws, uid);
