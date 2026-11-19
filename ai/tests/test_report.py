@@ -567,6 +567,7 @@ def test_schema_locks_prevention_when_there_is_no_fix_or_action_record():
 def test_main_call_prevention_ending_as_a_recommendation_is_dropped():
     """본 호출의 재발 방지 문장도 권고 · 예정으로 끝나면 싣지 않는다(보완 호출과 같은 기준)."""
     data = {"summary": SUMMARY, "prevention": [{"text": "풀 사용률 점검을 권장했습니다.", "refs": ["N3"]}, {"text": "풀 크기 재검토가 필요합니다.", "refs": ["N3"]},
+                                               {"text": "풀 상한 규칙을 검토할 필요가 있습니다.", "refs": ["N3"]}, {"text": "안내문 보강을 검토 중입니다.", "refs": ["N3"]},
                                                {"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"]}]}
     assert [s["text"] for s in report.merge(CONTENT, data)["prevention"]] == ["풀을 20 으로 늘렸습니다."]
 
