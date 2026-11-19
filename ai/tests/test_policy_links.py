@@ -84,6 +84,8 @@ def test_link_policies_marks_cases_whose_rule_was_revised(monkeypatch):
     assert "개정 전 규정 운영지침 v1 제11조 기준의 처리" in text and "처리 당시에는 규정에 기준이 없었다" in text
     must = llm._must_include(nodes)
     assert any("개정되기 전(v1 판)" in m and "[P1]" in m for m in must), "지금 조문의 값을 현재 기준으로 쓰게 한다"
+    asked = llm._must_include(nodes, query="힙 비율은 얼마로 잡았어?")
+    assert any('조문 [P1] 에서 질문("힙 비율은 얼마로 잡았어?")이 묻는 항목의 현재 값을 찾아 그대로 쓴다' in m for m in asked), "조문에 항이 여럿이어도 질문의 항목을 짚어 준다"
     assert any("개정 전 규정(운영지침 v1 제11조)" in m for m in must)
     assert not any("[None]" in m for m in must), "마커가 없는 근거를 마커로 쓰지 않는다"
     assert any("70% 가 당시(v1 판) 기준" in m for m in must) and not any("70% 가 현재 기준" in m for m in must), "예외 사례 지시에도 같은 치환"
@@ -284,3 +286,12 @@ def test_link_policies_gives_slots_to_resolving_fixes_before_follow_ups(monkeypa
     policy: list[dict] = []
     assert pipeline._link_policies(1, nodes, _event(nodes, entry=1), policy) == pipeline.MAX_LINKED == 3
     assert [p["chunk_id"] for p in policy] == ["ops-a2-1", "ops-a11-1", "ops-a16-1"], "진입 → 해결 기록 → 후속 순. 마지막 후속(제17조)은 자리가 없다"
+
+
+def test_case_handled_before_a_standard_existed_is_not_retold_as_a_missing_standard():
+    """기준이 없던 때의 사례인데 그 뒤 규정이 생겼으면, '당시에는 규정이 없었다'는 말을 답변에 옮기게 하지 않는다 — 지금 기준만 조문으로 답하게 한다."""
+    nodes = [{"ref": "N1", "status": "active", "type": "success", "entry": True, "title": "영수증 없이 환불",
+              "policy": [{"relation": "gap", "ref": None, "revision": "replaced", "topic": "영수증 분실 시 구매 확인"}]}]
+    must = llm._must_include(nodes)
+    assert any("[N1] 은 개정 전 사례다" in m and "과거에 기준이 없었다고 쓰지 말고" in m and "## 규정 의 조문으로만" in m for m in must)
+    assert not any("정한 규정이 없었다" in m for m in must)
