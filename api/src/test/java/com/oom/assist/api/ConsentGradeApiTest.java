@@ -23,6 +23,7 @@ class ConsentGradeApiTest extends AbstractApiTest {
 
   @Test
   void consentToOldVersionRequiresConsentAgain() throws Exception {
+    clearConsent(userBackend);   // 공통 기반은 지금 판에 동의한 계정을 만든다 — 옛 판에만 동의한 상태로 바꾼다
     jdbc.sql("UPDATE users SET consented_at = now() - interval '10 days' WHERE id = ?").param(userBackend).update();
     jdbc.sql("INSERT INTO user_consents (user_id, policy_version, consented_at) VALUES (?, 'v1', now() - interval '10 days')").param(userBackend).update();
     mvc.perform(asUser(get("/me"), userBackend))
@@ -43,6 +44,7 @@ class ConsentGradeApiTest extends AbstractApiTest {
 
   @Test
   void firstConsentWithoutBodyRecordsCurrentVersion() throws Exception {
+    clearConsent(userLead);      // 한 번도 동의하지 않은 계정
     mvc.perform(asUser(get("/me"), userLead)).andExpect(jsonPath("$.consent_required").value(true)).andExpect(jsonPath("$.consented_version").value(nullValue()));
     mvc.perform(asUser(post("/auth/consent"), userLead)).andExpect(status().isNoContent());
     mvc.perform(asUser(get("/me"), userLead)).andExpect(jsonPath("$.consent_required").value(false)).andExpect(jsonPath("$.consented_version").value("v2"));

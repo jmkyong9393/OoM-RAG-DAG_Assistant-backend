@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -48,15 +47,17 @@ public class AuthController {
   private final PasswordEncoder encoder;
   private final JdbcClient jdbc;
   private final LoginAttempts attempts;
+  private final AccountGate gate;
   private final Path privacyPolicyPath;
 
   public AuthController(AuthenticationManager authManager, SecurityContextRepository contextRepo, PasswordEncoder encoder, JdbcClient jdbc,
-      LoginAttempts attempts, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
+      LoginAttempts attempts, AccountGate gate, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
     this.authManager = authManager;
     this.contextRepo = contextRepo;
     this.encoder = encoder;
     this.jdbc = jdbc;
     this.attempts = attempts;
+    this.gate = gate;
     this.privacyPolicyPath = Path.of(privacyPolicyPath);
   }
 
@@ -76,8 +77,6 @@ public class AuthController {
   public record ProfileRequest(String name, String grade, String position, String title, String email, Long primaryWorkspaceId) {}
   /** version = 화면이 보여 준 처리방침 판. 다르면 그사이 문안이 바뀐 것이다. */
   public record ConsentRequest(String version) {}
-
-  private static final java.util.regex.Pattern POLICY_VERSION = java.util.regex.Pattern.compile("판:\\s*([A-Za-z0-9._-]+)");
 
   @PostMapping("/auth/login")
   public Me login(@Valid @RequestBody LoginRequest body, HttpServletRequest req, HttpServletResponse res) {
@@ -136,7 +135,7 @@ public class AuthController {
     try {
       String text = Files.readString(privacyPolicyPath, StandardCharsets.UTF_8);
       ResponseEntity.BodyBuilder ok = ResponseEntity.ok().contentType(new MediaType("text", "markdown", StandardCharsets.UTF_8));
-      String version = versionOf(text);
+      String version = AccountGate.versionOf(text);
       if (version != null) ok.header("X-Policy-Version", version);
       return ok.body(text);
     } catch (IOException e) {
@@ -146,16 +145,7 @@ public class AuthController {
 
   /** 지금 처리방침 판(문안 머리의 "판: v2"). 파일이 없거나 판 표시가 없으면 null — 그때는 판 없이 "동의한 적 있는가"만 본다. */
   String policyVersion() {
-    try {
-      return versionOf(Files.readString(privacyPolicyPath, StandardCharsets.UTF_8));
-    } catch (IOException e) {
-      return null;
-    }
-  }
-
-  private static String versionOf(String text) {
-    java.util.regex.Matcher m = POLICY_VERSION.matcher(text);
-    return m.find() ? m.group(1) : null;
+    return gate.policyVersion();   // 요청마다 파일을 읽지 않는다 — AccountGate 가 문안이 바뀔 때만 다시 읽는다
   }
 
   @PatchMapping("/auth/password")
@@ -212,14 +202,14 @@ public class AuthController {
           Long chosen = u.get("primary_workspace_id") == null ? null : ((Number) u.get("primary_workspace_id")).longValue();
           Long home = ws.stream().map(WorkspaceMembership::id).filter(id -> id.equals(chosen)).findFirst()
               .orElse(ws.isEmpty() ? null : ws.get(0).id());
+          // 아래 두 판정은 AccountGate 와 같은 메서드를 쓴다 — 화면이 게이트로 보내는 계정과 서버가 막는 계정이 같아야 한다
           Timestamp changed = (Timestamp) u.get("password_changed_at");
-          Instant expiresAt = changed == null ? null : changed.toInstant().plus(Duration.ofDays(PasswordPolicy.MAX_AGE_DAYS));
-          boolean expired = expiresAt == null || expiresAt.isBefore(Instant.now());   // 기준 시각이 없으면(구 계정) 만료로 본다
           String current = policyVersion();
-          boolean consentRequired = current == null ? u.get("consented_at") == null : !Boolean.TRUE.equals(u.get("consented_current"));
+          boolean consentRequired = AccountGate.consentRequired(current, u.get("consented_at"), Boolean.TRUE.equals(u.get("consented_current")));
           return new Me(((Number) u.get("id")).longValue(), (String) u.get("employee_no"), (String) u.get("name"), (String) u.get("title"),
               (String) u.get("grade"), (String) u.get("duty"), (String) u.get("email"), home, ws,
-              Boolean.TRUE.equals(u.get("must_change_password")) || expired, consentRequired, expiresAt, companyAdmin,
+              AccountGate.mustChangePassword(Boolean.TRUE.equals(u.get("must_change_password")), changed), consentRequired,
+              AccountGate.passwordExpiresAt(changed), companyAdmin,
               companyAdmin ? List.of("audit.read") : List.of(), current, (String) u.get("consented_version"));
         });
   }
