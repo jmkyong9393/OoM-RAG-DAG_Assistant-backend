@@ -734,6 +734,75 @@ def test_reuse_copies_marked_sentences_only_when_the_marks_are_the_same():
     assert report.reuse(ACTED, picked, ACTED_BODIES)["prevention"] == picked["prevention"]     # 표시가 없던 그대로면 전처럼 옮긴다
 
 
+def _prev(sentences: dict[int, str], shift: bool = True) -> dict:
+    """앞 보고서 — 표시된 기록(기록 ID → 문장)이 그때의 글 그대로 실려 있다. shift 면 그때는 기록 번호가 하나씩 뒤였다(N5 → N6 …)."""
+    recs = [{**r, "ref": f"N{int(r['ref'][1:]) + 1}"} for r in MARKED["records"]] if shift else MARKED["records"]
+    ref = {r["id"]: r["ref"] for r in recs}
+    texts = report.record_texts(MARKED, ACTED_BODIES)
+    now = {r["id"]: r["ref"] for r in MARKED["records"]}
+    return {"records": recs, "prevention": [{"text": t, "refs": [ref[i]], "owner": None, "due": None} for i, t in sentences.items()],
+            "marked_src": {str(i): report.marked_src("조치", texts[now[i]]) for i in sentences}}
+
+
+async def test_marked_sentence_of_an_unchanged_record_is_kept_from_the_previous_report(monkeypatch):
+    """기록의 글이 앞 보고서 때와 같으면 호출하지 않고 그 문장을 그대로 쓴다 — 번호가 밀려도 기록 ID 로 찾는다. 글이 바뀐 기록만 새로 받는다."""
+    calls = _marked_llm(monkeypatch, {"공지": {"text": NOTICE["text"]}})   # '경보' 기록의 호출이 나가면 답이 없어 제목으로 실린다 — 아래 단언이 깨진다
+    usage, trace = llm.Usage(), {}
+    prev = _prev({5: "풀 사용률이 80% 를 넘으면 울리는 경보를 추가했습니다."})
+    out = await report.fill(profile(), MARKED, ACTED_BODIES, False, usage, trace, prev=prev)
+    assert [(s["text"], s["refs"]) for s in out["prevention"]] == [("풀 사용률이 80% 를 넘으면 울리는 경보를 추가했습니다.", ["N5"]), (NOTICE["text"], ["N6"])]
+    assert trace["marked"]["reused"] == ["N5"] and [c["user"] for c in calls[1:]] == [f"(조치) {ACTION_LINES[1].split(' ', 2)[2]}"]
+    assert sorted(out["marked_src"]) == ["5", "6"]     # 둘 다 다음 보고서가 다시 쓸 수 있다
+
+    changed = {**ACTED_BODIES, 5: "풀 사용률 70% 경보로 바꿨다"}   # 그 기록의 글이 바뀌면 새로 받는다
+    calls = _marked_llm(monkeypatch, {"경보": {"text": "풀 사용률 70% 경보로 바꿨습니다."}, "공지": {"text": NOTICE["text"]}})
+    trace = {}
+    out = await report.fill(profile(), MARKED, changed, False, llm.Usage(), trace, prev=prev)
+    assert out["prevention"][0]["text"] == "풀 사용률 70% 경보로 바꿨습니다." and trace["marked"]["reused"] == [] and len(calls) == 3
+
+
+async def test_only_sentences_that_met_the_conditions_are_kept_for_the_next_report(monkeypatch):
+    """제목으로 대신 실린 것 · 모양이 어긋난 채 실린 것은 지문을 남기지 않는다 — 다음 보고서에서 다시 받는다. 지문이 없는 앞 보고서(옛 것)에서는 아무것도 옮기지 않는다."""
+    _marked_llm(monkeypatch, {"경보": [{"text": TWO}, {"text": PLUS}], "공지": RuntimeError("timeout")})
+    out, _, trace = await _fill(MARKED)
+    assert trace["marked"]["loose"] == ["N5"] and trace["marked"]["fallback"] == ["N6"] and out["marked_src"] == {}
+    assert report.kept_marked(out) == {} and report.kept_marked(None) == {}
+    old = {k: v for k, v in _prev({5: "예전 문장입니다."}).items() if k != "marked_src"}
+    assert report.kept_marked(old) == {}
+
+
+@requires_db
+async def test_job_keeps_marked_sentences_only_when_the_records_changed(monkeypatch, admin_conn):
+    """워커 경로 — 기록이 달라져 다시 만드는 보고서(sig 가 다름)는 앞 보고서의 문장을 옮겨 쓰고, 기록이 그대로인데 다시 만드는 보고서(sig 가 같음)는 모두 새로 받는다."""
+    from app.retrieval import db
+    alarm, notice = "풀 사용률 경보를 추가했습니다.", "고객 공지를 발송했습니다."   # 제목만으로 만든 줄 글과 낱말이 겹치는 문장
+    calls = _marked_llm(monkeypatch, {"경보": {"text": alarm}, "공지": {"text": notice}})
+    # 시험용 기록 ID 는 실제 기록이 아니다 — DB 의 본문과 상관없이 제목만으로 줄 글을 만든다
+    monkeypatch.setattr(report, "record_texts", lambda content, bodies: {r["ref"]: r["title"] for r in content["records"]})
+    kept = "풀 사용률이 80% 를 넘으면 울리는 경보를 추가했습니다."
+    done = {**MARKED, "summary": [{"text": "풀이 고갈됐습니다.", "refs": ["N1"]}], "prevention": [{"text": kept, "refs": ["N5"], "owner": None, "due": None}],
+            "marked_src": {"5": report.marked_src("조치", "풀 사용률 경보 추가")}}
+    a, b = _insert(admin_conn, done), _insert(admin_conn, MARKED)
+    model = profile().model_answer
+    admin_conn.execute("UPDATE incident_reports SET status = 'done', prompt_version = %s, model = %s WHERE id = %s", (report.PROMPT_VERSION, model, a))
+    c = None
+    try:
+        with db.connect() as conn:
+            assert await report.run_pending(conn) == {"reports": 1, "report_failed": 0}
+        row = admin_conn.execute("SELECT sig, content FROM incident_reports WHERE id = %s", (b,)).fetchone()
+        assert [s["text"] for s in row["content"]["prevention"]] == [kept, notice] and len(calls) == 2      # 본 호출 + '공지' 기록 하나
+        assert sorted(row["content"]["marked_src"]) == ["5", "6"]
+        calls.clear()
+        c = _insert(admin_conn, MARKED)
+        admin_conn.execute("UPDATE incident_reports SET sig = %s WHERE id = %s", (row["sig"], c))    # 기록이 그대로인데 다시 만들기
+        with db.connect() as conn:
+            assert await report.run_pending(conn) == {"reports": 1, "report_failed": 0}
+        again = admin_conn.execute("SELECT content FROM incident_reports WHERE id = %s", (c,)).fetchone()["content"]
+        assert [s["text"] for s in again["prevention"]] == [alarm, notice] and len(calls) == 3      # 본 호출 + 표시된 기록 둘
+    finally:
+        admin_conn.execute("DELETE FROM incident_reports WHERE id = ANY(%s)", ([x for x in (a, b, c) if x],))
+
+
 TWO = "풀 사용률 경보를 추가했습니다. 풀 사용률 80% 경보를 추가했습니다."   # N5 의 글과 겹치지만 문장이 둘이다
 PLUS = "풀 사용률 경보 + 80% 경보를 추가했습니다."
 LONG = "풀 사용률 80% 경보를 추가했다는 것을 " + "풀 사용률 경보를 추가하고 " * 8 + "추가했습니다."
