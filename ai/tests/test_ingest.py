@@ -139,6 +139,27 @@ def test_upload_job_converts_then_indexes_as_document(tmp_path, monkeypatch, adm
 
 
 @requires_db
+def test_reviewed_markdown_gets_the_same_cleanup_as_a_fresh_conversion(tmp_path, monkeypatch, admin_conn):
+    """검수자가 변환본을 고쳐 저장하면(converting + markdown 있음) 그 글도 후처리를 거친다 — '부칙' 줄이 제목이 되어 부칙 제1조가 본문 제1조와 겹치지 않는다."""
+    from app.retrieval import db
+    monkeypatch.setenv("UPLOADS_DIR", str(tmp_path))
+    tag = uuid.uuid4().hex[:8]
+    uid = admin_conn.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()["id"]
+    up = admin_conn.execute("""INSERT INTO policy_uploads (workspace_id, original_name, format, size_bytes, sha256, original_path, slug, title, version, uploaded_by, markdown)
+                               VALUES (2, '시험.md', 'md', %s, 'x', %s, %s, '검수 저장 시험', '2026-11', %s, %s) RETURNING id""",
+                            (len(MD), f"{tag}/original.md", f"test-upload-reviewed-{tag}", uid, MD)).fetchone()["id"]
+    try:
+        with db.connect() as conn:
+            assert jobs.convert_one(conn) == "review"
+        row = admin_conn.execute("SELECT markdown, report FROM policy_uploads WHERE id = %s", (up,)).fetchone()
+        assert row["markdown"] == convert.normalize(MD) and "## 부칙" in row["markdown"]
+        assert [a["label"].split(" (")[0] for a in row["report"]["articles"] if a["article"]] == ["제1조", "제2조", "부칙 제1조"]
+        assert not [w for w in row["report"]["warnings"] if "두 번" in w]
+    finally:
+        admin_conn.execute("DELETE FROM policy_uploads WHERE id = %s", (up,))
+
+
+@requires_db
 def test_pdf_upload_records_page_of_each_article(tmp_path, monkeypatch, admin_conn):
     """원본 PDF 에서 조문의 쪽을 찾아 청크에 남긴다(근거 조문 '원문 보기' 가 그 쪽을 연다)."""
     import pymupdf

@@ -10,7 +10,7 @@ import types
 from pathlib import Path
 
 from app.config import uploads_dir
-from app.ingest.convert import ConversionError, _scripts, ocr_suspects, pdf_page_texts, preview, to_markdown
+from app.ingest.convert import ConversionError, _scripts, normalize, ocr_suspects, pdf_page_texts, preview, to_markdown
 
 PAGES_FILE = "pages.json"   # 원본 옆에 두는 쪽별 글자(PDF)
 SOURCE_TYPE = {"pdf": "pdf", "hwp": "hwp", "hwpx": "hwp"}   # 그 밖(docx · md · txt)은 markdown — policy_documents.source_type 허용값
@@ -39,7 +39,7 @@ def convert_one(conn) -> str | None:
                 orig.with_name(PAGES_FILE).write_text(json.dumps(page_texts, ensure_ascii=False), encoding="utf-8")
             report["extract"] = extracted
         else:
-            md = row["markdown"]
+            md = normalize(row["markdown"])   # 검수자가 고친 글도 같은 후처리 — '부칙' 줄을 그대로 쓰면 부칙 제1조가 본문 제1조와 겹친다
         report.update(preview(md))
         ocr_pages = (report.get("extract") or {}).get("ocr_pages") or []
         if ocr_pages:   # 스캔본: 검수자가 원본과 대조할 줄을 짚어 준다
