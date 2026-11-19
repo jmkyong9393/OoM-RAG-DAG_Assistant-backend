@@ -165,7 +165,10 @@ def merge(content: dict, data: dict, external: bool = False) -> dict:
     by_ref = lambda key: data.get(key) if isinstance(data.get(key), dict) else {}  # noqa: E731
     out["causes"] = [{**c, "explanation": sentence(by_ref("causes").get(c["ref"]), c["ref"])} for c in content["causes"]]
     out["side_issues"] = [{**s, "note": sentence(by_ref("side_issues").get(s["ref"]), s["ref"])} for s in content["side_issues"]]
-    out["resolution"] = {**content["resolution"], "note": sentence(data.get("resolution_note")) if has_fix else None}
+    note = sentence(data.get("resolution_note")) if has_fix else None
+    if note and not {i["ref"] for i in content["resolution"]["items"]}.intersection(note["refs"]):
+        note = None   # 해결 요약은 해결 기록이 근거여야 한다 — 일부만 댄 것은 둔다(바로 위 표에 기록마다 결과가 나온다)
+    out["resolution"] = {**content["resolution"], "note": note}
     return out
 
 

@@ -88,6 +88,13 @@ def test_summary_says_no_fix_without_resolution_records(status, sentence):
     assert out["resolution"]["note"] is None
 
 
+def test_resolution_note_needs_a_fix_record_among_its_refs():
+    """해결 요약의 근거에 해결 기록이 하나도 없으면 싣지 않는다. 해결 기록 일부만 근거로 댄 것은 둔다."""
+    note = lambda refs: report.merge(TWO_FIXES, {"summary": SUMMARY, "resolution_note": {"text": "지연이 사라졌습니다.", "refs": refs}})["resolution"]["note"]  # noqa: E731
+    assert note(["N2"]) is None and note(["N1", "N4"]) is None
+    assert note(["N3"])["refs"] == ["N3"] and note(["N2", "N5"])["refs"] == ["N2", "N5"]
+
+
 async def test_fill_uses_answer_model_and_validates_output(monkeypatch):
     with OpenAIStub() as stub:
         monkeypatch.setenv("AI_MODE", "openai")
