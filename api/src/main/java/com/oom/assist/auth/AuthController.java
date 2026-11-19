@@ -98,7 +98,7 @@ public class AuthController {
     }
     AppPrincipal p = (AppPrincipal) auth.getPrincipal();
     // 인증하는 사이에 재발급 · 비활성화가 끝났으면 세션을 만들지 않는다 — 그쪽의 세션 삭제가 이 로그인의 세션은 지우지 못했다
-    if (!gate.stillValid(p.id(), p.takeAuthenticatedHash())) throw ApiException.unauthorized();
+    if (!gate.stillValid(p)) throw ApiException.unauthorized();
     SecurityContext ctx = SecurityContextHolder.createEmptyContext();
     ctx.setAuthentication(auth);
     SecurityContextHolder.setContext(ctx);
@@ -151,15 +151,21 @@ public class AuthController {
   }
 
   @PatchMapping("/auth/password")
-  public ResponseEntity<Void> changePassword(@Valid @RequestBody PasswordChangeRequest body, HttpServletRequest req) {
+  public ResponseEntity<Void> changePassword(@Valid @RequestBody PasswordChangeRequest body, HttpServletRequest req, HttpServletResponse res) {
     AppPrincipal p = CurrentUser.get().orElseThrow(ApiException::unauthorized);
     String hash = jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(p.id()).query(String.class).optional().orElse(null);
     if (hash == null || !encoder.matches(body.currentPassword(), hash)) throw ApiException.forbidden("current password mismatch");
     List<String> bad = PasswordPolicy.violations(body.newPassword(), p.employeeNo());
     if (body.newPassword().equals(body.currentPassword())) bad.add("이전 비밀번호와 달라야 합니다");
     if (!bad.isEmpty()) throw ApiException.badRequest("PASSWORD_POLICY", String.join(" / ", bad));
+    String newHash = encoder.encode(body.newPassword());
     jdbc.sql("UPDATE users SET password_hash = ?, must_change_password = false, password_changed_at = now() WHERE id = ?")
-        .params(encoder.encode(body.newPassword()), p.id()).update();
+        .params(newHash, p.id()).update();
+    // 이 세션만 새 비밀번호에 다시 묶는다 — 이 계정의 다른 세션은 옛 비밀번호에 묶여 있어 다음 요청에서 끝난다(AccountGate)
+    SecurityContext ctx = SecurityContextHolder.createEmptyContext();
+    ctx.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(p.reboundTo(newHash), null, p.getAuthorities()));
+    SecurityContextHolder.setContext(ctx);
+    contextRepo.saveContext(ctx, req, res);
     attempts.audit(p.employeeNo(), "password_changed", LoginAttempts.clientIp(req));
     return ResponseEntity.noContent().build();
   }

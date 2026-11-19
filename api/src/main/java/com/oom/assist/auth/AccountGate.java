@@ -44,7 +44,8 @@ public class AccountGate implements HandlerInterceptor {
       "POST /auth/consent", "GET /auth/privacy-policy",
       "PATCH /auth/password", "GET /auth/password-policy",
       "POST /auth/logout",
-      "POST /auth/login", "GET /workspaces");
+      "GET /workspaces");
+  private static final String LOGIN = "POST /auth/login";
 
   private static final Pattern POLICY_VERSION = Pattern.compile("판:\\s*([A-Za-z0-9._-]+)");
 
@@ -62,19 +63,20 @@ public class AccountGate implements HandlerInterceptor {
   @Override
   public boolean preHandle(HttpServletRequest req, HttpServletResponse res, Object handler) {
     if (req.getDispatcherType() != DispatcherType.REQUEST) return true;   // 스트리밍의 두 번째 디스패치 · 오류 디스패치는 이미 확인을 거쳤다
-    Optional<Long> uid = CurrentUser.id();
-    if (uid.isEmpty()) return true;
+    Optional<AppPrincipal> p = CurrentUser.get();
+    if (p.isEmpty()) return true;
+    if (LOGIN.equals(key(req))) return true;   // 로그인은 세션을 새로 채운다 — 쿠키에 남은 옛 세션의 상태로 막지 않는다
     String version = policyVersion();
     Optional<Map<String, Object>> row = jdbc.sql("""
-          SELECT status, must_change_password, password_changed_at, consented_at,
+          SELECT status, password_hash, must_change_password, password_changed_at, consented_at,
                  EXISTS (SELECT 1 FROM user_consents c WHERE c.user_id = users.id AND c.policy_version = ?::text) AS consented_current
-          FROM users WHERE id = ?""").params(version, uid.get()).query().listOfRows().stream().findFirst();
-    if (row.isEmpty()) return true;
-    Map<String, Object> u = row.get();
-    if (!"active".equals(u.get("status"))) {
+          FROM users WHERE id = ?""").params(version, p.get().id()).query().listOfRows().stream().findFirst();
+    // 더 쓸 수 없는 세션: 계정이 없다 · 비활성이다 · 로그인한 뒤 비밀번호가 바뀌었다(본인 변경 · 재발급). 열어 두는 API 까지 401 이고 세션을 끝낸다
+    if (row.isEmpty() || !"active".equals(row.get().get("status")) || !p.get().boundTo((String) row.get().get("password_hash"))) {
       new SecurityContextLogoutHandler().logout(req, res, SecurityContextHolder.getContext().getAuthentication());   // 세션 무효화 → 쿠키 만료 (로그아웃과 같다)
       throw ApiException.unauthorized();
     }
+    Map<String, Object> u = row.get();
     if (open(req)) return true;
     if (consentRequired(version, u.get("consented_at"), Boolean.TRUE.equals(u.get("consented_current"))))
       throw new ApiException(HttpStatus.FORBIDDEN, "CONSENT_REQUIRED", "consent to the privacy policy first (POST /auth/consent)");
@@ -84,18 +86,22 @@ public class AccountGate implements HandlerInterceptor {
   }
 
   /**
-   * 로그인의 끝에서 다시 확인한다 — 인증에 쓴 해시가 지금도 그 계정의 해시이고 계정이 활성인가.
-   * 인증(비밀번호 대조)과 세션 저장 사이에 재발급이나 비활성화가 끝나면, 그쪽의 세션 삭제는 아직 없는 세션을 지우지 못하고 이 로그인의 세션이 남는다.
-   * 행을 잠그지 않고 읽기만 한다(로그인마다 계정 행을 잠그지 않는다).
+   * 로그인의 끝에서 다시 확인한다 — 인증에 쓴 비밀번호가 지금도 그 계정의 비밀번호이고 계정이 활성인가. 아니면 세션을 만들지 않는다.
+   * 이 확인 뒤에 재발급이 끝나 남는 세션은 요청마다의 확인(preHandle)이 끝낸다. 행을 잠그지 않고 읽기만 한다.
    */
-  public boolean stillValid(long userId, String authenticatedHash) {
-    return authenticatedHash != null && jdbc.sql("SELECT EXISTS (SELECT 1 FROM users WHERE id = ? AND status = 'active' AND password_hash = ?)")
-        .params(userId, authenticatedHash).query(Boolean.class).single();
+  public boolean stillValid(AppPrincipal p) {
+    return jdbc.sql("SELECT password_hash FROM users WHERE id = ? AND status = 'active'").param(p.id()).query(String.class).optional()
+        .map(p::boundTo).orElse(false);
+  }
+
+  private static String key(HttpServletRequest req) {
+    return req.getMethod() + " " + req.getRequestURI().substring(req.getContextPath().length());
   }
 
   private static boolean open(HttpServletRequest req) {
     String path = req.getRequestURI().substring(req.getContextPath().length());
-    return OPEN.contains(req.getMethod() + " " + path) || path.startsWith("/actuator/");
+    // actuator 는 SecurityConfig 가 로그인 없이 열어 둔 것만 — 다른 엔드포인트를 노출해도 여기서 같이 열리지 않게
+    return OPEN.contains(key(req)) || path.equals("/actuator/health") || path.startsWith("/actuator/health/") || path.equals("/actuator/info");
   }
 
   /** 처리방침에 동의해야 하는가 — 지금 판에 대한 동의가 없다. 판을 알 수 없으면(문안 파일 없음 · 판 표시 없음) 동의한 적이 있는지만 본다. */

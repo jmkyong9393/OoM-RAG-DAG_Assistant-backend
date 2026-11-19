@@ -1,6 +1,13 @@
 package com.oom.assist.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.equalToIgnoringCase;
+import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -191,6 +198,121 @@ class UserAccountApiTest extends AbstractApiTest {
     mvc.perform(as(delete("/workspaces/" + wsSw + "/members/" + userBackend), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/reset-password"), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/unlock"), userNew, wsSw)).andExpect(status().isForbidden());
+  }
+
+  // ── 삭제 ────────────────────────────────────────────────────────────
+
+  private ResultActions deleteAccount(long actor, long target) throws Exception {
+    return mvc.perform(asUser(delete("/users/" + target), actor).contentType(MediaType.APPLICATION_JSON).content("{\"reason\": \"퇴사 후 파기\"}"));
+  }
+
+  @Test
+  void deleteErasesPersonalDataOfAnInactiveAccountAndKeepsItsRecords() throws Exception {
+    long written = node(wsSw, "fail", "김하늘이 남긴 기록", userNew);
+    mvc.perform(asUser(post("/auth/consent"), userNew)).andExpect(status().isNoContent());
+    deleteAccount(userLead, userNew).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("ACCOUNT_ACTIVE"));   // 활성 계정은 먼저 비활성화한다
+    deactivate(userLead, userNew, "{\"reason\": \"퇴사\"}").andExpect(status().isNoContent());
+    deleteAccount(userBackend, userNew).andExpect(status().isForbidden());                                                    // 회사 관리자만
+    deleteAccount(userLead, userNew).andExpect(status().isNoContent());
+    var row = jdbc.sql("SELECT name, employee_no, email, title, grade, duty, password_hash, status, deleted_at IS NOT NULL AS stamped FROM users WHERE id = ?")
+        .param(userNew).query().singleRow();
+    assertThat(row.get("name")).isEqualTo("삭제된 계정");
+    assertThat(row.get("status")).isEqualTo("deleted");
+    assertThat(row.get("stamped")).isEqualTo(true);
+    for (String col : new String[] {"email", "title", "grade", "duty", "password_hash"}) assertThat(row.get(col)).as(col).isNull();
+    assertThat(row.get("employee_no")).isEqualTo(empNew);   // 사번만 남겨 묶어 둔다
+    assertThat(jdbc.sql("SELECT count(*) FROM workspace_members WHERE user_id = ?").param(userNew).query(Long.class).single()).isZero();
+    assertThat(jdbc.sql("SELECT count(*) FROM user_consents WHERE user_id = ?").param(userNew).query(Long.class).single()).isZero();
+    assertThat(jdbc.sql("SELECT author_id FROM log_nodes WHERE id = ?").param(written).query(Long.class).single()).isEqualTo(userNew);   // 작성한 기록은 남는다
+    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(401);
+    mvc.perform(asUser(get("/users/inactive"), userLead)).andExpect(jsonPath("$[?(@.id == " + userNew + ")]").value(empty()));
+    // 삭제된 계정은 없는 계정과 같다
+    mvc.perform(asUser(post("/users/" + userNew + "/reactivate"), userLead)).andExpect(status().isNotFound());
+    deleteAccount(userLead, userNew).andExpect(status().isNotFound());
+    assertThat(jdbc.sql("SELECT reason FROM audit_log WHERE table_name = 'users' AND action = 'user_deleted' AND row_id = ?").param(String.valueOf(userNew))
+        .query(String.class).single()).isEqualTo("퇴사 후 파기");
+  }
+
+  @Test
+  void employeeNoOfADeletedAccountIsNeverGivenToSomeoneElse() throws Exception {
+    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(200);   // 삭제 전의 로그인 기록이 사번으로 남는다
+    deactivate(userLead, userNew, "{\"reason\": \"퇴사\"}").andExpect(status().isNoContent());
+    deleteAccount(userLead, userNew).andExpect(status().isNoContent());
+    // 같은 사번으로 초대할 수 없다 — 다른 부서에서도, 대소문자를 바꿔도
+    mvc.perform(as(post("/users"), userLead, wsSw).content("{\"employee_no\": \"" + empNew + "\", \"name\": \"새 사람\"}"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EMPLOYEE_NO_DELETED"));
+    mvc.perform(as(post("/users"), userBackend, wsHr).content("{\"employee_no\": \"" + empNew.toLowerCase() + "\", \"name\": \"새 사람\"}"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("EMPLOYEE_NO_DELETED"));
+    assertThat(jdbc.sql("SELECT count(*) FROM users WHERE lower(employee_no) = lower(?)").param(empNew).query(Long.class).single()).isEqualTo(1L);
+    // 접속기록은 삭제 뒤에도 그 사번으로 찾아진다 — 로그인 기록과 계정 관리 기록이 같은 사람의 것으로
+    mvc.perform(asUser(get("/audit?employee_no=" + empNew), userLead)).andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].action").value(hasItems("login_success", "user_deactivated", "user_deleted")))
+        .andExpect(jsonPath("$.items[*].employee_no").value(everyItem(equalToIgnoringCase(empNew))));
+    // 삭제된 계정의 사번으로 로그인을 여러 번 틀려도 잠기지 않는다 — 없는 사번과 같은 401 이고 자리 표시 행은 그대로다
+    for (int i = 0; i < 6; i++) assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(401);
+    var row = jdbc.sql("SELECT failed_attempts, locked_until FROM users WHERE id = ?").param(userNew).query().singleRow();
+    assertThat(row.get("failed_attempts")).isEqualTo(0);
+    assertThat(row.get("locked_until")).isNull();
+  }
+
+  @Test
+  void deleteIsLimitedToAccountsOfTheSameCompany() throws Exception {
+    long otherTenant = jdbc.sql("INSERT INTO tenants (slug, name) VALUES ('o', 'O') RETURNING id").query(Long.class).single();
+    long outsider = jdbc.sql("INSERT INTO users (tenant_id, name, employee_no, status) VALUES (?, '남의 회사 사람', 'X0001', 'inactive') RETURNING id").param(otherTenant)
+        .query(Long.class).single();
+    deleteAccount(userLead, outsider).andExpect(status().isNotFound());
+    deleteAccount(userLead, 99999999L).andExpect(status().isNotFound());
+    assertThat(jdbc.sql("SELECT status FROM users WHERE id = ?").param(outsider).query(String.class).single()).isEqualTo("inactive");
+  }
+
+  @Test
+  void companyAdminJoinsADepartmentAndThenManagesIt() throws Exception {
+    // 배종현은 회사 관리자이고 경영지원에는 속해 있지 않다
+    mvc.perform(as(get("/users"), userLead, wsHr)).andExpect(status().isForbidden());
+    mvc.perform(asUser(post("/workspaces/" + wsHr + "/join"), userLead)).andExpect(status().isNoContent());
+    mvc.perform(asUser(get("/me"), userLead))
+        .andExpect(jsonPath("$.workspaces[?(@.id == " + wsHr + ")].role").value(contains("member")))
+        .andExpect(jsonPath("$.workspaces[?(@.id == " + wsHr + ")].permissions[*]").value(hasItem("admin.members")));
+    // 들어간 뒤에는 속한 부서의 규칙 그대로 — 하나뿐인 admin 의 후임을 지정할 수 있다
+    changeRole(userLead, wsHr, userLead, "admin").andExpect(status().isOk());
+    changeRole(userLead, wsHr, userBackend, "member").andExpect(status().isOk());
+    assertThat(joinAudits(userLead, wsHr)).isEqualTo(1L);
+    mvc.perform(asUser(post("/workspaces/" + wsHr + "/join"), userLead)).andExpect(status().isNoContent());   // 이미 멤버 — 역할도 기록도 그대로
+    assertThat(joinAudits(userLead, wsHr)).isEqualTo(1L);
+    assertThat(jdbc.sql("SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?").params(wsHr, userLead).query(String.class).single()).isEqualTo("admin");
+  }
+
+  @Test
+  void joinIsForCompanyAdminsAndOnlyForDepartmentsOfTheirCompany() throws Exception {
+    mvc.perform(asUser(post("/workspaces/" + wsSw + "/join"), userNew)).andExpect(status().isForbidden());        // 회사 관리자가 아니다
+    mvc.perform(asUser(post("/workspaces/" + wsSw + "/join"), userBackend)).andExpect(status().isForbidden());    // 부서 관리자여도 아니다
+    long otherTenant = jdbc.sql("INSERT INTO tenants (slug, name) VALUES ('o', 'O') RETURNING id").query(Long.class).single();
+    long otherDept = jdbc.sql("INSERT INTO workspaces (tenant_id, kind, name, policy_enabled) VALUES (?, 'dept', '남의 부서', false) RETURNING id").param(otherTenant).query(Long.class).single();
+    mvc.perform(asUser(post("/workspaces/" + otherDept + "/join"), userLead)).andExpect(status().isNotFound());    // 다른 회사의 부서
+    mvc.perform(asUser(post("/workspaces/" + company + "/join"), userLead)).andExpect(status().isNotFound());      // 부서가 아니다
+    mvc.perform(asUser(post("/workspaces/99999999/join"), userLead)).andExpect(status().isNotFound());
+    assertThat(jdbc.sql("SELECT count(*) FROM workspace_members WHERE workspace_id = ?").param(otherDept).query(Long.class).single()).isZero();
+  }
+
+  private long joinAudits(long uid, long ws) {
+    return jdbc.sql("SELECT count(*) FROM audit_log WHERE table_name = 'users' AND action = 'add_member' AND row_id = ? AND workspace_id = ?")
+        .params(String.valueOf(uid), ws).query(Long.class).single();
+  }
+
+  @Test
+  void memberListTellsWhoseAccountTheRequesterCanManage() throws Exception {
+    long hrOnly = hrOnlyMember();   // 경영지원: 장문경 admin · 배종현 member · hrOnly member. 배종현 · 장문경은 SW 에도 속해 있다
+    // 부서 관리자 장문경 — 경영지원에만 속한 계정만 된다(실제 호출의 결과와 같다)
+    mvc.perform(as(get("/users"), userBackend, wsHr)).andExpect(status().isOk())
+        .andExpect(jsonPath("$[?(@.id == " + hrOnly + ")].can_manage_account").value(contains(true)))
+        .andExpect(jsonPath("$[?(@.id == " + userLead + ")].can_manage_account").value(contains(false)))
+        .andExpect(jsonPath("$[?(@.id == " + userBackend + ")].can_manage_account").value(contains(false)));
+    mvc.perform(as(post("/users/" + hrOnly + "/unlock"), userBackend, wsHr)).andExpect(status().isNoContent());
+    mvc.perform(as(post("/users/" + userLead + "/unlock"), userBackend, wsHr)).andExpect(status().isForbidden());
+    // 일반 멤버 — 모두 안 된다
+    mvc.perform(as(get("/users"), hrOnly, wsHr)).andExpect(jsonPath("$[*].can_manage_account").value(everyItem(is(false))));
+    // 회사 관리자 배종현 — 일반 멤버로 속한 부서에서도 모두 된다
+    mvc.perform(as(get("/users"), userLead, wsHr)).andExpect(jsonPath("$[*].can_manage_account").value(everyItem(is(true))));
   }
 
   // ── 잠금 해제 — 재발급과 같은 조건 ───────────────────────────────────

@@ -19,11 +19,11 @@ public class LoginAttempts {
     this.jdbc = jdbc;
   }
 
-  /** 실패 기록. 임계치에 닿으면 잠그고 true 를 돌려준다. 없는 사번이면 기록만 남긴다. */
+  /** 실패 기록. 임계치에 닿으면 잠그고 true 를 돌려준다. 없는 사번 · 삭제된 계정의 사번이면 기록만 남긴다. */
   public boolean recordFailure(String employeeNo, String ip) {
     Integer attempts = jdbc.sql("""
           UPDATE users SET failed_attempts = failed_attempts + 1
-          WHERE lower(employee_no) = lower(?) RETURNING failed_attempts""").param(employeeNo).query(Integer.class).optional().orElse(null);
+          WHERE lower(employee_no) = lower(?) AND status <> 'deleted' RETURNING failed_attempts""").param(employeeNo).query(Integer.class).optional().orElse(null);
     audit(employeeNo, "login_failed", ip);
     if (attempts != null && attempts >= MAX_FAILURES) {
       jdbc.sql("UPDATE users SET locked_until = now() + make_interval(mins => ?), failed_attempts = 0 WHERE lower(employee_no) = lower(?)")

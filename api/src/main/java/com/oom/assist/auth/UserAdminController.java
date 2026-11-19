@@ -49,8 +49,9 @@ public class UserAdminController {
   public record InviteRequest(@NotBlank @Pattern(regexp = "[A-Za-z0-9-]{3,32}") String employeeNo, @NotBlank String name,
                               @Email String email, String grade, String position, String title, String role) {}
   public record InviteResponse(long id, String employeeNo, String name, long workspaceId, String role, boolean created, String tempPassword) {}
-  /** title = 표시용 "직급 · 직책"(예전 화면 호환). */
-  public record MemberDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked, String role, boolean locked) {}
+  /** title = 표시용 "직급 · 직책"(예전 화면 호환). canManageAccount = 요청한 사람이 이 계정을 재발급 · 잠금 해제할 수 있는가(화면이 버튼을 미리 끄는 데 쓴다). */
+  public record MemberDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked, String role, boolean locked,
+                          boolean canManageAccount) {}
 
   @PostMapping("/users")
   @Transactional
@@ -63,7 +64,10 @@ public class UserAdminController {
 
     Optional<Long> existing = jdbc.sql("SELECT id FROM users WHERE tenant_id = ? AND lower(employee_no) = lower(?)").params(ctx.tenantId(), empNo)
         .query(Long.class).optional();
-    if (existing.isPresent() && !"active".equals(jdbc.sql("SELECT status FROM users WHERE id = ? FOR SHARE").param(existing.get()).query(String.class).single()))
+    String existingStatus = existing.map(id -> jdbc.sql("SELECT status FROM users WHERE id = ? FOR SHARE").param(id).query(String.class).single()).orElse("active");
+    // 삭제된 계정의 사번은 다른 사람에게 다시 주지 않는다 — 접속기록이 사번으로 사람을 가리킨다
+    if ("deleted".equals(existingStatus)) throw ApiException.conflict("EMPLOYEE_NO_DELETED", "employee_no belonged to a deleted account and is not reused");
+    if (!"active".equals(existingStatus))
       throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");   // 비활성(퇴사 처리) 계정이 그 상태로 다른 부서에 들어가지 않게. FOR SHARE = 확인과 소속 추가 사이에 비활성화가 끼어들지 못하게(lockUser 와 같은 줄)
     boolean created = existing.isEmpty();
     String temp = null;
@@ -98,17 +102,23 @@ public class UserAdminController {
         .body(new InviteResponse(userId, empNo, body.name().trim(), ctx.workspaceId(), role, created, temp));
   }
 
-  /** 현재 워크스페이스 멤버 목록 (초대 화면·작성자 선택용). 이메일은 마스킹. */
+  /**
+   * 현재 워크스페이스 멤버 목록 (초대 화면·작성자 선택용). 이메일은 마스킹.
+   * can_manage_account 는 재발급 · 잠금 해제가 거치는 두 확인(requireMemberAdmin · requireManagesAccount)과 같은 조건이다. 본인 재발급의 400 은 여기에 담지 않는다.
+   */
   @GetMapping("/users")
   public List<MemberDto> members(TenantContext ctx) {
     return jdbc.sql("""
           SELECT u.id, u.employee_no, u.email, u.name, u.grade, u.duty, coalesce(nullif(concat_ws(' · ', u.grade, u.duty), ''), u.title) AS title,
-                 m.role, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked
+                 m.role, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked,
+                 (? OR (? AND NOT (""" + outsideMyAdmin("u.id") + """
+                 ))) AS can_manage_account
           FROM workspace_members m JOIN users u ON u.id = m.user_id
           WHERE m.workspace_id = ? AND u.status = 'active' ORDER BY (m.role = 'admin') DESC, u.name""")
-        .param(ctx.workspaceId())
+        .params(companyAdmin(ctx.userId()), ctx.isAdmin(), ctx.userId(), ctx.workspaceId())
         .query((rs, i) -> new MemberDto(rs.getLong("id"), rs.getString("employee_no"), rs.getString("name"), rs.getString("title"),
-            rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"))).list();
+            rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"),
+            rs.getBoolean("can_manage_account"))).list();
   }
 
   /**
@@ -212,6 +222,28 @@ public class UserAdminController {
     return ResponseEntity.noContent().build();
   }
 
+  /**
+   * 계정 삭제(회사 관리자) — 비활성 계정의 개인정보 · 소속 · 동의 이력을 지운다. 되돌릴 수 없다. 행은 자리 표시로 남긴다(작성한 기록이 작성자를 참조한다).
+   * 사번만 남겨 묶어 둔다 — 같은 사번을 다른 사람에게 주면 사번으로 적힌 접속기록이 두 사람의 것으로 섞인다. 활성 계정은 409(확인과 세션 종료가 비활성화에 있다).
+   */
+  @DeleteMapping("/users/{id}")
+  @Transactional
+  public ResponseEntity<Void> delete(@PathVariable long id, @RequestBody(required = false) DeactivateRequest body) {
+    Actor actor = companyActor();
+    if ("active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ACCOUNT_ACTIVE", "deactivate the account first");
+    String reason = body == null || body.reason() == null ? "" : body.reason().strip();
+    endSessions(id);
+    jdbc.sql("DELETE FROM workspace_members WHERE user_id = ?").param(id).update();
+    jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(id).update();
+    jdbc.sql("""
+          UPDATE users SET status = 'deleted', deleted_at = now(), name = '삭제된 계정', email = NULL, title = NULL, grade = NULL, duty = NULL,
+                 external_id = NULL, auth_provider = NULL, password_hash = NULL, must_change_password = false, failed_attempts = 0, locked_until = NULL,
+                 last_login_at = NULL, password_changed_at = NULL, consented_at = NULL, primary_workspace_id = NULL
+          WHERE id = ?""").param(id).update();
+    auditCompany(actor, id, "user_deleted", reason.isEmpty() ? null : reason);   // 접속기록은 보관 대상이라 지우지 않는다
+    return ResponseEntity.noContent().build();
+  }
+
   /** 비활성 계정 한 줄 — 멤버 목록 항목(MemberDto)에서 role · locked 를 뺀 모양. */
   public record InactiveUserDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked) {}
 
@@ -253,12 +285,14 @@ public class UserAdminController {
    * 초대 · 역할 변경 · 제외는 계정에 들어가는 일이 아니라 쓰지 않는다(requireMemberAdmin 만).
    */
   private void requireManagesAccount(long requester, long target) {
-    if (!companyAdmin(requester) && jdbc.sql("""
-          SELECT EXISTS (SELECT 1 FROM workspace_members t
-                         WHERE t.user_id = ? AND NOT EXISTS (SELECT 1 FROM workspace_members r
-                                                             WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))""")
-        .params(target, requester).query(Boolean.class).single())
+    if (!companyAdmin(requester) && jdbc.sql("SELECT " + outsideMyAdmin("?")).params(target, requester).query(Boolean.class).single())
       throw ApiException.forbidden("the account belongs to a workspace you do not manage");
+  }
+
+  /** SQL 조건: 대상(target 식)이 속한 워크스페이스 가운데 요청한 사람(? 하나)이 admin 이 아닌 곳이 있다. 재발급 · 잠금 해제의 확인과 멤버 목록이 같이 쓴다. */
+  private static String outsideMyAdmin(String target) {
+    return "EXISTS (SELECT 1 FROM workspace_members t WHERE t.user_id = " + target
+        + " AND NOT EXISTS (SELECT 1 FROM workspace_members r WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))";
   }
 
   /** 회사 관리자 = 부서가 아닌 상위(전사 공통) 워크스페이스의 admin 인 활성 계정 (AuditController 와 같은 판정). */
@@ -276,10 +310,10 @@ public class UserAdminController {
 
   /**
    * 대상 계정의 상태 — 그 행을 잠그고 읽는다(FOR UPDATE): 비활성화 · 재활성화끼리, 그리고 그 계정의 역할 변경 · 제외 · 초대(lockUser)와 줄을 선다.
-   * 다른 회사의 계정 · 없는 번호는 같은 404 — 있는지를 알리지 않는다.
+   * 다른 회사의 계정 · 없는 번호 · 삭제된 계정은 같은 404 — 있는지를 알리지 않는다.
    */
   private String status(long id, long tenantId) {
-    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ? FOR UPDATE").params(id, tenantId).query(String.class).optional()
+    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ? AND status <> 'deleted' FOR UPDATE").params(id, tenantId).query(String.class).optional()
         .orElseThrow(() -> ApiException.notFound("user"));
   }
 
@@ -340,6 +374,26 @@ public class UserAdminController {
     if ("admin".equals(cur) && adminCount(ws) <= 1) throw ApiException.conflict("LAST_ADMIN", "workspace needs at least one admin");
     jdbc.sql("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?").params(ws, uid).update();
     auditMember(ctx, uid, "member_removed", "role=" + cur);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 회사 관리자가 자기 회사의 부서에 일반 멤버로 들어간다. 부서 헤더는 그 부서의 멤버만 통과하므로 헤더 없이 받는다.
+   * 멤버 관리는 속한 부서에서만 되므로(requireMemberAdmin) 속하지 않은 부서는 먼저 들어간 뒤 같은 규칙으로 관리한다. 이미 멤버면 아무것도 하지 않는다.
+   */
+  @PostMapping("/workspaces/{ws}/join")
+  @Transactional
+  public ResponseEntity<Void> join(@PathVariable long ws) {
+    Actor actor = companyActor();
+    if (!jdbc.sql("SELECT EXISTS (SELECT 1 FROM workspaces WHERE id = ? AND tenant_id = ? AND kind = 'dept')").params(ws, actor.tenantId())
+        .query(Boolean.class).single()) throw ApiException.notFound("workspace");   // 다른 회사의 부서 · 부서가 아닌 곳 · 없는 번호는 같은 404
+    int added = jdbc.sql("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING")
+        .params(ws, actor.id()).update();
+    if (added > 0)
+      jdbc.sql("""
+            INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason)
+            VALUES (?, ?, 'users', ?, 'add_member', ?, 'ui', 'role=member (company admin joined)')""")
+          .params(actor.tenantId(), ws, String.valueOf(actor.id()), actor.name()).update();
     return ResponseEntity.noContent().build();
   }
 
