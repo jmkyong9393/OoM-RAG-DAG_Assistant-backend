@@ -352,6 +352,26 @@ public class UserAdminController {
     return ResponseEntity.noContent().build();
   }
 
+  /**
+   * 회사 관리자가 자기 회사의 부서에 일반 멤버로 들어간다. 부서 헤더는 그 부서의 멤버만 통과하므로 헤더 없이 받는다.
+   * 멤버 관리는 속한 부서에서만 되므로(requireMemberAdmin) 속하지 않은 부서는 먼저 들어간 뒤 같은 규칙으로 관리한다. 이미 멤버면 아무것도 하지 않는다.
+   */
+  @PostMapping("/workspaces/{ws}/join")
+  @Transactional
+  public ResponseEntity<Void> join(@PathVariable long ws) {
+    Actor actor = companyActor();
+    if (!jdbc.sql("SELECT EXISTS (SELECT 1 FROM workspaces WHERE id = ? AND tenant_id = ? AND kind = 'dept')").params(ws, actor.tenantId())
+        .query(Boolean.class).single()) throw ApiException.notFound("workspace");   // 다른 회사의 부서 · 부서가 아닌 곳 · 없는 번호는 같은 404
+    int added = jdbc.sql("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING")
+        .params(ws, actor.id()).update();
+    if (added > 0)
+      jdbc.sql("""
+            INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason)
+            VALUES (?, ?, 'users', ?, 'add_member', ?, 'ui', 'role=member (company admin joined)')""")
+          .params(actor.tenantId(), ws, String.valueOf(actor.id()), actor.name()).update();
+    return ResponseEntity.noContent().build();
+  }
+
   /** 같은 부서의 역할 변경 · 제외를 줄 세운다 — 관리자 둘이 서로를 동시에 강등해 admin 이 0명이 되는 틈을 막는다. */
   private void lockMembers(long ws) {
     jdbc.sql("SELECT pg_advisory_xact_lock(?, ?)").params(7, (int) ws).query(Object.class).optional();

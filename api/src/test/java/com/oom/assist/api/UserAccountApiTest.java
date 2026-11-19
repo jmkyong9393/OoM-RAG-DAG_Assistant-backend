@@ -3,6 +3,7 @@ package com.oom.assist.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -194,6 +195,40 @@ class UserAccountApiTest extends AbstractApiTest {
     mvc.perform(as(delete("/workspaces/" + wsSw + "/members/" + userBackend), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/reset-password"), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/unlock"), userNew, wsSw)).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void companyAdminJoinsADepartmentAndThenManagesIt() throws Exception {
+    // 배종현은 회사 관리자이고 경영지원에는 속해 있지 않다
+    mvc.perform(as(get("/users"), userLead, wsHr)).andExpect(status().isForbidden());
+    mvc.perform(asUser(post("/workspaces/" + wsHr + "/join"), userLead)).andExpect(status().isNoContent());
+    mvc.perform(asUser(get("/me"), userLead))
+        .andExpect(jsonPath("$.workspaces[?(@.id == " + wsHr + ")].role").value(contains("member")))
+        .andExpect(jsonPath("$.workspaces[?(@.id == " + wsHr + ")].permissions[*]").value(hasItem("admin.members")));
+    // 들어간 뒤에는 속한 부서의 규칙 그대로 — 하나뿐인 admin 의 후임을 지정할 수 있다
+    changeRole(userLead, wsHr, userLead, "admin").andExpect(status().isOk());
+    changeRole(userLead, wsHr, userBackend, "member").andExpect(status().isOk());
+    assertThat(joinAudits(userLead, wsHr)).isEqualTo(1L);
+    mvc.perform(asUser(post("/workspaces/" + wsHr + "/join"), userLead)).andExpect(status().isNoContent());   // 이미 멤버 — 역할도 기록도 그대로
+    assertThat(joinAudits(userLead, wsHr)).isEqualTo(1L);
+    assertThat(jdbc.sql("SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?").params(wsHr, userLead).query(String.class).single()).isEqualTo("admin");
+  }
+
+  @Test
+  void joinIsForCompanyAdminsAndOnlyForDepartmentsOfTheirCompany() throws Exception {
+    mvc.perform(asUser(post("/workspaces/" + wsSw + "/join"), userNew)).andExpect(status().isForbidden());        // 회사 관리자가 아니다
+    mvc.perform(asUser(post("/workspaces/" + wsSw + "/join"), userBackend)).andExpect(status().isForbidden());    // 부서 관리자여도 아니다
+    long otherTenant = jdbc.sql("INSERT INTO tenants (slug, name) VALUES ('o', 'O') RETURNING id").query(Long.class).single();
+    long otherDept = jdbc.sql("INSERT INTO workspaces (tenant_id, kind, name, policy_enabled) VALUES (?, 'dept', '남의 부서', false) RETURNING id").param(otherTenant).query(Long.class).single();
+    mvc.perform(asUser(post("/workspaces/" + otherDept + "/join"), userLead)).andExpect(status().isNotFound());    // 다른 회사의 부서
+    mvc.perform(asUser(post("/workspaces/" + company + "/join"), userLead)).andExpect(status().isNotFound());      // 부서가 아니다
+    mvc.perform(asUser(post("/workspaces/99999999/join"), userLead)).andExpect(status().isNotFound());
+    assertThat(jdbc.sql("SELECT count(*) FROM workspace_members WHERE workspace_id = ?").param(otherDept).query(Long.class).single()).isZero();
+  }
+
+  private long joinAudits(long uid, long ws) {
+    return jdbc.sql("SELECT count(*) FROM audit_log WHERE table_name = 'users' AND action = 'add_member' AND row_id = ? AND workspace_id = ?")
+        .params(String.valueOf(uid), ws).query(Long.class).single();
   }
 
   @Test
