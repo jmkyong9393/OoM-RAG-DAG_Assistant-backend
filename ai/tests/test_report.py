@@ -655,3 +655,74 @@ async def test_external_job_rewrites_names_and_titles_in_reused_sentences(monkey
         assert rows[a] == f"{name}에게 보고했고 팀장 승인으로 풀을 늘렸습니다."     # 내부용은 그대로
     finally:
         admin_conn.execute("DELETE FROM incident_reports WHERE id = ANY(%s)", ([a, b],))
+
+
+# ── 재발 방지 표시: 팀이 표시한 기록마다 한 문장 ─────────────────────────────
+
+MARKED = {**ACTED, "prevention_refs": ["N6", "N5", "N4", "N99"]}   # N4 는 추가 문제 기록 · N99 는 없는 번호 — 표시로 치지 않는다
+
+
+def _marked_llm(monkeypatch, answers: dict) -> list[dict]:
+    """본 호출에는 재발 방지 문장이 든 응답을, 표시된 기록의 호출에는 answers[그 기록의 글에 든 낱말](목록이면 차례로)을 돌려주는 가짜 LLM."""
+    calls: list[dict] = []
+
+    async def chat(profile, model, system, user, usage, max_tokens=None, schema=None):
+        calls.append({"system": system, "user": user, "max_tokens": max_tokens, "schema": schema})
+        usage.prompt_tokens += 10
+        usage.completion_tokens += 2
+        if system.startswith(report.SYSTEM):
+            return _main(RUNBOOK)
+        assert system.startswith(report.SYSTEM_MARKED), system[:40]   # 표시가 있으면 고르는 보완 호출은 부르지 않는다
+        v = answers[next(k for k in answers if k in user)]
+        answer = (v.pop(0) if len(v) > 1 else v[0]) if isinstance(v, list) else v
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setenv("AI_MODE", "openai")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+    monkeypatch.setattr(llm, "_chat_json", chat)
+    return calls
+
+
+def test_marks_count_only_on_fix_and_action_records_in_record_order():
+    assert report.marked_prevention(MARKED) == ["N5", "N6"] and report.marked_prevention(ACTED) == []
+    assert report.report_schema(MARKED)["properties"]["prevention"] == {"type": "null"}          # 표시가 있으면 본 호출은 이 칸을 쓰지 않는다
+    assert report.merge(MARKED, _main(RUNBOOK))["prevention"] == []                               # 본 호출이 써 와도 싣지 않는다
+
+
+async def test_marked_records_get_one_sentence_each_from_their_own_record(monkeypatch):
+    """표시된 기록 하나에 호출 하나 — 그 기록 한 줄만 주고 한 문장을 받는다. 근거는 그 기록 하나이고, AI 가 고른 문장은 싣지 않는다."""
+    calls = _marked_llm(monkeypatch, {"경보": {"text": ALARM["text"]}, "공지": {"text": NOTICE["text"]}})
+    out, usage, trace = await _fill(MARKED)
+    assert out["prevention"] == [{**ALARM, "owner": None, "due": None}, {**NOTICE, "owner": None, "due": None}]
+    small = sorted((c for c in calls[1:]), key=lambda c: c["user"])
+    assert [c["user"] for c in small] == sorted(f"(조치) {line.split(' ', 2)[2]}" for line in ACTION_LINES[:2])
+    assert all(c["system"] == report.SYSTEM_MARKED and c["max_tokens"] == report.MARKED_MAX_TOKENS for c in small) and len(calls) == 3
+    assert calls[0]["schema"]["properties"]["prevention"] == {"type": "null"}
+    assert trace["marked"]["marked"] == ["N5", "N6"] and trace["marked"]["fallback"] == [] and "prevention" not in trace
+    assert (usage.prompt_tokens, usage.completion_tokens) == (30, 6)
+
+
+async def test_marked_sentence_that_fails_a_condition_is_asked_once_more(monkeypatch):
+    calls = _marked_llm(monkeypatch, {"경보": [{"text": "풀 사용률 80% 경보를 추가함."}, {"text": ALARM["text"]}], "공지": {"text": NOTICE["text"]}})
+    out, _, trace = await _fill(MARKED)
+    assert [s["text"] for s in out["prevention"]] == [ALARM["text"], NOTICE["text"]] and trace["marked"]["fallback"] == []
+    again = [c for c in calls if c["user"].endswith(report.MARKED_AGAIN)]
+    assert len(again) == 1 and "경보" in again[0]["user"] and len(calls) == 4
+
+
+async def test_marked_record_falls_back_to_its_title_so_it_never_disappears(monkeypatch):
+    """두 번 모두 조건에 못 미치거나(다른 내용을 씀) 호출이 실패하면 그 기록의 제목을 싣는다 — 표시한 기록이 표에서 빠지지 않는다."""
+    _marked_llm(monkeypatch, {"경보": {"text": "배포 체크리스트를 새로 만들었습니다."}, "공지": RuntimeError("boom")})
+    out, _, trace = await _fill(MARKED)
+    assert [(s["text"], s["refs"]) for s in out["prevention"]] == [("풀 사용률 경보 추가", ["N5"]), ("고객 공지 발송", ["N6"])]
+    assert sorted(trace["marked"]["fallback"]) == ["N5", "N6"] and "error" in trace["marked"]["raw"]["N6"][0]
+
+
+def test_reuse_copies_marked_sentences_only_when_the_marks_are_the_same():
+    done = {**report.merge(MARKED, _main()), "prevention": [{**ALARM, "owner": "김담당", "due": None}, {**NOTICE, "owner": None, "due": None}]}
+    out = report.reuse(MARKED, done, ACTED_BODIES)
+    assert out["prevention"] == [{**ALARM, "owner": None, "due": None}, {**NOTICE, "owner": None, "due": None}]
+    assert report.reuse({**MARKED, "prevention_refs": ["N5", "N6", "N7"]}, done, ACTED_BODIES) is None   # 표시가 늘었으면 새로 만든다(옮길 문장이 없다)
+    assert [s["refs"] for s in report.reuse({**MARKED, "prevention_refs": ["N5"]}, done, ACTED_BODIES)["prevention"]] == [["N5"]]   # 줄었으면 남은 것만

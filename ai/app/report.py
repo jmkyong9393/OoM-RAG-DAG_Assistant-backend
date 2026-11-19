@@ -8,6 +8,7 @@ content 에 없는 번호는 지운다. 키가 없으면(fake) AI 칸 없이 don
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -22,6 +23,7 @@ PROMPT_VERSION = "3"
 MAX_TOKENS = 1500        # 출력 상한. 문장 15개 안팎이면 넉넉하다 — 여기서 잘리면 JSON 이 닫히지 않아 failed 가 된다
 FIX_MAX_TOKENS = 300     # 해결 문장만 다시 받는 작은 호출의 출력 상한
 PREVENTION_MAX_TOKENS = 400   # 재발 방지 칸 보완 호출의 출력 상한
+MARKED_MAX_TOKENS = 150       # 표시된 재발 방지 기록 하나를 문장으로 옮기는 호출의 출력 상한
 BODY_MAX = 500           # 기록 본문은 앞부분만
 SENTENCE_MAX = 300       # 한 문장 상한(넘으면 자른다)
 LIST_MAX = 5             # 한 칸의 문장 수 상한
@@ -65,6 +67,13 @@ SYSTEM_PREVENTION = """사내 장애 건의 기록에서 장애 보고서의 '�
 (4) 실을 것이 없는 장애 건이 많다. 없으면 반드시 빈 배열을 낸다.
 (5) 한 항목에 한 문장, 기록 하나에 한 항목. refs 에는 그 문장을 옮겨 온 기록 번호 하나를 넣는다. 완결된 문장으로 풀어 '~습니다'로 끝낸다. 기록 번호 · 목록 기호를 문장 안에 쓰지 않는다.
 JSON {"prevention": [{"text": "…", "refs": ["N5"]}]} 만 낸다."""
+# 팀이 재발 방지 · 후속 조치로 표시한 기록 하나를 문장으로 옮기는 지시문. 기록 하나에 호출 하나 — 여러 기록을 한 번에 받으면 문장이 옆 기록의 칸으로 밀린다
+SYSTEM_MARKED = """사내 장애 건의 기록 하나를 장애 보고서의 '재발 방지 · 후속 조치' 칸에 실을 한 문장으로 옮긴다. 팀이 이 기록을 재발 방지 · 후속 조치로 표시했다.
+규칙: (1) 아래 기록에 적힌 사실만 옮긴다. 기록에 없는 평가 · 효과 · 계획을 덧붙이지 않는다. 문장의 낱말은 기록에 나온 낱말을 쓴다.
+(2) 기록에 장애를 멈추거나 복구한 일과 그 뒤에 새로 만들거나 바꿔 둔 것이 함께 적혀 있으면, 새로 만들거나 바꿔 둔 것만 쓴다.
+(3) 이미 끝낸 일이다 — 한 문장으로 풀어 '~했습니다'(과거형)로 끝낸다. '~합니다' · '~하려고 합니다' · '~할 예정입니다'처럼 지금 하고 있거나 앞으로 할 일처럼 쓰지 않는다. 기록 번호 · 목록 기호를 쓰지 않는다.
+JSON {"text": "…"} 만 낸다."""
+MARKED_AGAIN = "\n(다시 쓴다 — 앞의 답은 조건에 맞지 않았다. 이 기록의 내용을 '~했습니다'로 끝나는 완결된 한 문장으로 쓴다.)"   # 조건에 못 미친 문장을 한 번 다시 받을 때 덧붙인다
 # 보완 호출에 넘길 '해결' 기록을 고르는 낱말(조치 기록은 낱말과 상관없이 넘긴다). '이후' · '절차' · '규정' · '검수' · '자동' · '상한'은 흔한 말이라 복구 · 값 조정 기록이 걸린다 — 넣지 않는다
 SIGNALS = ("자동화", "점검", "체크리스트", "검수표", "경보", "알림", "검증", "런북", "표준", "필수", "방지", "멱등", "분리", "회수", "임계", "명문화", "앞으로")
 # 보완 호출이 준 문장의 검증 — 이 낱말이 문장에 있으면 근거 기록에도 있어야 하고(CLAIMS), 권고 · 예정 · 해결 되풀이로 끝나면 안 된다(NORM — 본 호출의 재발 방지 문장에도 건다)
@@ -104,6 +113,12 @@ def record_texts(content: dict, bodies: dict[int, str]) -> dict[str, str]:
             line += f" ← 이어 붙인 이유: {reason[r['ref']]}"
         out[r["ref"]] = line
     return out
+
+
+def marked_prevention(content: dict) -> list[str]:
+    """팀이 재발 방지 · 후속 조치로 표시한 기록 번호(기록 순서). 표시는 '해결' · '조치' 기록에만 붙는다 — 그 밖의 번호는 버린다."""
+    given = set(content.get("prevention_refs") or [])
+    return [r["ref"] for r in content["records"] if r["ref"] in given and r["kind"] in ("resolution", "action")]
 
 
 def render(content: dict, bodies: dict[int, str]) -> str:
@@ -183,7 +198,8 @@ def merge(content: dict, data: dict, external: bool = False) -> dict:
     out = dict(content)
     out["summary"], out["impact"] = summary(), sentences("impact")   # open_items(남은 확인)는 사실 칸 — Spring 이 조립한 그대로 둔다
     prevention = []
-    for x in (data.get("prevention") if isinstance(data.get("prevention"), list) else [])[:LIST_MAX]:
+    marked = marked_prevention(content)   # 표시가 있으면 본 호출의 재발 방지 문장은 쓰지 않는다 — 표시된 기록마다 따로 받는다(write_marked)
+    for x in (data.get("prevention") if isinstance(data.get("prevention"), list) and not marked else [])[:LIST_MAX]:
         s = sentence(x)
         if s and done.intersection(s["refs"]) and not NORM.search(s["text"]):   # 실제로 한 일('해결' · '조치' 기록)이 근거일 때만. 권고 · 예정으로 끝나는 문장은 싣지 않는다
             prevention.append({**s, "owner": None if external else text(x.get("owner")), "due": text(x.get("due"))})
@@ -294,7 +310,7 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
     cited = {r for s in out["prevention"] for r in s["refs"]}
     given = [r["ref"] for r in out["records"] if r["ref"] not in cited
              and (r["kind"] == "action" or (r["kind"] == "resolution" and any(w in texts[r["ref"]] for w in SIGNALS)))]
-    if not out["resolution"]["items"] or not out["summary"] or not given or room <= 0:
+    if not out["resolution"]["items"] or not out["summary"] or not given or room <= 0 or marked_prevention(out):   # 표시가 있으면 고르지 않는다
         return out
     note = {"given": given, "added": [], "dropped": []}
     if trace is not None:
@@ -310,6 +326,46 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
     kept, note["dropped"] = checked_prevention(raw, texts, given)
     note["added"] = [{**s, "owner": None, "due": None} for s in kept[:room]]   # 담당자 · 기한은 본 호출만 쓴다
     return {**out, "prevention": [*out["prevention"], *note["added"]]}
+
+
+def accept_marked(raw, src: str) -> dict | None:
+    """표시된 기록의 문장 조건 — '니다'로 끝나고 길이 상한 안이며, 그 기록의 글과 낱말이 겹친다(다른 내용을 쓰지 않았다). 아니면 None."""
+    text = raw.get("text").strip() if isinstance(raw, dict) and isinstance(raw.get("text"), str) else ""
+    if not text or not text.rstrip(".").endswith("니다") or len(text) > SENTENCE_MAX or overlap(text, src) < OVERLAP_MIN:
+        return None
+    return {"text": text}
+
+
+async def write_marked(profile, out: dict, texts: dict[str, str], external: bool, usage: llm.Usage, trace: dict | None = None) -> dict:
+    """팀이 표시한 재발 방지 기록마다 한 문장 — 기록 하나에 호출 하나, 근거는 그 기록 하나다. 고르는 일은 사람이 했으므로 낱말 · 권고 검증은 걸지 않는다.
+    조건에 못 미치면 한 번 다시 받고, 그래도 안 되거나 호출이 실패하면 그 기록의 제목을 그대로 싣는다 — 표시한 기록이 표에서 빠지지 않게."""
+    marked = marked_prevention(out)
+    if not marked or not out["summary"]:
+        return out
+    title = {r["ref"]: r["title"] for r in out["records"]}
+    kind = {r["ref"]: KIND_KO[r["kind"]] for r in out["records"]}
+    note = {"marked": marked, "raw": {}, "fallback": []}
+    if trace is not None:
+        trace["marked"] = note
+
+    async def one(ref: str) -> dict:
+        s, user = None, f"({kind[ref]}) {texts[ref]}"
+        for again in ("", MARKED_AGAIN):
+            try:
+                raw = await llm._chat_json(profile, profile.model_answer, SYSTEM_MARKED + (EXTERNAL_RULE if external else ""), user + again, usage,
+                                           max_tokens=MARKED_MAX_TOKENS)
+            except Exception as e:  # noqa: BLE001 — 작은 호출의 실패는 보고서의 실패가 아니다
+                raw = {"error": f"{type(e).__name__}: {e}"[:200]}
+            note["raw"].setdefault(ref, []).append(raw)
+            s = accept_marked(raw, texts[ref])
+            if s is not None:
+                break
+        if s is None:
+            note["fallback"].append(ref)
+            s = {"text": title[ref]}
+        return {**s, "refs": [ref], "owner": None, "due": None}
+
+    return {**out, "prevention": list(await asyncio.gather(*(one(ref) for ref in marked)))}
 
 
 def report_schema(content: dict) -> dict:
@@ -328,7 +384,8 @@ def report_schema(content: dict) -> dict:
     return obj({"summary": obj({"problem": sentence, "cause": maybe, "resolution": maybe}), "impact": {"type": "array", "items": sentence},
                 "causes": obj({c["ref"]: sentence for c in content["causes"]}), "resolution_note": maybe,
                 "side_issues": obj({s["ref"]: sentence for s in content["side_issues"]}),
-                "prevention": {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": ref},
+                "prevention": {"type": "null"} if marked_prevention(content) else   # 표시가 있으면 본 호출은 이 칸을 쓰지 않는다
+                {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": ref},
                                                               "owner": text_or_null, "due": text_or_null})}})
 
 
@@ -381,6 +438,7 @@ async def fill(profile, content: dict, bodies: dict[int, str], external: bool, u
     texts = record_texts(content, bodies)
     out = await refetch_fix(profile, out, has_sentence, texts, external, usage, trace)
     out = checked_main_prevention(out, texts, trace)
+    out = await write_marked(profile, out, texts, external, usage, trace)
     return await more_prevention(profile, out, texts, external, usage, trace)
 
 
@@ -430,6 +488,12 @@ def reuse(content: dict, src: dict, bodies: dict[int, str]) -> dict | None:
         return None
     out = merge(content, data, external=True)
     out["summary"] = src.get("summary") or []   # 저장된 한눈에 보기는 이미 걸러진 문장 배열 — 세 칸으로 다시 거르지 않고 그대로 옮긴다
+    marked = marked_prevention(content)
+    if marked:   # 표시된 기록의 문장은 merge 가 받지 않는다 — 내부용의 것을 그대로 옮긴다(표시가 양쪽에서 같을 때만)
+        kept = [{**p, "owner": None} for p in src.get("prevention") or [] if len(p.get("refs") or []) == 1 and p["refs"][0] in marked]
+        if [p["refs"][0] for p in kept] != marked:
+            return None
+        out["prevention"] = kept
     return out
 
 
