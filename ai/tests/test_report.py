@@ -216,6 +216,104 @@ async def test_empty_main_output_is_not_patched_by_a_small_call(monkeypatch):
     assert len(calls) == 1 and out["summary"] == []
 
 
+ACTED = {**CONTENT, "records": [*CONTENT["records"],
+                                {"ref": "N5", "id": 5, "kind": "action", "title": "풀 사용률 경보 추가", "at": "2026-07-13T08:00:00Z"},
+                                {"ref": "N6", "id": 6, "kind": "action", "title": "고객 공지 발송", "at": "2026-07-14T08:00:00Z"},
+                                {"ref": "N7", "id": 7, "kind": "action", "title": "런북 갱신", "at": "2026-07-15T08:00:00Z"}]}
+ACTED_BODIES = {**BODIES, 3: "풀 최대를 20 으로 조정했다", 5: "풀 사용률 80% 경보를 추가했다", 6: "지연을 겪은 고객에게 사과 공지를 발송했다", 7: "풀 고갈 대응 런북을 갱신했다"}
+ALARM = {"text": "풀 사용률 80% 경보를 추가했습니다.", "refs": ["N5"]}
+NOTICE = {"text": "지연을 겪은 고객에게 사과 공지를 발송했습니다.", "refs": ["N6"]}
+RUNBOOK = {"text": "풀 고갈 대응 런북을 갱신했습니다.", "refs": ["N7"]}
+ACTION_LINES = ["N5 (조치) 풀 사용률 경보 추가 — 풀 사용률 80% 경보를 추가했다", "N6 (조치) 고객 공지 발송 — 지연을 겪은 고객에게 사과 공지를 발송했다",
+                "N7 (조치) 런북 갱신 — 풀 고갈 대응 런북을 갱신했다"]
+
+
+def _main(*prevention) -> dict:
+    return {"summary": SUMMARY, "prevention": list(prevention)}
+
+
+async def _fill(content=ACTED, bodies=ACTED_BODIES, external=False):
+    usage, trace = llm.Usage(), {}
+    return await report.fill(profile(), content, bodies, external, usage, trace), usage, trace
+
+
+async def test_prevention_is_not_supplemented_when_main_call_cited_every_candidate(monkeypatch):
+    """조치 기록을 본 호출이 모두 근거로 썼고 해결 기록에 고르는 낱말이 없으면 보완 호출을 부르지 않는다."""
+    calls = _llm(monkeypatch, _main(ALARM, NOTICE, RUNBOOK))
+    out, _, trace = await _fill()
+    assert len(calls) == 1 and len(out["prevention"]) == 3 and "prevention" not in trace
+
+
+async def test_prevention_is_supplemented_from_records_the_main_call_left_out(monkeypatch):
+    """본 호출이 안 쓴 조치 기록만 주고 받은 문장을 뒤에 붙인다 — 토큰은 더하고, 담당자 · 기한은 비운다."""
+    calls = _llm(monkeypatch, _main({**ALARM, "owner": "김담당", "due": "2026-08-01"}), {report.SYSTEM_PREVENTION: {"prevention": [NOTICE]}})
+    out, usage, trace = await _fill()
+    assert out["prevention"] == [{**ALARM, "owner": "김담당", "due": "2026-08-01"}, {**NOTICE, "owner": None, "due": None}]
+    assert calls[1]["system"] == report.SYSTEM_PREVENTION and calls[1]["max_tokens"] == report.PREVENTION_MAX_TOKENS
+    assert calls[1]["user"] == "\n".join(["[기록]", *ACTION_LINES[1:]])   # 이미 근거로 쓴 N5 · 낱말이 없는 해결 기록 N3 · 다른 칸의 문장은 넣지 않는다
+    assert (usage.prompt_tokens, usage.completion_tokens) == (20, 4)
+    assert trace["prevention"]["given"] == ["N6", "N7"] and trace["prevention"]["added"] == [out["prevention"][1]]
+
+
+async def test_prevention_is_not_supplemented_without_fix_records(monkeypatch):
+    """해결 기록이 없는 장애 건의 조치 기록은 대응 그 자체다 — 재발 방지로 싣지 않는다."""
+    open_case = {**ACTED, "resolution": {**ACTED["resolution"], "items": []}, "records": [{**r, "kind": "action"} if r["ref"] == "N3" else r for r in ACTED["records"]]}
+    calls = _llm(monkeypatch, _main())
+    out, _, _ = await _fill(open_case)
+    assert len(calls) == 1 and out["prevention"] == []
+
+
+@pytest.mark.parametrize(("body", "given"), [("풀 최대를 20 으로 조정했다", False), ("풀 최대를 20 으로 조정하고 배포 점검표에 풀 설정 검증을 넣었다", True)])
+async def test_fix_record_is_given_only_when_it_has_a_signal_word(monkeypatch, body, given):
+    calls = _llm(monkeypatch, _main(), {report.SYSTEM_PREVENTION: {"prevention": []}})
+    await _fill(bodies={**ACTED_BODIES, 3: body})
+    assert calls[1]["user"].split("\n")[1:] == ([f"N3 (해결) 풀 최대 20 — {body} / 결과: 풀을 20 으로 늘려 해소"] if given else []) + ACTION_LINES
+
+
+@pytest.mark.parametrize(("answer", "why"), [
+    ([{"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"]}], "입력에 없는 근거 번호"),                 # 넘기지 않은 기록의 번호
+    ([ALARM, {"text": "풀 사용률 경보는 80% 입니다.", "refs": ["N5"]}], "같은 기록의 둘째 문장"),
+    ([{"text": "풀 사용률 경보를 추가해야 합니다.", "refs": ["N5"]}], "권고 · 예정 · 해결 되풀이로 끝남"),
+    ([{"text": "풀 사용률 경보 절차를 마련했습니다.", "refs": ["N5"]}], "기록에 없는 낱말"),
+    ([{"text": "배포 파이프라인 승인 단계를 늘렸습니다.", "refs": ["N5"]}], "근거 기록과 겹침 60% 미만")])   # 다른 내용에 번호만 붙임
+async def test_supplemented_sentence_that_fails_a_check_is_dropped(monkeypatch, answer, why):
+    _llm(monkeypatch, _main(), {report.SYSTEM_PREVENTION: {"prevention": answer}})
+    out, _, trace = await _fill()
+    assert out["prevention"] == ([{**ALARM, "owner": None, "due": None}] if answer[0] == ALARM else [])
+    assert trace["prevention"]["dropped"] == [[why, answer[-1]["text"]]]
+
+
+async def test_supplemented_sentences_stop_at_the_list_limit(monkeypatch):
+    four = [{"text": f"풀 설정을 {n}차로 고쳤습니다.", "refs": ["N3"]} for n in range(1, 5)]
+    _llm(monkeypatch, _main(*four), {report.SYSTEM_PREVENTION: {"prevention": [ALARM, NOTICE, RUNBOOK]}})
+    out, _, _ = await _fill()
+    assert [s["text"] for s in out["prevention"]] == [*(s["text"] for s in four), ALARM["text"]] and len(out["prevention"]) == report.LIST_MAX
+
+
+async def test_external_supplement_carries_the_external_rule(monkeypatch):
+    calls = _llm(monkeypatch, _main(), {report.SYSTEM_PREVENTION: {"prevention": [{**ALARM, "owner": "김담당"}]}})
+    out, _, _ = await _fill(external=True)
+    assert calls[1]["system"] == report.SYSTEM_PREVENTION + report.EXTERNAL_RULE and out["prevention"] == [{**ALARM, "owner": None, "due": None}]
+
+
+@pytest.mark.parametrize("answer", [RuntimeError("timeout"), ["not", "an", "object"]])
+async def test_failed_supplement_keeps_the_main_result(monkeypatch, answer):
+    _llm(monkeypatch, _main(ALARM), {report.SYSTEM_PREVENTION: answer})
+    out, _, trace = await _fill()
+    assert out["prevention"] == [{**ALARM, "owner": None, "due": None}] and trace["prevention"]["added"] == []   # 보고서는 그대로 끝난다
+
+
+async def test_both_small_calls_run_when_both_cells_fall_short(monkeypatch):
+    """해결 문장 다시 받기와 재발 방지 보완은 서로 다른 칸이다 — 둘 다 걸리면 둘 다 부른다."""
+    two = {**ACTED, "resolution": TWO_FIXES["resolution"],
+           "records": [*ACTED["records"], {"ref": "N8", "id": 8, "kind": "resolution", "title": "타임아웃 3초", "at": "2026-07-16T08:00:00Z"}]}
+    two["resolution"] = {**two["resolution"], "items": [two["resolution"]["items"][0], {"ref": "N8", "title": "타임아웃 3초", "summary": None}]}
+    calls = _llm(monkeypatch, _main(), {report.SYSTEM_FIX: {**BOTH_FIXES, "refs": ["N3", "N8"]}, report.SYSTEM_PREVENTION: {"prevention": [NOTICE]}})
+    out, usage, _ = await _fill(two)
+    assert len(calls) == 3 and out["summary"][-1]["refs"] == ["N3", "N8"] and [s["refs"] for s in out["prevention"]] == [["N6"]]
+    assert usage.prompt_tokens == 30
+
+
 def _insert(admin_conn, content: dict, audience: str = "internal") -> int:
     root = admin_conn.execute("SELECT id, workspace_id, author_id FROM log_nodes ORDER BY id LIMIT 1").fetchone()
     return admin_conn.execute("""INSERT INTO incident_reports (workspace_id, root_id, audience, sig, content, requested_by)
