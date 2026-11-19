@@ -67,12 +67,18 @@ SYSTEM_PREVENTION = """사내 장애 건의 기록에서 장애 보고서의 '�
 JSON {"prevention": [{"text": "…", "refs": ["N5"]}]} 만 낸다."""
 # 보완 호출에 넘길 '해결' 기록을 고르는 낱말(조치 기록은 낱말과 상관없이 넘긴다). '이후' · '절차' · '규정' · '검수' · '자동' · '상한'은 흔한 말이라 복구 · 값 조정 기록이 걸린다 — 넣지 않는다
 SIGNALS = ("자동화", "점검", "체크리스트", "검수표", "경보", "알림", "검증", "런북", "표준", "필수", "방지", "멱등", "분리", "회수", "임계", "명문화", "앞으로")
-# 보완 호출이 준 문장의 검증 — 이 낱말이 문장에 있으면 근거 기록에도 있어야 하고(CLAIMS), 권고 · 예정 · 해결 되풀이로 끝나면 안 된다(NORM)
+# 보완 호출이 준 문장의 검증 — 이 낱말이 문장에 있으면 근거 기록에도 있어야 하고(CLAIMS), 권고 · 예정 · 해결 되풀이로 끝나면 안 된다(NORM — 본 호출의 재발 방지 문장에도 건다)
 CLAIMS = ("명문화", "강화", "검증", "경보", "자동화", "점검", "체크리스트", "표준", "런북", "규정", "장치", "마련", "절차")
-NORM = re.compile(r"(해야 합니다|권장합니다|필요합니다|예정입니다|예정되어 있습니다|계획입니다|문제를 해결했습니다|문제가 해결되었습니다)\.?$")
+NORM = re.compile(r"(해야 합니다|권장합니다|권장했습니다|권고했습니다|필요합니다|예정입니다|예정되어 있습니다|계획입니다|문제를 해결했습니다|문제가 해결되었습니다)\.?$")
 TOK = re.compile(r"[가-힣A-Za-z0-9]{2,}")
 ENDINGS = ("했습니다", "하였습니다", "합니다", "있습니다", "되었습니다", "됩니다")
 OVERLAP_MIN = 0.6        # 문장의 낱말이 근거 기록에 나오는 비율의 하한 — 다른 기록의 내용에 번호만 붙인 문장을 거른다
+# 외부 공개용 문장에서 '책임자'로 바꿔 쓰는 직책 낱말. 과장 · 대리 · 부장 · 차장 · 실장 · 주임 · 매니저 · 리더는 다른 뜻이 있어 넣지 않는다(과장 광고 · 법정대리인)
+ROLE = "팀장|조직장|부서장|본부장|센터장|파트장|그룹장|임원"
+DEPT = "인사|재무|개발|운영|보안|영업|지원|총무|법무|품질|고객지원|고객"
+JOSA = {"이": "가", "은": "는", "을": "를", "과": "와", "으로": "로"}   # 받침 있는 말 뒤의 조사 → 받침 없는 '책임자' · '담당자' 뒤의 조사
+JOSA_FIX = r"(으로|이|은|을|과)?"
+TITLE = re.compile(rf"(?<![가-힣])(?:(?:{DEPT})\s?)?(?:{ROLE}){JOSA_FIX}(?=에게|께서|께|의|도|만|에|[^가-힣]|$)")
 
 
 def _day(iso: str | None) -> str:
@@ -179,7 +185,7 @@ def merge(content: dict, data: dict, external: bool = False) -> dict:
     prevention = []
     for x in (data.get("prevention") if isinstance(data.get("prevention"), list) else [])[:LIST_MAX]:
         s = sentence(x)
-        if s and done.intersection(s["refs"]):   # 재발 방지는 실제로 한 일('해결' · '조치' 기록)이 근거일 때만
+        if s and done.intersection(s["refs"]) and not NORM.search(s["text"]):   # 실제로 한 일('해결' · '조치' 기록)이 근거일 때만. 권고 · 예정으로 끝나는 문장은 싣지 않는다
             prevention.append({**s, "owner": None if external else text(x.get("owner")), "due": text(x.get("due"))})
     out["prevention"] = prevention
     by_ref = lambda key: data.get(key) if isinstance(data.get(key), dict) else {}  # noqa: E731
@@ -293,8 +299,10 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
 
 def report_schema(content: dict) -> dict:
     """본 호출의 응답 스키마 — 이 장애 건의 기록 번호로 만든다. 근거 번호는 [기록]의 번호만, 원인 설명 · 추가 문제 메모의 키는 그 기록 번호 전부.
-    모델이 지시문의 예시 번호를 키로 쓰거나 없는 번호를 근거로 대지 못하게 응답의 모양을 묶는다."""
+    모델이 지시문의 예시 번호를 키로 쓰거나 없는 번호를 근거로 대지 못하게 응답의 모양을 묶는다.
+    재발 방지의 근거는 '해결' · '조치' 기록 번호만 — 그런 기록이 없는 장애 건은 그 칸을 null 로 묶는다."""
     ref = {"type": "string", "enum": [r["ref"] for r in content["records"]]}
+    done = [r["ref"] for r in content["records"] if r["kind"] in ("resolution", "action")]
     sentence = {"type": "object", "properties": {"text": {"type": "string"}, "refs": {"type": "array", "items": ref}},
                 "required": ["text", "refs"], "additionalProperties": False}
     maybe = {"anyOf": [sentence, {"type": "null"}]}
@@ -306,8 +314,8 @@ def report_schema(content: dict) -> dict:
     return obj({"summary": obj({"problem": sentence, "cause": maybe, "resolution": maybe}), "impact": {"type": "array", "items": sentence},
                 "causes": obj({c["ref"]: sentence for c in content["causes"]}), "resolution_note": maybe,
                 "side_issues": obj({s["ref"]: sentence for s in content["side_issues"]}),
-                "prevention": {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": ref},
-                                                              "owner": text_or_null, "due": text_or_null})}})
+                "prevention": {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": {"type": "string", "enum": done}},
+                                                              "owner": text_or_null, "due": text_or_null})} if done else {"type": "null"}})
 
 
 def missing_notes(out: dict) -> list[str]:
@@ -348,7 +356,7 @@ async def fill(profile, content: dict, bodies: dict[int, str], external: bool, u
     if ai_mode() != "openai" or not profile.has_key:
         return None
     system, user = SYSTEM + (EXTERNAL_RULE if external else ""), render(content, bodies)
-    schema = report_schema(content) if os.environ.get("REPORT_JSON_SCHEMA", "1") != "0" else None   # 실험: 0 이면 전처럼 JSON 이기만 하면 받는다
+    schema = report_schema(content) if os.environ.get("REPORT_JSON_SCHEMA", "1") != "0" else None   # 0 이면 스키마 없이(JSON 이기만 하면) 받는다 — 끄는 스위치
     data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS, schema=schema)
     if not isinstance(data, dict):
         raise ValueError("AI_BAD_OUTPUT: not a JSON object")
@@ -359,6 +367,36 @@ async def fill(profile, content: dict, bodies: dict[int, str], external: bool, u
     texts = record_texts(content, bodies)
     out = await refetch_fix(profile, out, has_sentence, texts, external, usage, trace)
     return await more_prevention(profile, out, texts, external, usage, trace)
+
+
+def neutral(text: str, names: list[str] = (), ranks: list[str] = ()) -> str:
+    """외부 공개용 문장 — 사내 사람 이름(뒤의 직급 · 직책 · '님'째로)은 '담당자', 직책 낱말은 '책임자'로 바꿔 쓴다. 받침이 달라지므로 바로 뒤의 조사도 맞춘다.
+    지시문으로는 빠지지 않았고(기록의 낱말을 그대로 옮긴다) 내부용을 옮겨 쓰는 길에는 지시문이 닿지 않아, 받은 뒤 낱말만 바꾼다."""
+    swap = lambda word: lambda m: word + JOSA.get(m.group(1) or "", m.group(1) or "")  # noqa: E731
+    known = [re.escape(n) for n in names if n and len(n) >= 2]
+    if known:
+        rank = "|".join([re.escape(r) for r in ranks if r] + ["님"])
+        person = re.compile(rf"(?<![가-힣])(?:{'|'.join(known)})(?:\s?(?:{rank}))*{JOSA_FIX}(?=에게|께서|께|의|도|만|에|가|는|를|와|로|[^가-힣]|$)")
+        text = person.sub(swap("담당자"), text)
+    return TITLE.sub(swap("책임자"), text)
+
+
+def externalize(out: dict, names: list[str], ranks: list[str]) -> dict:
+    """외부 공개용 content 의 AI 문장 전부에 neutral 을 건다(사실 칸은 Spring 이 외부용으로 조립한 그대로 둔다)."""
+    fix = lambda s: {**s, "text": neutral(s["text"], names, ranks)} if s else s  # noqa: E731
+    return {**out, "summary": [fix(s) for s in out["summary"]], "impact": [fix(s) for s in out["impact"]], "prevention": [fix(s) for s in out["prevention"]],
+            "causes": [{**c, "explanation": fix(c.get("explanation"))} for c in out["causes"]],
+            "side_issues": [{**s, "note": fix(s.get("note"))} for s in out["side_issues"]],
+            "resolution": {**out["resolution"], "note": fix(out["resolution"].get("note"))}}
+
+
+def people(conn, workspace_id: int) -> tuple[list[str], list[str]]:
+    """그 부서가 속한 회사의 사람 이름(긴 것부터)과 직급 · 직책 낱말 — 외부 공개용 문장에서 가릴 것."""
+    rows = conn.execute("""SELECT u.name, u.grade, u.duty FROM users u JOIN workspaces w ON w.tenant_id = u.tenant_id
+                           WHERE w.id = %s AND u.status <> 'deleted'""", (workspace_id,)).fetchall()
+    names = sorted({r["name"] for r in rows if r["name"]}, key=len, reverse=True)
+    ranks = sorted({v for r in rows for v in (r["grade"], r["duty"]) if v}, key=len, reverse=True)
+    return names, ranks
 
 
 def reuse(content: dict, src: dict, bodies: dict[int, str]) -> dict | None:
@@ -401,6 +439,8 @@ async def fill_one(conn) -> str | None:
         model = src["model"] if filled else prof.model_answer   # 옮겨 쓴 보고서는 토큰 0 · 내부용을 만든 모델
         if filled is None:
             filled = await fill(prof, content, bodies, row["audience"] == "external", usage)
+        if filled is not None and row["audience"] == "external":   # 옮겨 쓴 문장이든 새로 받은 문장이든 이름 · 직책을 바꿔 쓴다
+            filled = externalize(filled, *people(conn, row["workspace_id"]))
         if filled is not None and not filled["summary"]:   # 한눈에 보기는 늘 한 문장 이상 — 비었으면 빈 결과다. 실패로 남겨 이전 보고서를 지우지 않는다
             raise ValueError("AI_EMPTY_OUTPUT: no summary sentence with a known ref")
         if filled is None:

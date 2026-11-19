@@ -109,6 +109,7 @@ async def test_fill_uses_answer_model_and_validates_output(monkeypatch):
     schema = fmt["json_schema"]["schema"]["properties"]
     assert list(schema["causes"]["properties"]) == ["N2"] and list(schema["side_issues"]["properties"]) == ["N4"]          # 키는 이 장애 건의 기록 번호
     assert schema["impact"]["items"]["properties"]["refs"]["items"]["enum"] == ["N1", "N2", "N3", "N4"]                       # 근거는 [기록]의 번호만
+    assert schema["prevention"]["items"]["properties"]["refs"]["items"]["enum"] == ["N3"]                                      # 재발 방지의 근거는 해결 · 조치 기록만
     assert "외부 공개용" in body["messages"][0]["content"] and body["messages"][1]["content"].startswith("[장애 건] DB 커넥션 풀 고갈")
     assert out["summary"] == [{"text": "스텁 보고서 요약입니다.", "refs": ["N1"]}]
     assert out["causes"][0]["explanation"] == {"text": "스텁 원인 설명입니다.", "refs": ["N2"]}
@@ -554,3 +555,99 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert (small["notes_refilled_reports"], small["notes_missing"], small["notes_filled"], t["notes_refilled_reports"]) == (1, 2, 1, 0)
     blank = rc.facts_only(report.merge(CONTENT, data))
     assert blank["summary"] == [] and blank["causes"][0]["explanation"] is None and blank["records"] == CONTENT["records"]
+
+
+def test_schema_locks_prevention_when_there_is_no_fix_or_action_record():
+    """해결 · 조치 기록이 없는 장애 건은 재발 방지 칸을 null 로 묶는다 — 근거로 댈 기록이 없다."""
+    bare = {**CONTENT, "records": [r for r in CONTENT["records"] if r["kind"] != "resolution"]}
+    assert report.report_schema(bare)["properties"]["prevention"] == {"type": "null"}
+    assert report.merge(bare, {"summary": SUMMARY, "prevention": None})["prevention"] == []
+
+
+def test_main_call_prevention_ending_as_a_recommendation_is_dropped():
+    """본 호출의 재발 방지 문장도 권고 · 예정으로 끝나면 싣지 않는다(보완 호출과 같은 기준)."""
+    data = {"summary": SUMMARY, "prevention": [{"text": "풀 사용률 점검을 권장했습니다.", "refs": ["N3"]}, {"text": "풀 크기 재검토가 필요합니다.", "refs": ["N3"]},
+                                               {"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"]}]}
+    assert [s["text"] for s in report.merge(CONTENT, data)["prevention"]] == ["풀을 20 으로 늘렸습니다."]
+
+
+@pytest.mark.parametrize("before,after", [
+    ("배송 지연을 근거로 팀장 승인으로 전액 환불이 이루어졌습니다.", "배송 지연을 근거로 책임자 승인으로 전액 환불이 이루어졌습니다."),
+    ("미입력 시 조직장에게 자동 알림을 설정했습니다.", "미입력 시 책임자에게 자동 알림을 설정했습니다."),
+    ("인사팀장이 승인했습니다.", "책임자가 승인했습니다."),                       # 부서 이름째로, 조사는 받침에 맞춘다
+    ("고객지원 팀장은 승인하지 않았고, 임원을 거쳤습니다.", "책임자는 승인하지 않았고, 책임자를 거쳤습니다."),
+    ("확인 뒤, 팀장과 협의했습니다.", "확인 뒤, 책임자와 협의했습니다."),           # 앞의 띄어쓰기는 그대로
+    ("과장 광고 문구를 확인했습니다.", "과장 광고 문구를 확인했습니다."),           # 다른 뜻이 있는 낱말은 건드리지 않는다
+    ("법정대리인이 대리 수령했습니다.", "법정대리인이 대리 수령했습니다."),
+    ("운영임원회에 보고했습니다.", "운영임원회에 보고했습니다."),                   # 다른 낱말의 일부
+])
+def test_external_sentence_replaces_job_titles_with_a_neutral_word(before, after):
+    assert report.neutral(before) == after
+
+
+@pytest.mark.parametrize("before,after", [
+    ("장문경 매니저가 재기동했습니다.", "담당자가 재기동했습니다."),               # 이름 뒤의 직급째로
+    ("배종현이 승인했습니다.", "담당자가 승인했습니다."),                         # 받침 있는 이름 뒤의 조사를 맞춘다
+    ("홍경표는 로그를 확인했습니다.", "담당자는 로그를 확인했습니다."),           # 받침 없는 이름은 조사가 그대로 맞는다
+    ("신동준 팀장님에게 보고했습니다.", "담당자에게 보고했습니다."),
+    ("배종현 팀장과 장문경을 불렀습니다.", "담당자와 담당자를 불렀습니다."),
+    ("홍경표준 문서를 고쳤습니다.", "홍경표준 문서를 고쳤습니다."),               # 이름으로 시작하는 다른 낱말은 건드리지 않는다
+])
+def test_external_sentence_replaces_staff_names(before, after):
+    assert report.neutral(before, ["장문경", "배종현", "홍경표", "신동준"], ["매니저", "팀장"]) == after
+
+
+def test_externalize_rewrites_every_ai_sentence_and_leaves_facts():
+    data = {"summary": {"problem": {"text": "팀장 승인 없이 배포됐습니다.", "refs": ["N1"]}, "cause": {"text": "장문경이 풀을 줄였습니다.", "refs": ["N2"]},
+                        "resolution": {"text": "임원 승인으로 풀을 늘렸습니다.", "refs": ["N3"]}},
+            "impact": [{"text": "조직장에게 알림이 가지 않았습니다.", "refs": ["N1"]}],
+            "causes": {"N2": {"text": "팀장이 확인하지 않았습니다.", "refs": ["N2"]}}, "side_issues": {"N4": {"text": "장문경 매니저가 한도를 올렸습니다.", "refs": ["N4"]}},
+            "resolution_note": {"text": "본부장 승인 절차가 생겼습니다.", "refs": ["N3"]}, "prevention": [{"text": "팀장이 점검표를 만들었습니다.", "refs": ["N3"]}]}
+    titled = {**CONTENT, "meta": {**CONTENT["meta"], "title": "팀장 승인 누락"}}
+    out = report.externalize(report.merge(titled, data), ["장문경"], ["매니저"])
+    assert [s["text"] for s in out["summary"]] == ["책임자 승인 없이 배포됐습니다.", "담당자가 풀을 줄였습니다.", "책임자 승인으로 풀을 늘렸습니다."]
+    assert out["impact"][0]["text"] == "책임자에게 알림이 가지 않았습니다." and out["causes"][0]["explanation"]["text"] == "책임자가 확인하지 않았습니다."
+    assert out["side_issues"][0]["note"]["text"] == "담당자가 한도를 올렸습니다." and out["resolution"]["note"]["text"] == "책임자 승인 절차가 생겼습니다."
+    assert out["prevention"][0]["text"] == "책임자가 점검표를 만들었습니다." and out["prevention"][0]["refs"] == ["N3"]
+    assert out["meta"]["title"] == "팀장 승인 누락"                               # 사실 칸은 건드리지 않는다
+    empty = report.externalize(report.merge(CONTENT, {"summary": SUMMARY}), ["장문경"], [])
+    assert empty["causes"][0]["explanation"] is None and empty["resolution"]["note"] is None   # 빈 칸은 빈 채로
+
+
+async def test_fill_falls_back_to_plain_json_when_the_provider_rejects_a_schema(monkeypatch):
+    """스키마 응답을 못 받는 공급자(400)면 스키마 없이 한 번 다시 보내 같은 결과를 받는다."""
+    with OpenAIStub() as stub:
+        stub.refuse_schema()
+        monkeypatch.setenv("AI_MODE", "openai")
+        monkeypatch.setenv("LLM_PROFILE_DEFAULT_BASE_URL", stub.base_url)
+        monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+        out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage())
+        formats = [c["body"]["response_format"]["type"] for c in stub.calls if c["path"].endswith("/chat/completions")]
+    assert formats[:2] == ["json_schema", "json_object"]
+    assert out["summary"] == [{"text": "스텁 보고서 요약입니다.", "refs": ["N1"]}]
+
+
+@requires_db
+async def test_external_job_rewrites_names_and_titles_in_reused_sentences(monkeypatch, admin_conn):
+    """외부용은 옮겨 쓴 문장에서도 사내 사람 이름과 직책 낱말을 바꿔 쓴다 — LLM 은 부르지 않는다."""
+    from app.retrieval import db
+
+    async def never(*a, **k):
+        raise AssertionError("LLM must not be called")
+
+    monkeypatch.setenv("AI_MODE", "openai")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+    monkeypatch.setattr(llm, "_chat_json", never)
+    name = admin_conn.execute("""SELECT u.name FROM users u JOIN workspaces w ON w.tenant_id = u.tenant_id
+                                 WHERE w.id = (SELECT workspace_id FROM log_nodes ORDER BY id LIMIT 1) AND u.status = 'active' ORDER BY u.id LIMIT 1""").fetchone()["name"]
+    done = report.merge(CONTENT, {"summary": {"problem": {"text": f"{name}에게 보고했고 팀장 승인으로 풀을 늘렸습니다.", "refs": ["N1"]}}})
+    a, b = _insert(admin_conn, done), _insert(admin_conn, CONTENT, "external")
+    admin_conn.execute("UPDATE incident_reports SET status = 'done', prompt_version = %s, model = 'stub-answer' WHERE id = %s", (report.PROMPT_VERSION, a))
+    try:
+        with db.connect() as conn:
+            assert await report.run_pending(conn) == {"reports": 1, "report_failed": 0}
+        rows = {r["id"]: r["content"]["summary"][0]["text"] for r in admin_conn.execute("SELECT id, content FROM incident_reports WHERE id = ANY(%s)", ([a, b],)).fetchall()}
+        assert rows[b] == "담당자에게 보고했고 책임자 승인으로 풀을 늘렸습니다."
+        assert rows[a] == f"{name}에게 보고했고 팀장 승인으로 풀을 늘렸습니다."     # 내부용은 그대로
+    finally:
+        admin_conn.execute("DELETE FROM incident_reports WHERE id = ANY(%s)", ([a, b],))
