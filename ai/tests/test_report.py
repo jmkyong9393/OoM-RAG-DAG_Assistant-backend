@@ -724,5 +724,11 @@ def test_reuse_copies_marked_sentences_only_when_the_marks_are_the_same():
     done = {**report.merge(MARKED, _main()), "prevention": [{**ALARM, "owner": "김담당", "due": None}, {**NOTICE, "owner": None, "due": None}]}
     out = report.reuse(MARKED, done, ACTED_BODIES)
     assert out["prevention"] == [{**ALARM, "owner": None, "due": None}, {**NOTICE, "owner": None, "due": None}]
-    assert report.reuse({**MARKED, "prevention_refs": ["N5", "N6", "N7"]}, done, ACTED_BODIES) is None   # 표시가 늘었으면 새로 만든다(옮길 문장이 없다)
-    assert [s["refs"] for s in report.reuse({**MARKED, "prevention_refs": ["N5"]}, done, ACTED_BODIES)["prevention"]] == [["N5"]]   # 줄었으면 남은 것만
+    # 표시가 달라졌으면 옮기지 않고 새로 만든다 — 늘었든 줄었든 모두 지웠든. 표시는 LLM 입력에 없어 입력 비교만으로는 걸리지 않는다
+    assert report.reuse({**MARKED, "prevention_refs": ["N5", "N6", "N7"]}, done, ACTED_BODIES) is None
+    assert report.reuse({**MARKED, "prevention_refs": ["N5"]}, done, ACTED_BODIES) is None
+    assert report.reuse({**MARKED, "prevention_refs": []}, done, ACTED_BODIES) is None        # 표시를 지운 뒤 — 표시가 있던 때의 문장이 외부용에 실리지 않는다
+    assert report.reuse(ACTED, done, ACTED_BODIES) is None
+    picked = {**report.merge(ACTED, _main()), "prevention": [{**ALARM, "owner": None, "due": None}]}   # 표시 없이 AI 가 고른 내부용
+    assert report.reuse(MARKED, picked, ACTED_BODIES) is None                                    # 그 뒤에 표시했으면 고른 문장을 표시한 것처럼 옮기지 않는다
+    assert report.reuse(ACTED, picked, ACTED_BODIES)["prevention"] == picked["prevention"]     # 표시가 없던 그대로면 전처럼 옮긴다

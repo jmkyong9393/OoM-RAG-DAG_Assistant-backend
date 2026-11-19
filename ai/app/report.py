@@ -23,7 +23,7 @@ PROMPT_VERSION = "3"
 MAX_TOKENS = 1500        # 출력 상한. 문장 15개 안팎이면 넉넉하다 — 여기서 잘리면 JSON 이 닫히지 않아 failed 가 된다
 FIX_MAX_TOKENS = 300     # 해결 문장만 다시 받는 작은 호출의 출력 상한
 PREVENTION_MAX_TOKENS = 400   # 재발 방지 칸 보완 호출의 출력 상한
-MARKED_MAX_TOKENS = 150       # 표시된 재발 방지 기록 하나를 문장으로 옮기는 호출의 출력 상한
+MARKED_MAX_TOKENS = 300       # 표시된 재발 방지 기록 하나를 문장으로 옮기는 호출의 출력 상한(문장 상한 300자가 잘리지 않게)
 BODY_MAX = 500           # 기록 본문은 앞부분만
 SENTENCE_MAX = 300       # 한 문장 상한(넘으면 자른다)
 LIST_MAX = 5             # 한 칸의 문장 수 상한
@@ -474,8 +474,9 @@ def people(conn, workspace_id: int) -> tuple[list[str], list[str]]:
 
 def reuse(content: dict, src: dict, bodies: dict[int, str]) -> dict | None:
     """외부용 content 에 내부용(src)의 AI 칸을 옮긴다 — LLM 을 다시 부르지 않는다.
-    LLM 입력이 다르거나(기록이 바뀜) 내부용 문장에 작성자 이름이 들어 있으면 None(호출 측이 LLM 으로 새로 만든다)."""
-    if render(src, bodies) != render(content, bodies):
+    LLM 입력이 다르거나(기록이 바뀜) 재발 방지 표시가 다르거나 내부용 문장에 작성자 이름이 들어 있으면 None(호출 측이 LLM 으로 새로 만든다)."""
+    # 표시는 LLM 입력(render)에 들어 있지 않아 따로 본다 — 표시를 지운 뒤에도 표시가 있던 때의 문장을 옮기지 않게
+    if render(src, bodies) != render(content, bodies) or marked_prevention(src) != marked_prevention(content):
         return None
     data = {"summary": src.get("summary"), "impact": src.get("impact"),
             "prevention": [{**p, "owner": None} for p in src.get("prevention") or []],   # 담당자 이름은 옮기지 않는다
@@ -489,9 +490,9 @@ def reuse(content: dict, src: dict, bodies: dict[int, str]) -> dict | None:
     out = merge(content, data, external=True)
     out["summary"] = src.get("summary") or []   # 저장된 한눈에 보기는 이미 걸러진 문장 배열 — 세 칸으로 다시 거르지 않고 그대로 옮긴다
     marked = marked_prevention(content)
-    if marked:   # 표시된 기록의 문장은 merge 가 받지 않는다 — 내부용의 것을 그대로 옮긴다(표시가 양쪽에서 같을 때만)
+    if marked:   # 표시된 기록의 문장은 merge 가 받지 않는다 — 내부용의 것을 그대로 옮긴다
         kept = [{**p, "owner": None} for p in src.get("prevention") or [] if len(p.get("refs") or []) == 1 and p["refs"][0] in marked]
-        if [p["refs"][0] for p in kept] != marked:
+        if [p["refs"][0] for p in kept] != marked:   # 내부용에 표시된 기록의 문장이 다 있지 않으면(만들다 만 것) 새로 만든다
             return None
         out["prevention"] = kept
     return out
