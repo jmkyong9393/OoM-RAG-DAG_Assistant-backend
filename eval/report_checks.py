@@ -120,7 +120,12 @@ def small_call_totals(rows: list[dict]) -> dict:
         for why, _ in m["dropped"]:
             dropped[why] = dropped.get(why, 0) + 1
     notes = [r["small_calls"]["notes"] for r in rows if (r.get("small_calls") or {}).get("notes")]
-    return {"notes_refilled_reports": len(notes), "notes_missing": sum(len(n["missing"]) for n in notes), "notes_filled": sum(len(n["filled"]) for n in notes),
+    main_dropped: dict[str, int] = {}   # 본 호출의 재발 방지 문장 가운데 검증이 버린 것(이유별)
+    for r in rows:
+        for why, _ in ((r.get("small_calls") or {}).get("main_prevention") or {}).get("dropped", []):
+            main_dropped[why] = main_dropped.get(why, 0) + 1
+    return {"main_prevention_dropped": main_dropped,
+            "notes_refilled_reports": len(notes), "notes_missing": sum(len(n["missing"]) for n in notes), "notes_filled": sum(len(n["filled"]) for n in notes),
             "fix_refetched": len(fix), "fix_refetch_accepted": sum(1 for f in fix if f["accepted"]),
             "prevention_supplemented": len(more), "prevention_added": sum(len(m["added"]) for m in more), "prevention_dropped": dropped,
             "small_call_errors": sum(1 for x in fix + more + notes if x.get("error"))}

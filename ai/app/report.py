@@ -253,6 +253,21 @@ def guard(text: str, src: str) -> str | None:
     return None
 
 
+def checked_main_prevention(out: dict, texts: dict[str, str], trace: dict | None = None) -> dict:
+    """본 호출이 쓴 재발 방지 문장에도 보완 호출과 같은 검증(guard)을 건다 — 근거로 댄 기록의 내용이 아닌 문장, 기록에 없는 낱말을 쓴 문장을 버린다.
+    버려진 문장의 근거 기록은 보완 호출의 후보로 돌아간다(그 기록만 주고 다시 받는다)."""
+    kept, dropped = [], []
+    for s in out["prevention"]:
+        why = guard(s["text"], " ".join(texts[r] for r in s["refs"]))
+        if why:
+            dropped.append([why, s["text"]])
+        else:
+            kept.append(s)
+    if trace is not None and dropped:
+        trace["main_prevention"] = {"dropped": dropped}
+    return {**out, "prevention": kept}
+
+
 def checked_prevention(raw, texts: dict[str, str], given: list[str]) -> tuple[list[dict], list[list[str]]]:
     """보완 호출의 응답에서 (실을 문장, 버린 [이유, 문장]). 근거가 넘긴 기록이고, 기록 하나에 한 문장이며, '니다'로 끝나고, guard 를 통과해야 싣는다."""
     kept, dropped, used = [], [], set()
@@ -300,9 +315,8 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
 def report_schema(content: dict) -> dict:
     """본 호출의 응답 스키마 — 이 장애 건의 기록 번호로 만든다. 근거 번호는 [기록]의 번호만, 원인 설명 · 추가 문제 메모의 키는 그 기록 번호 전부.
     모델이 지시문의 예시 번호를 키로 쓰거나 없는 번호를 근거로 대지 못하게 응답의 모양을 묶는다.
-    재발 방지의 근거는 '해결' · '조치' 기록 번호만 — 그런 기록이 없는 장애 건은 그 칸을 null 로 묶는다."""
+    재발 방지의 근거 번호는 좁히지 않는다 — '해결' · '조치' 기록만 허용하면 참고 · 추가 문제 기록에서 온 문장이 허용된 번호를 대신 달고 나온다(받은 뒤 버릴 수 없게 된다)."""
     ref = {"type": "string", "enum": [r["ref"] for r in content["records"]]}
-    done = [r["ref"] for r in content["records"] if r["kind"] in ("resolution", "action")]
     sentence = {"type": "object", "properties": {"text": {"type": "string"}, "refs": {"type": "array", "items": ref}},
                 "required": ["text", "refs"], "additionalProperties": False}
     maybe = {"anyOf": [sentence, {"type": "null"}]}
@@ -314,8 +328,8 @@ def report_schema(content: dict) -> dict:
     return obj({"summary": obj({"problem": sentence, "cause": maybe, "resolution": maybe}), "impact": {"type": "array", "items": sentence},
                 "causes": obj({c["ref"]: sentence for c in content["causes"]}), "resolution_note": maybe,
                 "side_issues": obj({s["ref"]: sentence for s in content["side_issues"]}),
-                "prevention": {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": {"type": "string", "enum": done}},
-                                                              "owner": text_or_null, "due": text_or_null})} if done else {"type": "null"}})
+                "prevention": {"type": "array", "items": obj({"text": {"type": "string"}, "refs": {"type": "array", "items": ref},
+                                                              "owner": text_or_null, "due": text_or_null})}})
 
 
 def missing_notes(out: dict) -> list[str]:
@@ -366,6 +380,7 @@ async def fill(profile, content: dict, bodies: dict[int, str], external: bool, u
     has_sentence = isinstance(v, dict) and _sentence(v.get("resolution"), {r["ref"] for r in content["records"]}) is not None
     texts = record_texts(content, bodies)
     out = await refetch_fix(profile, out, has_sentence, texts, external, usage, trace)
+    out = checked_main_prevention(out, texts, trace)
     return await more_prevention(profile, out, texts, external, usage, trace)
 
 

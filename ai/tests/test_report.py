@@ -109,11 +109,11 @@ async def test_fill_uses_answer_model_and_validates_output(monkeypatch):
     schema = fmt["json_schema"]["schema"]["properties"]
     assert list(schema["causes"]["properties"]) == ["N2"] and list(schema["side_issues"]["properties"]) == ["N4"]          # 키는 이 장애 건의 기록 번호
     assert schema["impact"]["items"]["properties"]["refs"]["items"]["enum"] == ["N1", "N2", "N3", "N4"]                       # 근거는 [기록]의 번호만
-    assert schema["prevention"]["items"]["properties"]["refs"]["items"]["enum"] == ["N3"]                                      # 재발 방지의 근거는 해결 · 조치 기록만
+    assert schema["prevention"]["items"]["properties"]["refs"]["items"]["enum"] == ["N1", "N2", "N3", "N4"]                    # 재발 방지의 근거도 좁히지 않는다 — 받은 뒤 버린다
     assert "외부 공개용" in body["messages"][0]["content"] and body["messages"][1]["content"].startswith("[장애 건] DB 커넥션 풀 고갈")
     assert out["summary"] == [{"text": "스텁 보고서 요약입니다.", "refs": ["N1"]}]
     assert out["causes"][0]["explanation"] == {"text": "스텁 원인 설명입니다.", "refs": ["N2"]}
-    assert out["prevention"] == [{"text": "스텁 재발 방지입니다.", "refs": ["N3"], "owner": None, "due": None}] and out["open_items"] == []
+    assert out["prevention"] == [{"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"], "owner": None, "due": None}] and out["open_items"] == []
     assert (usage.prompt_tokens, usage.completion_tokens) == (42, 7)
 
 
@@ -297,7 +297,7 @@ async def test_supplemented_sentence_that_fails_a_check_is_dropped(monkeypatch, 
 
 
 async def test_supplemented_sentences_stop_at_the_list_limit(monkeypatch):
-    four = [{"text": f"풀 설정을 {n}차로 고쳤습니다.", "refs": ["N3"]} for n in range(1, 5)]
+    four = [{"text": f"풀 최대를 {n}차에 20 으로 조정했습니다.", "refs": ["N3"]} for n in range(1, 5)]   # 근거 기록(N3)의 내용이어야 실린다
     _llm(monkeypatch, _main(*four), {report.SYSTEM_PREVENTION: {"prevention": [ALARM, NOTICE, RUNBOOK]}})
     out, _, _ = await _fill()
     assert [s["text"] for s in out["prevention"]] == [*(s["text"] for s in four), ALARM["text"]] and len(out["prevention"]) == report.LIST_MAX
@@ -557,11 +557,14 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert blank["summary"] == [] and blank["causes"][0]["explanation"] is None and blank["records"] == CONTENT["records"]
 
 
-def test_schema_locks_prevention_when_there_is_no_fix_or_action_record():
-    """해결 · 조치 기록이 없는 장애 건은 재발 방지 칸을 null 로 묶는다 — 근거로 댈 기록이 없다."""
-    bare = {**CONTENT, "records": [r for r in CONTENT["records"] if r["kind"] != "resolution"]}
-    assert report.report_schema(bare)["properties"]["prevention"] == {"type": "null"}
-    assert report.merge(bare, {"summary": SUMMARY, "prevention": None})["prevention"] == []
+async def test_main_call_prevention_that_does_not_match_its_record_is_dropped_and_the_record_is_asked_again(monkeypatch):
+    """본 호출의 재발 방지 문장이 근거로 댄 기록의 내용이 아니면 버린다 — 그 기록은 보완 호출의 후보로 돌아간다."""
+    wrong = {"text": "배포 체크리스트에 크론 확인 항목을 추가했습니다.", "refs": ["N5"]}   # N5 는 풀 사용률 경보 기록이다
+    calls = _llm(monkeypatch, _main(wrong, NOTICE, RUNBOOK), {report.SYSTEM_PREVENTION: {"prevention": [ALARM]}})
+    out, _, trace = await _fill()
+    assert [s["text"] for s in out["prevention"]] == [NOTICE["text"], RUNBOOK["text"], ALARM["text"]]
+    assert trace["main_prevention"]["dropped"] == [["기록에 없는 낱말", wrong["text"]]]
+    assert calls[1]["user"] == "\n".join(["[기록]", ACTION_LINES[0]])   # 버려진 문장의 근거 기록만 다시 준다
 
 
 def test_main_call_prevention_ending_as_a_recommendation_is_dropped():
