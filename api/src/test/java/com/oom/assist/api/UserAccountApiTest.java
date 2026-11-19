@@ -2,6 +2,8 @@ package com.oom.assist.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
@@ -195,6 +197,51 @@ class UserAccountApiTest extends AbstractApiTest {
     mvc.perform(as(delete("/workspaces/" + wsSw + "/members/" + userBackend), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/reset-password"), userNew, wsSw)).andExpect(status().isForbidden());
     mvc.perform(as(post("/users/" + userBackend + "/unlock"), userNew, wsSw)).andExpect(status().isForbidden());
+  }
+
+  // ── 삭제 ────────────────────────────────────────────────────────────
+
+  private ResultActions deleteAccount(long actor, long target) throws Exception {
+    return mvc.perform(asUser(delete("/users/" + target), actor).contentType(MediaType.APPLICATION_JSON).content("{\"reason\": \"퇴사 후 파기\"}"));
+  }
+
+  @Test
+  void deleteErasesPersonalDataOfAnInactiveAccountAndKeepsItsRecords() throws Exception {
+    long written = node(wsSw, "fail", "김하늘이 남긴 기록", userNew);
+    mvc.perform(asUser(post("/auth/consent"), userNew)).andExpect(status().isNoContent());
+    deleteAccount(userLead, userNew).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("ACCOUNT_ACTIVE"));   // 활성 계정은 먼저 비활성화한다
+    deactivate(userLead, userNew, "{\"reason\": \"퇴사\"}").andExpect(status().isNoContent());
+    deleteAccount(userBackend, userNew).andExpect(status().isForbidden());                                                    // 회사 관리자만
+    deleteAccount(userLead, userNew).andExpect(status().isNoContent());
+    var row = jdbc.sql("SELECT name, employee_no, email, title, grade, duty, password_hash, status, deleted_at IS NOT NULL AS stamped FROM users WHERE id = ?")
+        .param(userNew).query().singleRow();
+    assertThat(row.get("name")).isEqualTo("삭제된 계정");
+    assertThat(row.get("status")).isEqualTo("deleted");
+    assertThat(row.get("stamped")).isEqualTo(true);
+    for (String col : new String[] {"employee_no", "email", "title", "grade", "duty", "password_hash"}) assertThat(row.get(col)).as(col).isNull();
+    assertThat(jdbc.sql("SELECT count(*) FROM workspace_members WHERE user_id = ?").param(userNew).query(Long.class).single()).isZero();
+    assertThat(jdbc.sql("SELECT count(*) FROM user_consents WHERE user_id = ?").param(userNew).query(Long.class).single()).isZero();
+    assertThat(jdbc.sql("SELECT author_id FROM log_nodes WHERE id = ?").param(written).query(Long.class).single()).isEqualTo(userNew);   // 작성한 기록은 남는다
+    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(401);
+    mvc.perform(asUser(get("/users/inactive"), userLead)).andExpect(jsonPath("$[?(@.id == " + userNew + ")]").value(empty()));
+    // 삭제된 계정은 없는 계정과 같다
+    mvc.perform(asUser(post("/users/" + userNew + "/reactivate"), userLead)).andExpect(status().isNotFound());
+    deleteAccount(userLead, userNew).andExpect(status().isNotFound());
+    assertThat(jdbc.sql("SELECT reason FROM audit_log WHERE table_name = 'users' AND action = 'user_deleted' AND row_id = ?").param(String.valueOf(userNew))
+        .query(String.class).single()).isEqualTo("사번 " + empNew + " — 퇴사 후 파기");
+    // 사번은 다시 쓸 수 있다 — 새 계정으로 만들어진다
+    mvc.perform(as(post("/users"), userLead, wsSw).content("{\"employee_no\": \"" + empNew + "\", \"name\": \"새 사람\"}")).andExpect(status().isCreated())
+        .andExpect(jsonPath("$.created").value(true)).andExpect(jsonPath("$.id").value(not((int) userNew)));
+  }
+
+  @Test
+  void deleteIsLimitedToAccountsOfTheSameCompany() throws Exception {
+    long otherTenant = jdbc.sql("INSERT INTO tenants (slug, name) VALUES ('o', 'O') RETURNING id").query(Long.class).single();
+    long outsider = jdbc.sql("INSERT INTO users (tenant_id, name, employee_no, status) VALUES (?, '남의 회사 사람', 'X0001', 'inactive') RETURNING id").param(otherTenant)
+        .query(Long.class).single();
+    deleteAccount(userLead, outsider).andExpect(status().isNotFound());
+    deleteAccount(userLead, 99999999L).andExpect(status().isNotFound());
+    assertThat(jdbc.sql("SELECT status FROM users WHERE id = ?").param(outsider).query(String.class).single()).isEqualTo("inactive");
   }
 
   @Test

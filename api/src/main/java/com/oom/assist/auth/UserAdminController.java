@@ -219,6 +219,30 @@ public class UserAdminController {
     return ResponseEntity.noContent().build();
   }
 
+  /**
+   * 계정 삭제(회사 관리자) — 비활성 계정의 개인정보 · 소속 · 동의 이력을 지운다. 되돌릴 수 없고, 사번은 비워져 다시 쓸 수 있다.
+   * 행은 자리 표시로 남긴다(작성한 기록이 작성자를 참조한다). 활성 계정은 409 — 마지막 관리자 · 본인 확인과 세션 종료가 비활성화에 있다.
+   */
+  @DeleteMapping("/users/{id}")
+  @Transactional
+  public ResponseEntity<Void> delete(@PathVariable long id, @RequestBody(required = false) DeactivateRequest body) {
+    Actor actor = companyActor();
+    if ("active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ACCOUNT_ACTIVE", "deactivate the account first");
+    String empNo = jdbc.sql("SELECT employee_no FROM users WHERE id = ?").param(id).query(String.class).optional().orElse(null);
+    String reason = body == null || body.reason() == null ? "" : body.reason().strip();
+    endSessions(id);   // 사번을 비우기 전에 — 세션은 사번으로 찾는다
+    jdbc.sql("DELETE FROM workspace_members WHERE user_id = ?").param(id).update();
+    jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(id).update();
+    jdbc.sql("""
+          UPDATE users SET status = 'deleted', deleted_at = now(), name = '삭제된 계정', employee_no = NULL, email = NULL, title = NULL, grade = NULL, duty = NULL,
+                 external_id = NULL, auth_provider = NULL, password_hash = NULL, must_change_password = false, failed_attempts = 0, locked_until = NULL,
+                 last_login_at = NULL, password_changed_at = NULL, consented_at = NULL, primary_workspace_id = NULL
+          WHERE id = ?""").param(id).update();
+    // 접속기록은 보관 대상이라 지우지 않는다. 삭제한 뒤에는 사번을 계정에서 찾을 수 없으므로 이 기록에 적어 둔다
+    auditCompany(actor, id, "user_deleted", reason.isEmpty() ? "사번 " + empNo : "사번 " + empNo + " — " + reason);
+    return ResponseEntity.noContent().build();
+  }
+
   /** 비활성 계정 한 줄 — 멤버 목록 항목(MemberDto)에서 role · locked 를 뺀 모양. */
   public record InactiveUserDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked) {}
 
@@ -285,10 +309,10 @@ public class UserAdminController {
 
   /**
    * 대상 계정의 상태 — 그 행을 잠그고 읽는다(FOR UPDATE): 비활성화 · 재활성화끼리, 그리고 그 계정의 역할 변경 · 제외 · 초대(lockUser)와 줄을 선다.
-   * 다른 회사의 계정 · 없는 번호는 같은 404 — 있는지를 알리지 않는다.
+   * 다른 회사의 계정 · 없는 번호 · 삭제된 계정은 같은 404 — 있는지를 알리지 않는다.
    */
   private String status(long id, long tenantId) {
-    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ? FOR UPDATE").params(id, tenantId).query(String.class).optional()
+    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ? AND status <> 'deleted' FOR UPDATE").params(id, tenantId).query(String.class).optional()
         .orElseThrow(() -> ApiException.notFound("user"));
   }
 
