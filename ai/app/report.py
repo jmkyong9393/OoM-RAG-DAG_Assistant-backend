@@ -3,7 +3,8 @@
 사실 칸(경과 · 원인 · 조치 · 규정 · 근거 기록)은 Spring 이 content 에 넣어 두었다. 여기서는 그 기록 번호(N1…)와 기록 본문을 LLM 에 주고
 한눈에 보기 · 영향 · 원인 설명 · 조치 결과 · 추가 문제 메모 · 재발 방지 · 남은 확인만 받는다. 문장마다 근거 기록 번호가 있어야 하고(없으면 그 문장은 버린다),
 content 에 없는 번호는 지운다. 키가 없으면(fake) AI 칸 없이 done — 화면이 고정 문구를 보인다. 실패해도 사실 칸은 그대로 남는다.
-본 호출이 빠뜨린 것만 작은 호출로 보완한다(해결 문장 · 재발 방지 칸). 작은 호출은 실패하거나 조건을 못 채우면 본 호출의 결과를 그대로 둔다.
+본 호출이 빠뜨린 것만 보완한다 — 해결 문장 · 재발 방지 칸은 작은 호출로, 번호별 칸(원인 설명 · 추가 문제 메모)은 본 호출을 한 번 더 불러 빠진 칸만.
+보완은 실패하거나 조건을 못 채우면 본 호출의 결과를 그대로 둔다.
 """
 from __future__ import annotations
 
@@ -289,16 +290,48 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
     return {**out, "prevention": [*out["prevention"], *note["added"]]}
 
 
+def missing_notes(out: dict) -> list[str]:
+    """번호별 칸이 빈 기록 번호 — 설명이 없는 원인 기록, 메모가 없는 추가 문제 기록."""
+    return ([c["ref"] for c in out["causes"] if not c.get("explanation")] + [s["ref"] for s in out["side_issues"] if not s.get("note")])
+
+
+async def refill_notes(profile, content: dict, out: dict, system: str, user: str, external: bool, usage: llm.Usage, trace: dict | None = None) -> dict:
+    """번호별 칸(원인 설명 · 추가 문제 메모)이 비었으면 본 호출을 한 번 더 불러 **빠진 칸만** 채운다. 다른 칸은 첫 응답 그대로 둔다.
+    모델이 드물게 지시문의 예시 번호를 키로 써서 그 장애 건의 메모가 통째로 빠진다 — 같은 요청을 다시 보내면 제 번호로 나온다."""
+    missing = missing_notes(out)
+    if not missing or not out["summary"]:
+        return out
+    note = {"missing": missing, "filled": []}
+    if trace is not None:
+        trace["notes"] = note
+    try:
+        data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS)
+        again = merge(content, data, external) if isinstance(data, dict) else None
+    except Exception as e:  # noqa: BLE001 — 보완의 실패는 보고서의 실패가 아니다
+        note["error"] = f"{type(e).__name__}: {e}"[:200]
+        return out
+    if again is None:
+        return out
+    explanation = {c["ref"]: c.get("explanation") for c in again["causes"]}
+    memo = {s["ref"]: s.get("note") for s in again["side_issues"]}
+    causes = [c if c.get("explanation") else {**c, "explanation": explanation.get(c["ref"])} for c in out["causes"]]
+    sides = [s if s.get("note") else {**s, "note": memo.get(s["ref"])} for s in out["side_issues"]]
+    filled = {**out, "causes": causes, "side_issues": sides}
+    note["filled"] = [r for r in missing if r not in missing_notes(filled)]
+    return filled
+
+
 async def fill(profile, content: dict, bodies: dict[int, str], external: bool, usage: llm.Usage, trace: dict | None = None) -> dict | None:
-    """AI 칸을 채운 content. openai 모드가 아니거나 키가 없으면 None(호출 측이 AI 칸 없이 끝낸다). 본 호출 1회(답변 모델) + 빠뜨린 것이 있을 때만 작은 호출.
-    trace 를 주면 작은 호출이 무엇을 받고 무엇을 버렸는지 적는다(점검 스크립트용 — 저장하는 content 에는 넣지 않는다)."""
+    """AI 칸을 채운 content. openai 모드가 아니거나 키가 없으면 None(호출 측이 AI 칸 없이 끝낸다). 본 호출 1회(답변 모델) + 빠뜨린 것이 있을 때만 보완 호출.
+    trace 를 주면 보완 호출이 무엇을 받고 무엇을 버렸는지 적는다(점검 스크립트용 — 저장하는 content 에는 넣지 않는다)."""
     if ai_mode() != "openai" or not profile.has_key:
         return None
-    data = await llm._chat_json(profile, profile.model_answer, SYSTEM + (EXTERNAL_RULE if external else ""), render(content, bodies), usage,
-                                max_tokens=MAX_TOKENS)
+    system, user = SYSTEM + (EXTERNAL_RULE if external else ""), render(content, bodies)
+    data = await llm._chat_json(profile, profile.model_answer, system, user, usage, max_tokens=MAX_TOKENS)
     if not isinstance(data, dict):
         raise ValueError("AI_BAD_OUTPUT: not a JSON object")
     out = merge(content, data, external)
+    out = await refill_notes(profile, content, out, system, user, external, usage, trace)
     v = data.get("summary")
     has_sentence = isinstance(v, dict) and _sentence(v.get("resolution"), {r["ref"] for r in content["records"]}) is not None
     texts = record_texts(content, bodies)

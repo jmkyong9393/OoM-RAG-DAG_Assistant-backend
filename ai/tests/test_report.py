@@ -140,17 +140,20 @@ TWO_FIXES = {**CONTENT,
 BOTH_FIXES = {"text": "풀을 20 으로 늘리고 타임아웃을 3초로 줄였습니다.", "refs": ["N5", "N3"]}
 
 
-def _llm(monkeypatch, main: dict, small: dict | None = None) -> list[dict]:
-    """본 호출에는 main, 작은 호출에는 small[그 지시문]을 돌려주는 가짜 LLM(값이 예외면 던진다). 부른 호출을 순서대로 남긴다."""
+def _llm(monkeypatch, main, small: dict | None = None) -> list[dict]:
+    """본 호출에는 main(목록이면 부를 때마다 다음 것, 끝나면 마지막 것), 작은 호출에는 small[그 지시문]을 돌려주는 가짜 LLM(값이 예외면 던진다).
+    부른 호출을 순서대로 남긴다."""
     calls: list[dict] = []
+    mains = list(main) if isinstance(main, list) else [main]
 
     async def chat(profile, model, system, user, usage, max_tokens=None):
         calls.append({"system": system, "user": user, "max_tokens": max_tokens})
         usage.prompt_tokens += 10
         usage.completion_tokens += 2
         if system.startswith(report.SYSTEM):
-            return main
-        answer = next(v for k, v in (small or {}).items() if system.startswith(k))   # 예상하지 않은 작은 호출이면 StopIteration 으로 드러난다
+            answer = mains.pop(0) if len(mains) > 1 else mains[0]
+        else:
+            answer = next(v for k, v in (small or {}).items() if system.startswith(k))   # 예상하지 않은 작은 호출이면 StopIteration 으로 드러난다
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -161,8 +164,12 @@ def _llm(monkeypatch, main: dict, small: dict | None = None) -> list[dict]:
     return calls
 
 
+# 번호별 칸(원인 설명 · 추가 문제 메모)까지 채운 본 호출 응답 — 이것이 빠지면 본 호출을 한 번 더 부른다
+NOTES = {"causes": {"N2": {"text": "풀이 작아 대기가 쌓였습니다.", "refs": ["N2"]}}, "side_issues": {"N4": {"text": "연결 한도를 넘었습니다.", "refs": ["N4"]}}}
+
+
 def _summary(fix) -> dict:
-    return {"summary": {**SUMMARY, "resolution": fix}}
+    return {"summary": {**SUMMARY, "resolution": fix}, **NOTES}
 
 
 async def test_fix_sentence_that_cites_every_fix_is_not_refetched(monkeypatch):
@@ -229,7 +236,7 @@ ACTION_LINES = ["N5 (조치) 풀 사용률 경보 추가 — 풀 사용률 80% �
 
 
 def _main(*prevention) -> dict:
-    return {"summary": SUMMARY, "prevention": list(prevention)}
+    return {"summary": SUMMARY, "prevention": list(prevention), **NOTES}
 
 
 async def _fill(content=ACTED, bodies=ACTED_BODIES, external=False):
@@ -313,6 +320,40 @@ async def test_both_small_calls_run_when_both_cells_fall_short(monkeypatch):
     out, usage, _ = await _fill(two)
     assert len(calls) == 3 and out["summary"][-1]["refs"] == ["N3", "N8"] and [s["refs"] for s in out["prevention"]] == [["N6"]]
     assert usage.prompt_tokens == 30
+
+
+WRONG_KEY = {"summary": SUMMARY, "impact": [{"text": "응답이 지연됐습니다.", "refs": ["N1"]}], "causes": NOTES["causes"],
+             "side_issues": {"N6": {"text": "예시 번호를 그대로 쓴 메모입니다.", "refs": ["N5"]}}}   # 지시문의 예시 번호를 키로 쓴 응답 — N4 의 메모가 빠진다
+
+
+async def test_missing_note_is_refilled_by_calling_the_main_prompt_again(monkeypatch):
+    """추가 문제 메모가 빠지면 본 호출을 같은 입력으로 한 번 더 불러 빠진 칸만 채운다 — 다른 칸은 첫 응답 그대로, 토큰은 더한다."""
+    second = {"summary": {"problem": {"text": "다르게 쓴 문제입니다.", "refs": ["N1"]}}, "impact": [],
+              "causes": {"N2": {"text": "다르게 쓴 원인 설명입니다.", "refs": ["N2"]}}, "side_issues": NOTES["side_issues"]}
+    calls = _llm(monkeypatch, [WRONG_KEY, second])
+    usage, trace = llm.Usage(), {}
+    out = await report.fill(profile(), CONTENT, BODIES, True, usage, trace)
+    assert len(calls) == 2 and calls[1] == calls[0] and calls[0]["system"] == report.SYSTEM + report.EXTERNAL_RULE   # 같은 지시문 · 같은 입력
+    assert out["side_issues"][0]["note"] == NOTES["side_issues"]["N4"]
+    assert out["summary"][0]["text"] == SUMMARY["problem"]["text"] and out["impact"] == WRONG_KEY["impact"]        # 첫 응답의 문장은 그대로
+    assert out["causes"][0]["explanation"] == NOTES["causes"]["N2"]                                                 # 이미 있던 칸도 그대로
+    assert (usage.prompt_tokens, usage.completion_tokens) == (20, 4) and trace["notes"] == {"missing": ["N4"], "filled": ["N4"]}
+
+
+async def test_missing_cause_explanation_is_refilled_too(monkeypatch):
+    calls = _llm(monkeypatch, [{"summary": SUMMARY, "side_issues": NOTES["side_issues"]}, {"summary": SUMMARY, **NOTES}])
+    out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage())
+    assert len(calls) == 2 and out["causes"][0]["explanation"] == NOTES["causes"]["N2"] and out["side_issues"][0]["note"] == NOTES["side_issues"]["N4"]
+
+
+@pytest.mark.parametrize("second", [WRONG_KEY, ["not", "an", "object"], RuntimeError("timeout")])
+async def test_note_stays_empty_when_the_second_call_does_not_help(monkeypatch, second):
+    """다시 불러도 빠지거나 그 호출이 실패하면 빈 칸으로 둔다 — 한 번만 다시 부르고, 보고서는 그대로 끝난다."""
+    calls = _llm(monkeypatch, [WRONG_KEY, second])
+    trace = {}
+    out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage(), trace)
+    assert len(calls) == 2 and out["side_issues"][0]["note"] is None and out["summary"][0]["text"] == SUMMARY["problem"]["text"]
+    assert trace["notes"]["filled"] == []
 
 
 def _insert(admin_conn, content: dict, audience: str = "internal") -> int:
@@ -503,8 +544,9 @@ def test_check_script_counts_missing_causes_and_fixes():
     assert (t["fix_refetched"], t["prevention_supplemented"], t["prevention_added"], t["prevention_dropped"]) == (0, 0, 0, {})   # 작은 호출 기록이 없는 행
     small = rc.totals([{"score": s, "small_calls": {"fix": {"accepted": True}, "prevention": {"added": [1, 2], "dropped": [["기록에 없는 낱말", "…"]]}}},
                        {"score": s, "small_calls": {"prevention": {"added": [], "dropped": [["기록에 없는 낱말", "…"], ["같은 기록의 둘째 문장", "…"]], "error": "x"}}},
-                       {"score": s, "small_calls": {}}])
+                       {"score": s, "small_calls": {"notes": {"missing": ["N4", "N5"], "filled": ["N4"]}}}])
     assert (small["fix_refetched"], small["fix_refetch_accepted"], small["prevention_supplemented"], small["prevention_added"]) == (1, 1, 2, 2)
     assert small["prevention_dropped"] == {"기록에 없는 낱말": 2, "같은 기록의 둘째 문장": 1} and small["small_call_errors"] == 1
+    assert (small["notes_refilled_reports"], small["notes_missing"], small["notes_filled"], t["notes_refilled_reports"]) == (1, 2, 1, 0)
     blank = rc.facts_only(report.merge(CONTENT, data))
     assert blank["summary"] == [] and blank["causes"][0]["explanation"] is None and blank["records"] == CONTENT["records"]

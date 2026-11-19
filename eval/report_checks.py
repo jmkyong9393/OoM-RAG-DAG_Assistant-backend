@@ -6,6 +6,7 @@
   제목 낱말 기준은 바꿔 말한 표현을 놓친다 — 빠짐으로 나온 것은 --list 로 뽑아 요약과 대조해 확정한다. 기록에 없는 말은 세지 못한다: --json 파일의 input · ai 를 읽어 확인한다.
   해결 요약의 근거(해결 기록이 없음 · 일부만 댐)도 센다. 작은 호출(해결 문장 다시 받기 · 재발 방지 보완)이 돈 수와 더한 문장 · 버린 문장은 --refill 일 때만 센다
   (저장된 보고서에는 그 기록이 없다) — --json 의 small_calls 에 건마다 넘긴 기록 · 더한 문장 · 버린 문장과 이유가 남는다.
+  번호별 칸(원인 설명 · 추가 문제 메모)이 빠져 본 호출을 한 번 더 부른 보고서 수와 채운 칸 수도 같이 센다.
 
 실행: set -a; . deploy/.env; set +a; cd ai && uv run python ../eval/report_checks.py [--refill] [--ws 1] [--limit 5] [--list] [--json 결과경로]
       (api 가 떠 있어야 한다. PORT · SEED_PASSWORD 는 deploy/.env)
@@ -118,9 +119,11 @@ def small_call_totals(rows: list[dict]) -> dict:
     for m in more:
         for why, _ in m["dropped"]:
             dropped[why] = dropped.get(why, 0) + 1
-    return {"fix_refetched": len(fix), "fix_refetch_accepted": sum(1 for f in fix if f["accepted"]),
+    notes = [r["small_calls"]["notes"] for r in rows if (r.get("small_calls") or {}).get("notes")]
+    return {"notes_refilled_reports": len(notes), "notes_missing": sum(len(n["missing"]) for n in notes), "notes_filled": sum(len(n["filled"]) for n in notes),
+            "fix_refetched": len(fix), "fix_refetch_accepted": sum(1 for f in fix if f["accepted"]),
             "prevention_supplemented": len(more), "prevention_added": sum(len(m["added"]) for m in more), "prevention_dropped": dropped,
-            "small_call_errors": sum(1 for x in fix + more if x.get("error"))}
+            "small_call_errors": sum(1 for x in fix + more + notes if x.get("error"))}
 
 
 def totals(rows: list[dict]) -> dict:
@@ -270,6 +273,7 @@ async def main() -> int:
     print(f"해결 요약의 근거에 해결 기록이 없음 {t['note_without_fix_ref']}   해결 기록이 여럿인데 일부만 근거로 댐 {t['note_partial_fix_refs']}/{t['multi_fix']}")
     if a.refill:
         why = " · ".join(f"{k} {v}" for k, v in t["prevention_dropped"].items()) or "없음"
+        print(f"번호별 칸이 빠져 본 호출을 한 번 더 부른 보고서 {t['notes_refilled_reports']}건(빠진 칸 {t['notes_missing']} 중 채운 것 {t['notes_filled']})")
         print(f"해결 문장을 따로 다시 받은 보고서 {t['fix_refetched']}건(받아들인 것 {t['fix_refetch_accepted']})   "
               f"재발 방지 보완 호출 {t['prevention_supplemented']}건 · 더한 문장 {t['prevention_added']} · 버린 문장: {why}   작은 호출 실패 {t['small_call_errors']}")
     if open_rows:
