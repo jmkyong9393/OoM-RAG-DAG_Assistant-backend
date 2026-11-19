@@ -30,6 +30,8 @@ POLICY_VERSION = (m.group(1) if _POLICY.exists() and (m := re.search(r"판:\s*([
 
 TABLES_IN_ORDER = ["tenants", "workspaces", "users", "workspace_members", "log_nodes", "log_edges",
                    "policy_documents", "policy_chunks", "audit_log"]
+# 표시(category)가 붙을 수 있는 기록 유형 — API 의 R14 와 같다
+CATEGORY_TYPE = {"cause": "fail", "prevention": "success"}
 
 
 def validate() -> list[str]:
@@ -59,12 +61,17 @@ def validate() -> list[str]:
                     problems.append(f"node {n['id']}: R12 위반 — success 의 부모 {p} 도 success")
         if not (n.get("body") or "").strip():
             problems.append(f"node {n['id']}: body 비어 있음 (정제·검색 품질 저하)")
+        cat = n.get("category")
+        if cat and (cat not in CATEGORY_TYPE or n["type"] != CATEGORY_TYPE[cat] or n["id"] not in children):
+            problems.append(f"node {n['id']}: R14 위반 — category {cat!r} 는 상위가 있는 {CATEGORY_TYPE.get(cat, 'fail·success')} 기록에만")
     for e in edges:
         a, b = nodes.get(e["parent_id"]), nodes.get(e["child_id"])
         if not a or not b:
             problems.append(f"edge {e['parent_id']}→{e['child_id']}: 노드 없음")
         elif a["workspace_id"] != b["workspace_id"]:
             problems.append(f"edge {e['parent_id']}→{e['child_id']}: 워크스페이스가 다름")
+        elif b["created_at"] < a["created_at"]:
+            problems.append(f"edge {e['parent_id']}→{e['child_id']}: 하위 기록의 시각이 상위보다 앞섬 (보고서 경과가 뒤집힌다)")
     return problems
 
 
@@ -114,12 +121,20 @@ def main():
                            ON CONFLICT DO NOTHING""", (m["workspace_id"], m["role"], m["user_id"]))
         for n in load("log_nodes.json"):
             cur.execute("""INSERT INTO log_nodes (id, workspace_id, type, status, title, body, author_id, error_code, keywords, resolution_summary,
-                             refine_status, last_confirmed_at, deprecated_via, deprecate_reason, resolved_at, resolve_note, source, source_ref, created_at)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING""",
+                             refine_status, last_confirmed_at, deprecated_via, deprecate_reason, resolved_at, resolve_note, source, source_ref, created_at, category)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING""",
                         (n["id"], n["workspace_id"], n["type"], n["status"], n["title"], n["body"], n["author_id"], n.get("error_code"),
                          n.get("keywords", []), n.get("resolution_summary"), n.get("refine_status", "pending"), n.get("last_confirmed_at"),
                          n.get("deprecated_via"), n.get("deprecate_reason"), n.get("resolved_at"), n.get("resolve_note"),
-                         n.get("source", "synthetic"), n.get("source_ref"), n["created_at"]))
+                         n.get("source", "synthetic"), n.get("source_ref"), n["created_at"], n.get("category")))
+            # 이미 있는 시드 기록: 표시는 비어 있을 때만 채우고(화면에서 지운 표시도 다시 채워진다) 기록 시각은 시드 값에 맞춘다.
+            # 마지막 확인 시각은 기록 시각보다 앞설 때만 시드 값으로 — 화면에서 다시 확인한 시각은 그대로 둔다
+            cur.execute("""UPDATE log_nodes SET category = coalesce(category, %(cat)s), created_at = %(at)s::timestamptz,
+                             last_confirmed_at = CASE WHEN last_confirmed_at < %(at)s::timestamptz THEN %(seen)s::timestamptz ELSE last_confirmed_at END
+                           WHERE id = %(id)s AND source_ref = %(ref)s
+                             AND ((category IS NULL AND %(cat)s::text IS NOT NULL) OR created_at <> %(at)s::timestamptz
+                                  OR last_confirmed_at < %(at)s::timestamptz)""",
+                        {"id": n["id"], "ref": n.get("source_ref"), "cat": n.get("category"), "at": n["created_at"], "seen": n.get("last_confirmed_at")})
         for e in load("log_edges.json"):
             cur.execute("INSERT INTO log_edges (workspace_id, parent_id, child_id, created_by, origin) VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
                         (e["workspace_id"], e["parent_id"], e["child_id"], e.get("created_by"), e.get("origin", "manual")))
