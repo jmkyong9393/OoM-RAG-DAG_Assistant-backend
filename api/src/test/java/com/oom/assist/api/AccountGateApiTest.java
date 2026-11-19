@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import com.oom.assist.auth.AppPrincipal;
 import com.oom.assist.common.context.TenantContextFilter;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
@@ -125,16 +126,70 @@ class AccountGateApiTest extends AbstractApiTest {
         .isEqualTo(sessions - 3);   // 요청에 쓴 세션 셋이 끝났다
   }
 
+  private AppPrincipal authenticated(long uid, String employeeNo) {
+    return new AppPrincipal(uid, tenant, employeeNo, "이름", true, false,
+        jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(uid).query(String.class).single());
+  }
+
+  private long sessionsOf(String employeeNo) {
+    return jdbc.sql("SELECT count(*) FROM spring_session WHERE principal_name = ?").param(employeeNo).query(Long.class).single();
+  }
+
   @Test
-  void loginIsRecheckedAgainstTheHashUsedForAuthentication() {
-    // 인증과 세션 저장 사이에 재발급이 끝난 로그인은 요청 하나 안의 두 줄 사이라 API 로 겹치지 못한다 — 로그인이 끝에서 부르는 확인을 직접 본다
-    String used = jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(userBackend).query(String.class).single();
-    assertThat(accountGate.stillValid(userBackend, used)).isTrue();
+  void loginIsRecheckedAgainstThePasswordUsedForAuthentication() {
+    // 인증과 세션 저장 사이는 요청 하나 안의 두 줄 사이라 API 로 겹치지 못한다 — 로그인이 끝에서 부르는 확인을 직접 본다
+    AppPrincipal backend = authenticated(userBackend, empBackend);
+    assertThat(accountGate.stillValid(backend)).isTrue();
     jdbc.sql("UPDATE users SET password_hash = ? WHERE id = ?").params(encoder.encode(NEW_PASSWORD), userBackend).update();   // 인증 뒤 재발급
-    assertThat(accountGate.stillValid(userBackend, used)).isFalse();
-    String lead = jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(userLead).query(String.class).single();
+    assertThat(accountGate.stillValid(backend)).isFalse();
+    AppPrincipal lead = authenticated(userLead, empLead);
     jdbc.sql("UPDATE users SET status = 'inactive' WHERE id = ?").param(userLead).update();                                   // 인증 뒤 비활성화
-    assertThat(accountGate.stillValid(userLead, lead)).isFalse();
+    assertThat(accountGate.stillValid(lead)).isFalse();
+  }
+
+  @Test
+  void sessionEndsWhenThePasswordChangesAfterLogin() throws Exception {
+    Cookie c = cookieOf(login(empBackend, PASSWORD));
+    logs(c).andExpect(status().isOk());
+    long sessions = sessionsOf(empBackend);   // 세션 저장은 테스트 트랜잭션 밖이라 다른 테스트의 행이 남아 있다 — 차이로 센다
+    // 세션 행은 남기고 비밀번호만 바꾼다 — 재발급과 겹친 로그인이 남긴 세션과 같은 상태
+    jdbc.sql("UPDATE users SET password_hash = ?, password_changed_at = now() WHERE id = ?").params(encoder.encode(NEW_PASSWORD), userBackend).update();
+    logs(c).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    assertThat(sessionsOf(empBackend)).isEqualTo(sessions - 1);                   // 그 세션은 끝났다
+    mvc.perform(get("/workspaces").cookie(c)).andExpect(status().isOk());        // 끝난 쿠키로도 공개 API 는 된다 — 로그인 화면이 401 로 돌지 않는다
+    logs(cookieOf(login(empBackend, NEW_PASSWORD))).andExpect(status().isOk());
+  }
+
+  @Test
+  void changingOwnPasswordKeepsThisSessionAndEndsTheOthers() throws Exception {
+    Cookie here = cookieOf(login(empBackend, PASSWORD)), other = cookieOf(login(empBackend, PASSWORD));
+    long sessions = sessionsOf(empBackend);
+    changePassword(here, PASSWORD, NEW_PASSWORD).andExpect(status().isNoContent());
+    logs(here).andExpect(status().isOk());                                        // 바꾼 세션은 이어진다
+    mvc.perform(get("/me").cookie(here)).andExpect(status().isOk());
+    mvc.perform(get("/me").cookie(other)).andExpect(status().isUnauthorized());   // 옛 비밀번호로 만든 다른 세션은 끝난다
+    assertThat(sessionsOf(empBackend)).isEqualTo(sessions - 1);
+  }
+
+  @Test
+  void loginWithAStaleSessionCookieIsNotBlocked() throws Exception {
+    Cookie stale = cookieOf(login(empBackend, PASSWORD));
+    jdbc.sql("UPDATE users SET password_hash = ?, password_changed_at = now() WHERE id = ?").params(encoder.encode(NEW_PASSWORD), userBackend).update();
+    // 로그인 화면에 옛 세션의 쿠키가 남아 있어도 새 비밀번호로 한 번에 들어간다
+    mvc.perform(post("/auth/login").cookie(stale).contentType(MediaType.APPLICATION_JSON)
+        .content("{\"employee_no\": \"" + empBackend + "\", \"password\": \"" + NEW_PASSWORD + "\"}")).andExpect(status().isOk());
+  }
+
+  @Test
+  void sessionOfAnAccountThatNoLongerExistsEnds() throws Exception {
+    long gone = user("삭제될 계정", "사원", "T0009", "gone@test.local");
+    Cookie c = cookieOf(login("T0009", PASSWORD));
+    long sessions = sessionsOf("T0009");
+    jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(gone).update();
+    jdbc.sql("DELETE FROM users WHERE id = ?").param(gone).update();
+    mvc.perform(get("/auth/password-policy").cookie(c)).andExpect(status().isUnauthorized());   // 공개 API 여도 그 세션으로는 401
+    assertThat(sessionsOf("T0009")).isEqualTo(sessions - 1);
+    mvc.perform(get("/auth/password-policy").cookie(c)).andExpect(status().isOk());
   }
 
   @Test
