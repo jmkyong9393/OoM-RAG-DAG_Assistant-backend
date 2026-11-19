@@ -83,6 +83,16 @@ public class AccountGate implements HandlerInterceptor {
     return true;
   }
 
+  /**
+   * 로그인의 끝에서 다시 확인한다 — 인증에 쓴 해시가 지금도 그 계정의 해시이고 계정이 활성인가.
+   * 인증(비밀번호 대조)과 세션 저장 사이에 재발급이나 비활성화가 끝나면, 그쪽의 세션 삭제는 아직 없는 세션을 지우지 못하고 이 로그인의 세션이 남는다.
+   * 행을 잠그지 않고 읽기만 한다(로그인마다 계정 행을 잠그지 않는다).
+   */
+  public boolean stillValid(long userId, String authenticatedHash) {
+    return authenticatedHash != null && jdbc.sql("SELECT EXISTS (SELECT 1 FROM users WHERE id = ? AND status = 'active' AND password_hash = ?)")
+        .params(userId, authenticatedHash).query(Boolean.class).single();
+  }
+
   private static boolean open(HttpServletRequest req) {
     String path = req.getRequestURI().substring(req.getContextPath().length());
     return OPEN.contains(req.getMethod() + " " + path) || path.startsWith("/actuator/");

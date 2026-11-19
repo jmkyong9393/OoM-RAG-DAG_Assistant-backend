@@ -96,11 +96,13 @@ public class AuthController {
       }
       throw ApiException.unauthorized();                          // 계정 존재 여부를 드러내지 않는다
     }
+    AppPrincipal p = (AppPrincipal) auth.getPrincipal();
+    // 인증하는 사이에 재발급 · 비활성화가 끝났으면 세션을 만들지 않는다 — 그쪽의 세션 삭제가 이 로그인의 세션은 지우지 못했다
+    if (!gate.stillValid(p.id(), p.takeAuthenticatedHash())) throw ApiException.unauthorized();
     SecurityContext ctx = SecurityContextHolder.createEmptyContext();
     ctx.setAuthentication(auth);
     SecurityContextHolder.setContext(ctx);
     contextRepo.saveContext(ctx, req, res);                      // 세션 생성 → 쿠키
-    AppPrincipal p = (AppPrincipal) auth.getPrincipal();
     attempts.recordSuccess(p.id(), p.employeeNo(), ip);
     return loadMe(p.id()).orElseThrow(ApiException::unauthorized);
   }

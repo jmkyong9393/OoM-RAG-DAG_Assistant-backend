@@ -59,6 +59,9 @@ class AccountGateApiTest extends AbstractApiTest {
     mvc.perform(get("/auth/password-policy").cookie(c)).andExpect(status().isOk());
     mvc.perform(get("/auth/privacy-policy").cookie(c)).andExpect(status().isOk());
     mvc.perform(get("/workspaces").cookie(c)).andExpect(status().isOk());
+    int health = mvc.perform(get("/actuator/health")).andReturn().getResponse().getStatus();   // 로그인 없이 부른 응답
+    assertThat(health).isIn(200, 503);
+    mvc.perform(get("/actuator/health").cookie(c)).andExpect(status().is(health));              // 로그인했다고 막지 않는다
     mvc.perform(post("/auth/consent").cookie(c)).andExpect(status().isNoContent());
     // 비밀번호를 바꾸면 같은 세션에서 바로 풀린다
     changePassword(c, temp, NEW_PASSWORD).andExpect(status().isNoContent());
@@ -120,6 +123,18 @@ class AccountGateApiTest extends AbstractApiTest {
     mvc.perform(get("/me").cookie(c)).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     assertThat(jdbc.sql("SELECT count(*) FROM spring_session WHERE principal_name = ?").param(empLead).query(Long.class).single())
         .isEqualTo(sessions - 3);   // 요청에 쓴 세션 셋이 끝났다
+  }
+
+  @Test
+  void loginIsRecheckedAgainstTheHashUsedForAuthentication() {
+    // 인증과 세션 저장 사이에 재발급이 끝난 로그인은 요청 하나 안의 두 줄 사이라 API 로 겹치지 못한다 — 로그인이 끝에서 부르는 확인을 직접 본다
+    String used = jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(userBackend).query(String.class).single();
+    assertThat(accountGate.stillValid(userBackend, used)).isTrue();
+    jdbc.sql("UPDATE users SET password_hash = ? WHERE id = ?").params(encoder.encode(NEW_PASSWORD), userBackend).update();   // 인증 뒤 재발급
+    assertThat(accountGate.stillValid(userBackend, used)).isFalse();
+    String lead = jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(userLead).query(String.class).single();
+    jdbc.sql("UPDATE users SET status = 'inactive' WHERE id = ?").param(userLead).update();                                   // 인증 뒤 비활성화
+    assertThat(accountGate.stillValid(userLead, lead)).isFalse();
   }
 
   @Test
