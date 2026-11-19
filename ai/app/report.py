@@ -246,7 +246,7 @@ def guard(text: str, src: str) -> str | None:
 
 
 def checked_prevention(raw, texts: dict[str, str], given: list[str]) -> tuple[list[dict], list[list[str]]]:
-    """보완 호출의 응답에서 (실을 문장, 버린 [이유, 문장]). 근거가 넘긴 기록이고, 기록 하나에 한 문장이며, guard 를 통과해야 싣는다."""
+    """보완 호출의 응답에서 (실을 문장, 버린 [이유, 문장]). 근거가 넘긴 기록이고, 기록 하나에 한 문장이며, '니다'로 끝나고, guard 를 통과해야 싣는다."""
     kept, dropped, used = [], [], set()
     for x in (raw.get("prevention") if isinstance(raw, dict) and isinstance(raw.get("prevention"), list) else [])[:LIST_MAX]:
         if not isinstance(x, dict) or not isinstance(x.get("text"), str) or not x["text"].strip():
@@ -254,6 +254,7 @@ def checked_prevention(raw, texts: dict[str, str], given: list[str]) -> tuple[li
         text = x["text"].strip()
         refs = list(dict.fromkeys(r for r in (x.get("refs") if isinstance(x.get("refs"), list) else []) if isinstance(r, str) and r in given))
         why = ("입력에 없는 근거 번호" if not refs else "같은 기록의 둘째 문장" if used.intersection(refs)
+               else "'니다'로 끝나지 않음" if not text.rstrip(".").endswith("니다")   # 기록의 메모 말투를 그대로 옮긴 문장
                else guard(text, " ".join(texts[r] for r in refs)))
         if why:
             dropped.append([why, text])
