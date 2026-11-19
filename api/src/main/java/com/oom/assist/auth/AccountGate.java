@@ -19,6 +19,8 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -30,6 +32,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 컨트롤러마다 넣지 않고 인터셉터 한 곳에 둔다(새 API 를 만들 때 빠지지 않게). 컨트롤러 전에 돌아서 스트리밍(POST /chat)도 스트림을 열기 전에 JSON 으로 거절된다.
  * 값은 요청마다 DB 에서 읽는다 — 세션에 넣어 두면 동의하거나 비밀번호를 바꾼 직후 같은 세션에서 풀리지 않고, 만료 · 판 변경은 로그인한 뒤에도 생긴다.
  * 판정은 GET /me 의 consent_required · must_change_password 와 같은 메서드를 쓴다(AuthController.loadMe) — 화면은 게이트로 보내는데 서버는 통과시키는 경우가 없게.
+ * 같은 조회에서 계정이 활성인지도 본다 — 비활성 계정의 요청은 열어 두는 API 까지 모두 401(비활성 계정의 로그인과 같은 응답)이고 그 세션을 끝낸다.
+ * 비활성화할 때 세션을 지우지만(UserAdminController), 그 순간 진행 중이던 로그인은 세션을 남길 수 있다. 이 확인이 그 세션을 막는 두 번째 장치다.
  */
 @Component
 public class AccountGate implements HandlerInterceptor {
@@ -59,14 +63,19 @@ public class AccountGate implements HandlerInterceptor {
   public boolean preHandle(HttpServletRequest req, HttpServletResponse res, Object handler) {
     if (req.getDispatcherType() != DispatcherType.REQUEST) return true;   // 스트리밍의 두 번째 디스패치 · 오류 디스패치는 이미 확인을 거쳤다
     Optional<Long> uid = CurrentUser.id();
-    if (uid.isEmpty() || open(req)) return true;
+    if (uid.isEmpty()) return true;
     String version = policyVersion();
     Optional<Map<String, Object>> row = jdbc.sql("""
-          SELECT must_change_password, password_changed_at, consented_at,
+          SELECT status, must_change_password, password_changed_at, consented_at,
                  EXISTS (SELECT 1 FROM user_consents c WHERE c.user_id = users.id AND c.policy_version = ?::text) AS consented_current
           FROM users WHERE id = ?""").params(version, uid.get()).query().listOfRows().stream().findFirst();
     if (row.isEmpty()) return true;
     Map<String, Object> u = row.get();
+    if (!"active".equals(u.get("status"))) {
+      new SecurityContextLogoutHandler().logout(req, res, SecurityContextHolder.getContext().getAuthentication());   // 세션 무효화 → 쿠키 만료 (로그아웃과 같다)
+      throw ApiException.unauthorized();
+    }
+    if (open(req)) return true;
     if (consentRequired(version, u.get("consented_at"), Boolean.TRUE.equals(u.get("consented_current"))))
       throw new ApiException(HttpStatus.FORBIDDEN, "CONSENT_REQUIRED", "consent to the privacy policy first (POST /auth/consent)");
     if (mustChangePassword(Boolean.TRUE.equals(u.get("must_change_password")), (Timestamp) u.get("password_changed_at")))

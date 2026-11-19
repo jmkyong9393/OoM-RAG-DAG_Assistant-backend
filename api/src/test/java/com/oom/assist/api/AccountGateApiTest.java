@@ -1,5 +1,6 @@
 package com.oom.assist.api;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -82,7 +83,10 @@ class AccountGateApiTest extends AbstractApiTest {
   @Test
   void accountWithoutCurrentConsentMustConsentFirst() throws Exception {
     clearConsent(userBackend);   // 동의 이력이 없는 계정
-    logs(cookieOf(login(empBackend, PASSWORD))).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CONSENT_REQUIRED"));
+    Cookie first = cookieOf(login(empBackend, PASSWORD));
+    logs(first).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("CONSENT_REQUIRED"));
+    mvc.perform(post("/auth/consent").cookie(first)).andExpect(status().isNoContent());
+    logs(first).andExpect(status().isOk());   // 동의하면 같은 세션에서 바로 풀린다
     clearConsent(userLead);      // 옛 판에만 동의한 계정
     jdbc.sql("UPDATE users SET consented_at = now() - interval '10 days' WHERE id = ?").param(userLead).update();
     jdbc.sql("INSERT INTO user_consents (user_id, policy_version, consented_at) VALUES (?, 'v1', now() - interval '10 days')").param(userLead).update();
@@ -102,6 +106,20 @@ class AccountGateApiTest extends AbstractApiTest {
     logs(c).andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("PASSWORD_CHANGE_REQUIRED"));
     changePassword(c, temp, NEW_PASSWORD).andExpect(status().isNoContent());
     logs(c).andExpect(status().isOk());
+  }
+
+  @Test
+  void inactiveAccountWithSurvivingSessionGets401AndTheSessionEnds() throws Exception {
+    member(company, userLead, "admin");   // 배종현: 회사 관리자(GET /audit)이고 SW 개발의 admin(PATCH /workspaces/{id})
+    Cookie a = cookieOf(login(empLead, PASSWORD)), b = cookieOf(login(empLead, PASSWORD)), c = cookieOf(login(empLead, PASSWORD));
+    jdbc.sql("UPDATE users SET status = 'inactive' WHERE id = ?").param(userLead).update();   // 세션 행은 남겨 둔다 — 비활성화와 겹친 로그인이 남긴 세션과 같은 상태
+    long sessions = jdbc.sql("SELECT count(*) FROM spring_session WHERE principal_name = ?").param(empLead).query(Long.class).single();
+    mvc.perform(get("/audit").cookie(a)).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    mvc.perform(patch("/workspaces/" + wsSw).cookie(b).contentType(MediaType.APPLICATION_JSON).content("{\"policy_enabled\": true}"))
+        .andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    mvc.perform(get("/me").cookie(c)).andExpect(status().isUnauthorized()).andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    assertThat(jdbc.sql("SELECT count(*) FROM spring_session WHERE principal_name = ?").param(empLead).query(Long.class).single())
+        .isEqualTo(sessions - 3);   // 요청에 쓴 세션 셋이 끝났다
   }
 
   @Test
