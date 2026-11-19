@@ -1,18 +1,20 @@
 """규정-사례 대조표(data/alignment/*.json)를 사례 노드의 근거 조문으로 적재한다.
 
-대조표의 한 줄(로그 파일·ref → 규정 slug·조문·관계)을 log_nodes.attributes.policy_refs 에 쓴다. 노드 id 는 data/logs/<파일>.ids.json 에서 찾는다.
+대조표의 한 줄(로그 파일·ref → 규정 slug·조문·관계)을 log_nodes.attributes.policy_refs 에 쓴다. 노드 id 는 DB 에서 찾는다(로그 파일의 ref → source_ref → 그 부서의 노드. scripts/log_ids.py) — DB 마다 번호가 달라 *.ids.json 은 쓰지 않는다.
   [{"policy": "retail-deploy-incident-2026-11", "article": "제12조", "relation": "follows", "note": "…"}]   # follows | exception
   [{"relation": "gap", "topic": "…", "note": "…"}]                                                          # 규정에 기준이 없음
 재실행하면 같은 값으로 덮어쓴다(멱등). 대조표에 없는 노드의 policy_refs 는 건드리지 않는다.
 가리키는 조문이 그 부서에서 검색되는 활성 문서에 없으면 경고만 낸다(답변에는 실리지 않는다) — 규정을 먼저 적재한다(make index).
 
-사용: python scripts/load_alignment.py [대조표...] [--dry-run]    (먼저 make load-logs 로 *.ids.json 을 만든다)
+사용: python scripts/load_alignment.py [대조표...] [--dry-run]    (먼저 make load-logs 로 로그를 적재한다)
 환경: DATABASE_URL (기본 postgresql://oom:oom@localhost:5432/oom) — make link-policies 는 deploy/.env 를 읽는다
 """
 import argparse, json, os, pathlib, sys
 
 import psycopg
 from psycopg.types.json import Jsonb
+
+from log_ids import node_ids
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DSN = os.environ.get("DATABASE_URL", "postgresql://oom:oom@localhost:5432/oom")
@@ -32,12 +34,7 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
         if link.get("relation") not in RELATIONS:
             sys.exit(f"{path.name}: relation 은 {RELATIONS} 중 하나 — {link}")
         log = link["log"]
-        if log not in ids:
-            f = ROOT / "data" / "logs" / f"{log}.ids.json"
-            if not f.exists():
-                sys.exit(f"{path.name}: {f.name} 이 없다. make load-logs 를 먼저 실행한다")
-            ids[log] = json.loads(f.read_text(encoding="utf-8"))
-        node = ids[log]["ref"].get(link["ref"])
+        node = node_ids(conn, log, ids)["ref"].get(link["ref"])
         if node is None:
             warn.append(f"ref 없음: {log}/{link['ref']}")
             continue
@@ -46,7 +43,7 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
     for (node, ws), links in by_node.items():
         row = conn.execute("SELECT workspace_id FROM log_nodes WHERE id = %s", (node,)).fetchone()
         if not row or row[0] != ws:
-            warn.append(f"노드 {node} 가 ws{ws} 에 없다 — ids.json 이 지금 DB 와 다르다(make load-logs 다시)")
+            warn.append(f"노드 {node} 가 ws{ws} 에 없다")
             continue
         for link in links:
             if link["relation"] == "gap":

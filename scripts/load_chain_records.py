@@ -2,35 +2,28 @@
 
   "resolutions":  [{"log": "it-dev_v1", "root": "d6-root", "resolved_by": ["d6-jitter", "d6-fallback"], "why": "…"}]
   "edge_reasons": [{"log": "it-dev_v1", "parent": "d6-ttl", "child": "d6-jitter", "reason": "…"}]
-노드 id 는 data/logs/<파일>.ids.json 에서 찾는다. 재실행하면 같은 값으로 덮어쓴다(멱등) — 적힌 장애 건의 해결 기록은 통째로 바뀐다.
+노드 id 는 DB 에서 찾는다(로그 파일의 ref → source_ref → 그 부서의 노드. scripts/log_ids.py) — DB 마다 번호가 달라 *.ids.json 은 쓰지 않는다. 재실행하면 같은 값으로 덮어쓴다(멱등) — 적힌 장애 건의 해결 기록은 통째로 바뀐다.
 해결 기록은 그 장애 건의 활성 success 자손만, 연결 사유는 이미 있는 간선에만 쓴다. 맞지 않으면 경고하고 그 줄은 건너뛴다.
 완료된 장애 건은 완료 시각(resolved_at)을 마지막 해결 기록의 시각으로 맞춘다 — 완료되지 않은 장애 건은 건드리지 않는다.
 
-사용: python scripts/load_chain_records.py [파일...] [--dry-run]    (먼저 make load-logs 로 *.ids.json 을 만든다)
+사용: python scripts/load_chain_records.py [파일...] [--dry-run]    (먼저 make load-logs 로 로그를 적재한다)
 환경: DATABASE_URL (기본 postgresql://oom:oom@localhost:5432/oom) — make link-chains 는 deploy/.env 를 읽는다
 """
 import argparse, json, os, pathlib, sys
 
 import psycopg
 
+from log_ids import node_ids
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DSN = os.environ.get("DATABASE_URL", "postgresql://oom:oom@localhost:5432/oom")
-
-
-def node_ids(log: str, cache: dict) -> dict:
-    if log not in cache:
-        f = ROOT / "data" / "logs" / f"{log}.ids.json"
-        if not f.exists():
-            sys.exit(f"{f.name} 이 없다. make load-logs 를 먼저 실행한다")
-        cache[log] = json.loads(f.read_text(encoding="utf-8"))
-    return cache[log]
 
 
 def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
     doc = json.loads(path.read_text(encoding="utf-8"))
     cache, warn, roots, edges = {}, [], 0, 0
     for r in doc.get("resolutions", []):
-        ids = node_ids(r["log"], cache)
+        ids = node_ids(conn, r["log"], cache)
         ws, root = ids["workspace_id"], ids["ref"].get(r["root"])
         nodes = [ids["ref"].get(x) for x in r["resolved_by"]]
         if root is None or None in nodes:
@@ -55,7 +48,7 @@ def load(conn, path: pathlib.Path, dry: bool) -> tuple[int, int, list[str]]:
                             WHERE id = %s AND resolved_at IS NOT NULL""", (nodes, root))
         roots += 1
     for e in doc.get("edge_reasons", []):
-        ids = node_ids(e["log"], cache)
+        ids = node_ids(conn, e["log"], cache)
         p, c = ids["ref"].get(e["parent"]), ids["ref"].get(e["child"])
         reason = (e.get("reason") or "").strip()
         if p is None or c is None or not reason or len(reason) > 300:
