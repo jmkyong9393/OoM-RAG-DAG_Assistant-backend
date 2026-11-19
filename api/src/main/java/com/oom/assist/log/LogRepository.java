@@ -158,9 +158,10 @@ public class LogRepository {
     jdbc.sql("UPDATE log_nodes SET category = ? WHERE id = ?").params(category, id).update();
   }
 
-  /** 비어 있을 때만 채운다(이미 적재한 fail 기록에). 표시를 바꾸거나 지우지 않는다. */
+  /** 비어 있을 때만 채운다(이미 적재한 기록에 — 원인은 fail, 재발 방지는 success). 표시를 바꾸거나 지우지 않는다. */
   public void fillCategory(long id, String category) {
-    jdbc.sql("UPDATE log_nodes SET category = ? WHERE id = ? AND category IS NULL AND type = 'fail'").params(category, id).update();
+    jdbc.sql("UPDATE log_nodes SET category = ? WHERE id = ? AND category IS NULL AND type = CASE ? WHEN 'cause' THEN 'fail' ELSE 'success' END")
+        .params(category, id, category).update();
   }
 
   public boolean isRoot(long id) {

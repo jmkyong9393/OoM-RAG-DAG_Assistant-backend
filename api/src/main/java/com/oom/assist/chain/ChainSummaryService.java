@@ -186,7 +186,7 @@ public class ChainSummaryService {
     return SUMMARY_VERSION + ":" + jdbc.sql("""
         WITH t AS (SELECT node_id FROM bfs_levels(:ws, ARRAY[:root]::bigint[], true))
         SELECT md5(
-          coalesce((SELECT string_agg(concat_ws('|', n.id, n.type, n.status, n.category, n.title, n.body), E'\\n' ORDER BY n.id)
+          coalesce((SELECT string_agg(concat_ws('|', n.id, n.type, n.status, CASE WHEN n.category = 'cause' THEN n.category END, n.title, n.body), E'\\n' ORDER BY n.id)
                     FROM log_nodes n WHERE n.id IN (SELECT node_id FROM t)), '')
           || '#' || coalesce((SELECT string_agg(concat_ws('|', e.parent_id, e.child_id, e.reason), E'\\n' ORDER BY e.parent_id, e.child_id)
                     FROM log_edges e WHERE e.parent_id IN (SELECT node_id FROM t)), '')
