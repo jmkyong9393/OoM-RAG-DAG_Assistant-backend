@@ -708,7 +708,7 @@ async def test_marked_sentence_that_fails_a_condition_is_asked_once_more(monkeyp
     calls = _marked_llm(monkeypatch, {"경보": [{"text": "풀 사용률 80% 경보를 추가함."}, {"text": ALARM["text"]}], "공지": {"text": NOTICE["text"]}})
     out, _, trace = await _fill(MARKED)
     assert [s["text"] for s in out["prevention"]] == [ALARM["text"], NOTICE["text"]] and trace["marked"]["fallback"] == []
-    again = [c for c in calls if c["user"].endswith(report.MARKED_AGAIN)]
+    again = [c for c in calls if c["user"].endswith(report.MARKED_AGAIN["내용"])]
     assert len(again) == 1 and "경보" in again[0]["user"] and len(calls) == 4
 
 
@@ -732,3 +732,26 @@ def test_reuse_copies_marked_sentences_only_when_the_marks_are_the_same():
     picked = {**report.merge(ACTED, _main()), "prevention": [{**ALARM, "owner": None, "due": None}]}   # 표시 없이 AI 가 고른 내부용
     assert report.reuse(MARKED, picked, ACTED_BODIES) is None                                    # 그 뒤에 표시했으면 고른 문장을 표시한 것처럼 옮기지 않는다
     assert report.reuse(ACTED, picked, ACTED_BODIES)["prevention"] == picked["prevention"]     # 표시가 없던 그대로면 전처럼 옮긴다
+
+
+TWO = "풀 사용률 경보를 추가했습니다. 풀 사용률 80% 경보를 추가했습니다."   # N5 의 글과 겹치지만 문장이 둘이다
+PLUS = "풀 사용률 경보 + 80% 경보를 추가했습니다."
+LONG = "풀 사용률 80% 경보를 추가했다는 것을 " + "풀 사용률 경보를 추가하고 " * 8 + "추가했습니다."
+
+
+@pytest.mark.parametrize("first,why", [(TWO, "두 문장"), (PLUS, "기호"), (LONG, "길이")])
+async def test_marked_sentence_with_a_wrong_shape_is_asked_again_with_the_reason(monkeypatch, first, why):
+    """모양만 어긋난 문장(두 문장 · '+' 로 이은 메모 말투 · 기록을 통째로 옮긴 긴 문장)은 무엇이 어긋났는지 알려 주고 다시 받는다."""
+    assert report.marked_problem({"text": first}, ACTION_LINES[0]) == why and report.marked_problem({"text": ALARM["text"]}, ACTION_LINES[0]) is None
+    calls = _marked_llm(monkeypatch, {"경보": [{"text": first}, {"text": ALARM["text"]}], "공지": {"text": NOTICE["text"]}})
+    out, _, trace = await _fill(MARKED)
+    assert [s["text"] for s in out["prevention"]] == [ALARM["text"], NOTICE["text"]] and trace["marked"]["loose"] == []
+    assert [c["user"].endswith(report.MARKED_AGAIN[why]) for c in calls if c["system"] == report.SYSTEM_MARKED and "경보" in c["user"]] == [False, True]
+
+
+async def test_marked_sentence_whose_shape_stays_wrong_is_kept_rather_than_the_title(monkeypatch):
+    """다시 받아도 모양만 어긋나면 그 문장을 싣는다(먼저 받은 것) — 제목보다 낫고 내용이 빠지지 않는다. 내용이 어긋난 답은 쓰지 않는다."""
+    _marked_llm(monkeypatch, {"경보": [{"text": TWO}, {"text": PLUS}], "공지": [{"text": "고객에게 사과 공지 + 발송했습니다."}, {"text": "런북을 새로 만들었습니다."}]})
+    out, _, trace = await _fill(MARKED)
+    assert out["prevention"][0]["text"] == TWO and out["prevention"][1]["text"] == "고객에게 사과 공지 + 발송했습니다."
+    assert sorted(trace["marked"]["loose"]) == ["N5", "N6"] and trace["marked"]["fallback"] == []
