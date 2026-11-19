@@ -140,7 +140,7 @@ async def generate(profile: LlmProfile, query: str, policy_ctx: list[dict], chai
         context = _render_context(policy_ctx, chain_ctx)
         # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
         searched = [x for x in policy_ctx if x.get("source") == "search"]
-        must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS))
+        must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS), query=query)
                 + _wording_notes(searched[:3]))
         tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
         async for piece in _chat_stream(profile, profile.model_answer, GENERATE_SYSTEM,
@@ -174,7 +174,8 @@ def _template_answer(query: str, policy_ctx: list[dict], chain_ctx: list[dict]) 
     return [w + " " for w in text.split(" ") if w]
 
 
-def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: set[str] | None = None, asks_cause: bool = False) -> list[str]:
+def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: set[str] | None = None, asks_cause: bool = False,
+                  query: str | None = None) -> list[str]:
     """사례가 있을 때 답변이 빠뜨리기 쉬운 것을 컨텍스트에서 뽑는다 — 규칙만 주면 규정 문장만 쓰고 사례·예외를 건너뛰는 일이 잦았다.
     사례 인용, 규정과 달리 처리한 예외, 진입 사례의 '기준 없음', 진입 사례가 따른 규정.
     예외는 질문과 이어진 것만: 진입 사례와 같은 줄기(near)이거나, 질문으로 검색된 조문(searched)을 벗어난 사례. 같은 체인의 다른 가지에 있는 예외까지 넣으면 답이 샌다."""
@@ -209,7 +210,11 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     if amended:
         refs = " ".join(dict.fromkeys(f"[{p['ref']}]" for _, p in amended))
         ver = amended[0][1].get("from_version")
-        out.append(f"이 사례들은 규정이 개정되기 전({ver} 판)에 처리한 것이다. '규정이 그 뒤 개정됐다'는 것을 한 문장으로 밝히고, 지금 기준은 조문 {refs} 에 적힌 값으로 쓴다. "
+        # 조문에 값이 여럿이면(제한 · 요청 · 힙 비율 …) 질문을 짚어 주지 않으면 앞쪽 항의 값을 지금 기준으로 내놓는다 — 일반적인 말로는 듣지 않았다
+        asked = f"질문(\"{query.strip()}\")이" if query and query.strip() else "질문이"
+        now = (f"지금 기준은 조문 {refs} 에서 {asked} 묻는 항목의 현재 값을 찾아 그대로 쓴다"
+               "(조문에 항이 여럿이면 질문의 항목이 적힌 항의 값을 빠뜨리지 않는다). ")
+        out.append(f"이 사례들은 규정이 개정되기 전({ver} 판)에 처리한 것이다. '규정이 그 뒤 개정됐다'는 것을 한 문장으로 밝히고, {now}"
                    f"메모의 '당시({ver} 판) 기준'은 개정 전 규정의 값이다 — 사례에서 쓴 값, 개정 전 기준, 지금 기준을 섞지 말고 구분해 쓴다.")
     if replaced:
         n, p = next(((n, p) for n, p in replaced if n.get("entry")), replaced[0])
@@ -219,8 +224,8 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     entry = next((n for n in live if n.get("entry")), None)
     for p in (entry or {}).get("policy") or []:
         if p["relation"] == "gap" and p.get("revision"):
-            out.append(f"[{entry['ref']}] 을 처리할 당시에는 이 부분({p.get('topic') or '이 조치'})을 정한 규정이 없었다. 그 뒤 규정이 개정됐으니 "
-                       "'규정에 기준이 없다'고 단정하지 말고, 지금 기준은 ## 규정 의 조문으로 답한다.")
+            # '처리할 당시에는 규정이 없었다'고 적어 주면 그 말을 답변에 그대로 옮긴다 — 지금 기준을 묻는 답에는 군말이고, 지금도 없다는 말로 읽힌다
+            out.append(f"[{entry['ref']}] 은 개정 전 사례다. 과거에 기준이 없었다고 쓰지 말고, 지금 기준은 ## 규정 의 조문으로만 답한다.")
         elif p["relation"] == "gap":
             out.append(f"[{entry['ref']}] 이 다루는 부분({p.get('topic') or '이 조치'})은 회사 규정에 기준이 없다. "
                        f"'이 부분은 규정에 기준이 없다'는 문장을 답변에 넣고 [{entry['ref']}] 를 붙인다.")
