@@ -100,16 +100,18 @@ def main():
                            ON CONFLICT (id) DO UPDATE SET employee_no = EXCLUDED.employee_no, email = EXCLUDED.email,
                              password_hash = coalesce(users.password_hash, EXCLUDED.password_hash),
                              password_changed_at = coalesce(users.password_changed_at, now()),
-                             consented_at = coalesce(users.consented_at, EXCLUDED.consented_at)""",
+                             consented_at = coalesce(users.consented_at, EXCLUDED.consented_at)
+                           WHERE users.status <> 'deleted'""",   # 삭제된 계정(V18)은 되살리지 않는다 — 지운 개인정보를 다시 넣지 않는다
                         (u["id"], u["tenant_id"], u["name"], u.get("title"), u.get("employee_no"), u.get("email"), pw_hash, bool(u.get("consented"))))
             # 직급 · 직책: 직함 한 칸을 DB 규칙(title_parts)으로 나눈다(V13). 이미 나뉜 계정은 건드리지 않는다
             cur.execute("""UPDATE users u SET (grade, duty) = (SELECT p.grade, p.duty FROM title_parts(u.title) p)
-                           WHERE u.id = %s AND u.grade IS NULL AND u.duty IS NULL""", (u["id"],))
+                           WHERE u.id = %s AND u.grade IS NULL AND u.duty IS NULL AND u.status <> 'deleted'""", (u["id"],))
             if u.get("consented") and POLICY_VERSION:
-                cur.execute("INSERT INTO user_consents (user_id, policy_version) VALUES (%s, %s) ON CONFLICT DO NOTHING", (u["id"], POLICY_VERSION))
+                cur.execute("""INSERT INTO user_consents (user_id, policy_version) SELECT id, %s FROM users WHERE id = %s AND status <> 'deleted'
+                               ON CONFLICT DO NOTHING""", (POLICY_VERSION, u["id"]))
         for m in load("workspace_members.json"):
-            cur.execute("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
-                        (m["workspace_id"], m["user_id"], m["role"]))
+            cur.execute("""INSERT INTO workspace_members (workspace_id, user_id, role) SELECT %s, id, %s FROM users WHERE id = %s AND status <> 'deleted'
+                           ON CONFLICT DO NOTHING""", (m["workspace_id"], m["role"], m["user_id"]))
         for n in load("log_nodes.json"):
             cur.execute("""INSERT INTO log_nodes (id, workspace_id, type, status, title, body, author_id, error_code, keywords, resolution_summary,
                              refine_status, last_confirmed_at, deprecated_via, deprecate_reason, resolved_at, resolve_note, source, source_ref, created_at)
