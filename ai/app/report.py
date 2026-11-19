@@ -72,8 +72,15 @@ SYSTEM_MARKED = """사내 장애 건의 기록 하나를 장애 보고서의 '�
 규칙: (1) 아래 기록에 적힌 사실만 옮긴다. 기록에 없는 평가 · 효과 · 계획을 덧붙이지 않는다. 문장의 낱말은 기록에 나온 낱말을 쓴다.
 (2) 기록에 장애를 멈추거나 복구한 일과 그 뒤에 새로 만들거나 바꿔 둔 것이 함께 적혀 있으면, 새로 만들거나 바꿔 둔 것만 쓴다.
 (3) 이미 끝낸 일이다 — 한 문장으로 풀어 '~했습니다'(과거형)로 끝낸다. '~합니다' · '~하려고 합니다' · '~할 예정입니다'처럼 지금 하고 있거나 앞으로 할 일처럼 쓰지 않는다. 기록 번호 · 목록 기호를 쓰지 않는다.
+(4) 메모 말투로 쓰지 않는다 — 구절을 '+' 로 잇지 않고, 빠진 조사('~을' · '~으로')를 넣어 풀어 쓴다.
 JSON {"text": "…"} 만 낸다."""
-MARKED_AGAIN = "\n(다시 쓴다 — 앞의 답은 조건에 맞지 않았다. 이 기록의 내용을 '~했습니다'로 끝나는 완결된 한 문장으로 쓴다.)"   # 조건에 못 미친 문장을 한 번 다시 받을 때 덧붙인다
+# 조건에 못 미친 문장을 한 번 다시 받을 때 덧붙이는 말 — 무엇이 어긋났는지에 따라 다르다(두 문장을 그냥 "한 문장으로"라고만 하면 한쪽을 버린다)
+MARKED_AGAIN = {
+    "두 문장": "\n(다시 쓴다 — 앞의 답은 문장이 둘이었다. 두 문장의 내용을 '~하고 ~했습니다'로 이어 한 문장으로 쓴다. 어느 쪽도 빼지 않는다.)",
+    "기호": "\n(다시 쓴다 — 앞의 답은 '+' 로 이은 메모 말투였다. '+' 를 쓰지 않고 '~하고 ~했습니다'로 풀어 한 문장으로 쓴다.)",
+    "길이": "\n(다시 쓴다 — 앞의 답은 너무 길었다. 새로 만들거나 바꿔 둔 것 가운데 중심이 되는 한두 가지만 90자 이내의 한 문장으로 쓴다.)",
+    "내용": "\n(다시 쓴다 — 앞의 답은 조건에 맞지 않았다. 이 기록에 적힌 내용을 '~했습니다'로 끝나는 완결된 한 문장으로 쓴다.)",
+}
 # 보완 호출에 넘길 '해결' 기록을 고르는 낱말(조치 기록은 낱말과 상관없이 넘긴다). '이후' · '절차' · '규정' · '검수' · '자동' · '상한'은 흔한 말이라 복구 · 값 조정 기록이 걸린다 — 넣지 않는다
 SIGNALS = ("자동화", "점검", "체크리스트", "검수표", "경보", "알림", "검증", "런북", "표준", "필수", "방지", "멱등", "분리", "회수", "임계", "명문화", "앞으로")
 # 보완 호출이 준 문장의 검증 — 이 낱말이 문장에 있으면 근거 기록에도 있어야 하고(CLAIMS), 권고 · 예정 · 해결 되풀이로 끝나면 안 된다(NORM — 본 호출의 재발 방지 문장에도 건다)
@@ -81,6 +88,8 @@ CLAIMS = ("명문화", "강화", "검증", "경보", "자동화", "점검", "체
 NORM = re.compile(r"(해야 합니다|권장합니다|권장했습니다|권고했습니다|필요합니다|필요가 있습니다|검토 중입니다|예정입니다|예정되어 있습니다|계획입니다|문제를 해결했습니다|문제가 해결되었습니다)\.?$")
 TOK = re.compile(r"[가-힣A-Za-z0-9]{2,}")
 ENDINGS = ("했습니다", "하였습니다", "합니다", "있습니다", "되었습니다", "됩니다")
+MARKED_LEN = 110         # 표시된 기록의 문장 길이 — 넘으면 기록을 통째로 옮긴 것으로 보고 줄여서 다시 받는다
+TWO_SENTENCES = re.compile(r"다\.\s+\S")   # 한 항목에 문장이 둘 이상
 OVERLAP_MIN = 0.6        # 문장의 낱말이 근거 기록에 나오는 비율의 하한 — 다른 기록의 내용에 번호만 붙인 문장을 거른다
 # 외부 공개용 문장에서 '책임자'로 바꿔 쓰는 직책 낱말. 과장 · 대리 · 부장 · 차장 · 실장 · 주임 · 매니저 · 리더는 다른 뜻이 있어 넣지 않는다(과장 광고 · 법정대리인)
 ROLE = "팀장|조직장|부서장|본부장|센터장|파트장|그룹장|임원"
@@ -328,42 +337,51 @@ async def more_prevention(profile, out: dict, texts: dict[str, str], external: b
     return {**out, "prevention": [*out["prevention"], *note["added"]]}
 
 
-def accept_marked(raw, src: str) -> dict | None:
-    """표시된 기록의 문장 조건 — '니다'로 끝나고 길이 상한 안이며, 그 기록의 글과 낱말이 겹친다(다른 내용을 쓰지 않았다). 아니면 None."""
+def marked_problem(raw, src: str) -> str | None:
+    """표시된 기록의 문장이 어긋난 곳. 없으면 None.
+    '내용' = 글이 없다 · '니다'로 끝나지 않는다 · 문장 상한을 넘는다 · 그 기록의 글과 낱말이 겹치지 않는다(다른 내용을 썼다) — 실을 수 없다.
+    '두 문장' · '기호' · '길이' = 모양만 어긋났다 — 다시 받아도 그대로면 제목보다는 이 문장을 싣는다."""
     text = raw.get("text").strip() if isinstance(raw, dict) and isinstance(raw.get("text"), str) else ""
     if not text or not text.rstrip(".").endswith("니다") or len(text) > SENTENCE_MAX or overlap(text, src) < OVERLAP_MIN:
-        return None
-    return {"text": text}
+        return "내용"
+    return "두 문장" if TWO_SENTENCES.search(text) else "기호" if "+" in text else "길이" if len(text) > MARKED_LEN else None
 
 
 async def write_marked(profile, out: dict, texts: dict[str, str], external: bool, usage: llm.Usage, trace: dict | None = None) -> dict:
     """팀이 표시한 재발 방지 기록마다 한 문장 — 기록 하나에 호출 하나, 근거는 그 기록 하나다. 고르는 일은 사람이 했으므로 낱말 · 권고 검증은 걸지 않는다.
-    조건에 못 미치면 한 번 다시 받고, 그래도 안 되거나 호출이 실패하면 그 기록의 제목을 그대로 싣는다 — 표시한 기록이 표에서 빠지지 않게."""
+    조건에 못 미치면 무엇이 어긋났는지 알려 주고 한 번 다시 받는다. 그래도 모양만 어긋나면(두 문장 · '+' · 긴 문장) 그 문장을 싣고, 내용이 어긋나거나 호출이 실패하면 그 기록의 제목을 싣는다 — 표시한 기록이 표에서 빠지지 않게."""
     marked = marked_prevention(out)
     if not marked or not out["summary"]:
         return out
     title = {r["ref"]: r["title"] for r in out["records"]}
     kind = {r["ref"]: KIND_KO[r["kind"]] for r in out["records"]}
-    note = {"marked": marked, "raw": {}, "fallback": []}
+    note = {"marked": marked, "raw": {}, "loose": [], "fallback": []}
     if trace is not None:
         trace["marked"] = note
 
     async def one(ref: str) -> dict:
-        s, user = None, f"({kind[ref]}) {texts[ref]}"
-        for again in ("", MARKED_AGAIN):
+        user, again, answers = f"({kind[ref]}) {texts[ref]}", "", []
+        for _ in (1, 2):   # 조건에 못 미치면 무엇이 어긋났는지 알려 주고 한 번만 다시 받는다
             try:
                 raw = await llm._chat_json(profile, profile.model_answer, SYSTEM_MARKED + (EXTERNAL_RULE if external else ""), user + again, usage,
                                            max_tokens=MARKED_MAX_TOKENS)
             except Exception as e:  # noqa: BLE001 — 작은 호출의 실패는 보고서의 실패가 아니다
                 raw = {"error": f"{type(e).__name__}: {e}"[:200]}
             note["raw"].setdefault(ref, []).append(raw)
-            s = accept_marked(raw, texts[ref])
-            if s is not None:
+            why = marked_problem(raw, texts[ref])
+            answers.append((why, raw))
+            if why is None:
                 break
-        if s is None:
+            again = MARKED_AGAIN[why]
+        why, raw = answers[-1] if answers[-1][0] is None else next((a for a in answers if a[0] != "내용"), answers[-1])   # 맞는 답 → 모양만 어긋난 답(먼저 받은 것 — 내용이 덜 빠진다) → 없음
+        if why == "내용":
             note["fallback"].append(ref)
-            s = {"text": title[ref]}
-        return {**s, "refs": [ref], "owner": None, "due": None}
+            text = title[ref]
+        else:
+            if why:
+                note["loose"].append(ref)
+            text = llm._clip(raw["text"].strip(), SENTENCE_MAX)
+        return {"text": text, "refs": [ref], "owner": None, "due": None}
 
     return {**out, "prevention": list(await asyncio.gather(*(one(ref) for ref in marked)))}
 
