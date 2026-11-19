@@ -27,6 +27,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "openai-stub/0.1"
     calls: list[dict] = []
     rejected: dict[str, tuple[int, dict]] = {}   # 키 → (상태 코드, 오류 본문). 막힌 키를 흉내 낸다
+    no_schema = False                             # True 면 response_format 이 json_schema 인 요청을 400 으로 거절한다
 
     def log_message(self, *a):  # 조용히
         pass
@@ -54,6 +55,8 @@ class Handler(BaseHTTPRequestHandler):
                                     "data": [{"index": i, "embedding": fake_embedding(t)} for i, t in enumerate(inputs)],
                                     "usage": {"prompt_tokens": 3 * len(inputs), "total_tokens": 3 * len(inputs)}})
         if self.path.endswith("/chat/completions"):
+            if Handler.no_schema and (req.get("response_format") or {}).get("type") == "json_schema":
+                return self._json(400, {"error": {"message": "response_format json_schema is not supported", "type": "invalid_request_error"}})
             system = next((m["content"] for m in req["messages"] if m["role"] == "system"), "")
             user = next((m["content"] for m in req["messages"] if m["role"] == "user"), "")
             if req.get("stream"):
@@ -117,6 +120,7 @@ class OpenAIStub:
     def __enter__(self):
         Handler.calls.clear()
         Handler.rejected.clear()
+        Handler.no_schema = False
         self.thread.start()
         return self
 
@@ -127,6 +131,9 @@ class OpenAIStub:
     @property
     def calls(self) -> list[dict]:
         return Handler.calls
+
+    def refuse_schema(self) -> None:
+        Handler.no_schema = True
 
     def reject(self, key: str, status: int, error: dict) -> None:
         Handler.rejected[key] = (status, {"error": error})
