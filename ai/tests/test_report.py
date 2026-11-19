@@ -127,6 +127,88 @@ async def test_fill_is_skipped_without_key(monkeypatch):
     assert await report.fill(profile(), CONTENT, BODIES, False, llm.Usage()) is None
 
 
+TWO_FIXES = {**CONTENT,
+             "resolution": {**CONTENT["resolution"], "items": [*CONTENT["resolution"]["items"], {"ref": "N5", "title": "타임아웃 3초", "summary": None}]},
+             "records": [*CONTENT["records"], {"ref": "N5", "id": 5, "kind": "resolution", "title": "타임아웃 3초", "at": "2026-07-13T08:00:00Z"}]}
+BOTH_FIXES = {"text": "풀을 20 으로 늘리고 타임아웃을 3초로 줄였습니다.", "refs": ["N5", "N3"]}
+
+
+def _llm(monkeypatch, main: dict, small: dict | None = None) -> list[dict]:
+    """본 호출에는 main, 작은 호출에는 small[그 지시문]을 돌려주는 가짜 LLM(값이 예외면 던진다). 부른 호출을 순서대로 남긴다."""
+    calls: list[dict] = []
+
+    async def chat(profile, model, system, user, usage, max_tokens=None):
+        calls.append({"system": system, "user": user, "max_tokens": max_tokens})
+        usage.prompt_tokens += 10
+        usage.completion_tokens += 2
+        if system.startswith(report.SYSTEM):
+            return main
+        answer = next(v for k, v in (small or {}).items() if system.startswith(k))   # 예상하지 않은 작은 호출이면 StopIteration 으로 드러난다
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setenv("AI_MODE", "openai")
+    monkeypatch.setenv("LLM_PROFILE_DEFAULT_API_KEY", "sk-test")
+    monkeypatch.setattr(llm, "_chat_json", chat)
+    return calls
+
+
+def _summary(fix) -> dict:
+    return {"summary": {**SUMMARY, "resolution": fix}}
+
+
+async def test_fix_sentence_that_cites_every_fix_is_not_refetched(monkeypatch):
+    calls = _llm(monkeypatch, _summary({"text": "풀을 늘리고 타임아웃을 줄였습니다.", "refs": ["N3", "N5"]}))
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, llm.Usage())
+    assert len(calls) == 1 and out["summary"][-1]["refs"] == ["N3", "N5"]
+
+
+async def test_missing_fix_is_refetched_from_fix_records_only(monkeypatch):
+    """해결 기록 하나가 근거 번호에서 빠지면 해결 기록 줄만 주고 그 문장만 다시 받는다 — 다른 문장은 그대로, 토큰은 더한다."""
+    calls = _llm(monkeypatch, _summary(SUMMARY["resolution"]), {report.SYSTEM_FIX: BOTH_FIXES})
+    usage, trace = llm.Usage(), {}
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, usage, trace)
+    assert [s["refs"] for s in out["summary"]] == [["N1"], ["N2"], ["N3", "N5"]] and out["summary"][-1]["text"] == BOTH_FIXES["text"]
+    assert calls[1]["system"] == report.SYSTEM_FIX and calls[1]["max_tokens"] == report.FIX_MAX_TOKENS
+    assert calls[1]["user"] == f"N3 풀 최대 20 — {'x' * 500}… / 결과: 풀을 20 으로 늘려 해소\nN5 타임아웃 3초"   # 구분 · 날짜 없이 해결 기록만
+    assert (usage.prompt_tokens, usage.completion_tokens) == (20, 4)
+    assert trace["fix"]["accepted"] is True and trace["fix"]["before"]["refs"] == ["N3"]
+
+
+@pytest.mark.parametrize("answer", [{"text": "풀을 20 으로 늘렸습니다.", "refs": ["N3"]},                       # 다시 받은 문장도 하나를 빠뜨림
+                                    {**BOTH_FIXES, "refs": ["N3", "N5", "N2"]},                              # 해결 기록이 아닌 번호가 섞임
+                                    {**BOTH_FIXES, "text": "풀을 20 으로 늘리고 타임아웃을 3초로 줄였음."},       # '니다'로 끝나지 않음
+                                    {**BOTH_FIXES, "text": "가" * report.SENTENCE_MAX + "했습니다."},           # 길이 상한 초과
+                                    ["not", "an", "object"], RuntimeError("timeout")])                        # 형식 오류 · 호출 실패
+async def test_refetched_fix_that_fails_a_condition_keeps_the_original(monkeypatch, answer):
+    calls = _llm(monkeypatch, _summary(SUMMARY["resolution"]), {report.SYSTEM_FIX: answer})
+    trace = {}
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, llm.Usage(), trace)
+    assert len(calls) == 2 and out["summary"][-1] == SUMMARY["resolution"] and trace["fix"]["accepted"] is False   # 보고서는 그대로 끝난다
+
+
+async def test_single_fix_is_never_refetched(monkeypatch):
+    calls = _llm(monkeypatch, _summary({"text": "문제를 해결했습니다.", "refs": ["N1"]}))
+    out = await report.fill(profile(), CONTENT, BODIES, False, llm.Usage())
+    assert len(calls) == 1 and out["summary"][-1]["refs"] == ["N1"]
+
+
+async def test_absent_fix_sentence_is_refetched_and_appended(monkeypatch):
+    """해결 기록이 둘인데 해결 문장을 아예 쓰지 않았으면 다시 받아 끝에 붙인다(원인 문장을 덮어쓰지 않는다). 외부용이면 외부용 규칙이 붙는다."""
+    calls = _llm(monkeypatch, _summary(None), {report.SYSTEM_FIX: BOTH_FIXES})
+    out = await report.fill(profile(), TWO_FIXES, BODIES, True, llm.Usage())
+    assert [s["refs"] for s in out["summary"]] == [["N1"], ["N2"], ["N3", "N5"]]
+    assert calls[1]["system"] == report.SYSTEM_FIX + report.EXTERNAL_RULE
+
+
+async def test_empty_main_output_is_not_patched_by_a_small_call(monkeypatch):
+    """한눈에 보기가 비면 빈 결과다 — 작은 호출로 문장을 채워 실패를 가리지 않는다."""
+    calls = _llm(monkeypatch, {"summary": {"resolution": SUMMARY["resolution"]}}, {report.SYSTEM_FIX: BOTH_FIXES})
+    out = await report.fill(profile(), TWO_FIXES, BODIES, False, llm.Usage())
+    assert len(calls) == 1 and out["summary"] == []
+
+
 def _insert(admin_conn, content: dict, audience: str = "internal") -> int:
     root = admin_conn.execute("SELECT id, workspace_id, author_id FROM log_nodes ORDER BY id LIMIT 1").fetchone()
     return admin_conn.execute("""INSERT INTO incident_reports (workspace_id, root_id, audience, sig, content, requested_by)
