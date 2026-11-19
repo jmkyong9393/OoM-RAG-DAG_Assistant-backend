@@ -6,7 +6,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -48,22 +47,25 @@ public class AuthController {
   private final PasswordEncoder encoder;
   private final JdbcClient jdbc;
   private final LoginAttempts attempts;
+  private final AccountGate gate;
   private final Path privacyPolicyPath;
 
   public AuthController(AuthenticationManager authManager, SecurityContextRepository contextRepo, PasswordEncoder encoder, JdbcClient jdbc,
-      LoginAttempts attempts, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
+      LoginAttempts attempts, AccountGate gate, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
     this.authManager = authManager;
     this.contextRepo = contextRepo;
     this.encoder = encoder;
     this.jdbc = jdbc;
     this.attempts = attempts;
+    this.gate = gate;
     this.privacyPolicyPath = Path.of(privacyPolicyPath);
   }
 
   public record LoginRequest(@NotBlank String employeeNo, @NotBlank String password) {}
   public record PasswordChangeRequest(@NotBlank String currentPassword, @NotBlank String newPassword) {}
   /** canConfigure: 이 부서의 설정(규정 사용·사례 사용)을 바꿀 수 있는가 — 부서 admin 이거나 상위(전사 공통)의 admin. */
-  /** permissions: 이 부서에서 할 수 있는 관리 동작(admin.members · admin.settings · docs.manage). 화면 노출용이고 서버는 요청마다 다시 검사한다. */
+  /** permissions: 이 부서에서 할 수 있는 관리 동작(admin.members · admin.settings · docs.manage). 화면 노출용이고 서버는 요청마다 다시 검사한다.
+   *  admin.members = 그 부서의 admin 이거나 회사 관리자(UserAdminController.requireMemberAdmin 과 같은 조건). role 은 그 부서에서의 역할 그대로다. */
   public record WorkspaceMembership(long id, String name, boolean policyEnabled, boolean caseEnabled, String role, boolean canConfigure, List<String> permissions) {}
   /** permissions: 부서와 무관한 동작(audit.read = 회사 관리자). title = 표시용 "직급 · 직책"(예전 화면 호환).
    *  consentVersion = 지금 처리방침 판, consentedVersion = 이 사용자가 마지막으로 동의한 판. 둘이 다르면 consentRequired. */
@@ -75,8 +77,6 @@ public class AuthController {
   public record ProfileRequest(String name, String grade, String position, String title, String email, Long primaryWorkspaceId) {}
   /** version = 화면이 보여 준 처리방침 판. 다르면 그사이 문안이 바뀐 것이다. */
   public record ConsentRequest(String version) {}
-
-  private static final java.util.regex.Pattern POLICY_VERSION = java.util.regex.Pattern.compile("판:\\s*([A-Za-z0-9._-]+)");
 
   @PostMapping("/auth/login")
   public Me login(@Valid @RequestBody LoginRequest body, HttpServletRequest req, HttpServletResponse res) {
@@ -96,11 +96,13 @@ public class AuthController {
       }
       throw ApiException.unauthorized();                          // 계정 존재 여부를 드러내지 않는다
     }
+    AppPrincipal p = (AppPrincipal) auth.getPrincipal();
+    // 인증하는 사이에 재발급 · 비활성화가 끝났으면 세션을 만들지 않는다 — 그쪽의 세션 삭제가 이 로그인의 세션은 지우지 못했다
+    if (!gate.stillValid(p.id(), p.takeAuthenticatedHash())) throw ApiException.unauthorized();
     SecurityContext ctx = SecurityContextHolder.createEmptyContext();
     ctx.setAuthentication(auth);
     SecurityContextHolder.setContext(ctx);
     contextRepo.saveContext(ctx, req, res);                      // 세션 생성 → 쿠키
-    AppPrincipal p = (AppPrincipal) auth.getPrincipal();
     attempts.recordSuccess(p.id(), p.employeeNo(), ip);
     return loadMe(p.id()).orElseThrow(ApiException::unauthorized);
   }
@@ -135,7 +137,7 @@ public class AuthController {
     try {
       String text = Files.readString(privacyPolicyPath, StandardCharsets.UTF_8);
       ResponseEntity.BodyBuilder ok = ResponseEntity.ok().contentType(new MediaType("text", "markdown", StandardCharsets.UTF_8));
-      String version = versionOf(text);
+      String version = AccountGate.versionOf(text);
       if (version != null) ok.header("X-Policy-Version", version);
       return ok.body(text);
     } catch (IOException e) {
@@ -145,16 +147,7 @@ public class AuthController {
 
   /** 지금 처리방침 판(문안 머리의 "판: v2"). 파일이 없거나 판 표시가 없으면 null — 그때는 판 없이 "동의한 적 있는가"만 본다. */
   String policyVersion() {
-    try {
-      return versionOf(Files.readString(privacyPolicyPath, StandardCharsets.UTF_8));
-    } catch (IOException e) {
-      return null;
-    }
-  }
-
-  private static String versionOf(String text) {
-    java.util.regex.Matcher m = POLICY_VERSION.matcher(text);
-    return m.find() ? m.group(1) : null;
+    return gate.policyVersion();   // 요청마다 파일을 읽지 않는다 — AccountGate 가 문안이 바뀔 때만 다시 읽는다
   }
 
   @PatchMapping("/auth/password")
@@ -194,6 +187,10 @@ public class AuthController {
           FROM users WHERE id = ? AND status = 'active'""").params(policyVersion(), userId)
         .query().listOfRows().stream().findFirst()
         .map(u -> {
+          // 회사 관리자: 부서가 아닌 상위 워크스페이스(전사 공통)의 admin. 소속 부서 목록에는 넣지 않는다
+          boolean companyAdmin = jdbc.sql("""
+                SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                               WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept')""").param(userId).query(Boolean.class).single();
           List<WorkspaceMembership> ws = jdbc.sql("""
                 SELECT w.id, w.name, w.policy_enabled, w.case_enabled, m.role,
                        EXISTS (SELECT 1 FROM workspace_members a WHERE a.user_id = m.user_id AND a.role = 'admin'
@@ -202,30 +199,26 @@ public class AuthController {
                 WHERE m.user_id = ? AND w.kind = 'dept' ORDER BY (m.role = 'admin') DESC, w.id
                 """).param(userId).query((rs, i) -> new WorkspaceMembership(rs.getLong("id"), rs.getString("name"),
                   rs.getBoolean("policy_enabled"), rs.getBoolean("case_enabled"), rs.getString("role"), rs.getBoolean("can_configure"),
-                  permissions("admin".equals(rs.getString("role")), rs.getBoolean("can_configure")))).list();
-          // 회사 관리자: 부서가 아닌 상위 워크스페이스(전사 공통)의 admin. 소속 부서 목록에는 넣지 않는다
-          boolean companyAdmin = jdbc.sql("""
-                SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
-                               WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept')""").param(userId).query(Boolean.class).single();
+                  permissions("admin".equals(rs.getString("role")) || companyAdmin, rs.getBoolean("can_configure")))).list();
           // 홈 = 본인이 지정한 메인 부서(지금도 소속일 때만). 지정이 없거나 그 부서에서 빠졌으면 계산값 — admin 멤버십이 있으면 그것, 그다음 번호순
           Long chosen = u.get("primary_workspace_id") == null ? null : ((Number) u.get("primary_workspace_id")).longValue();
           Long home = ws.stream().map(WorkspaceMembership::id).filter(id -> id.equals(chosen)).findFirst()
               .orElse(ws.isEmpty() ? null : ws.get(0).id());
+          // 아래 두 판정은 AccountGate 와 같은 메서드를 쓴다 — 화면이 게이트로 보내는 계정과 서버가 막는 계정이 같아야 한다
           Timestamp changed = (Timestamp) u.get("password_changed_at");
-          Instant expiresAt = changed == null ? null : changed.toInstant().plus(Duration.ofDays(PasswordPolicy.MAX_AGE_DAYS));
-          boolean expired = expiresAt == null || expiresAt.isBefore(Instant.now());   // 기준 시각이 없으면(구 계정) 만료로 본다
           String current = policyVersion();
-          boolean consentRequired = current == null ? u.get("consented_at") == null : !Boolean.TRUE.equals(u.get("consented_current"));
+          boolean consentRequired = AccountGate.consentRequired(current, u.get("consented_at"), Boolean.TRUE.equals(u.get("consented_current")));
           return new Me(((Number) u.get("id")).longValue(), (String) u.get("employee_no"), (String) u.get("name"), (String) u.get("title"),
               (String) u.get("grade"), (String) u.get("duty"), (String) u.get("email"), home, ws,
-              Boolean.TRUE.equals(u.get("must_change_password")) || expired, consentRequired, expiresAt, companyAdmin,
+              AccountGate.mustChangePassword(Boolean.TRUE.equals(u.get("must_change_password")), changed), consentRequired,
+              AccountGate.passwordExpiresAt(changed), companyAdmin,
               companyAdmin ? List.of("audit.read") : List.of(), current, (String) u.get("consented_version"));
         });
   }
 
-  private static List<String> permissions(boolean wsAdmin, boolean canConfigure) {
+  private static List<String> permissions(boolean memberAdmin, boolean canConfigure) {
     List<String> p = new java.util.ArrayList<>();
-    if (wsAdmin) p.add("admin.members");
+    if (memberAdmin) p.add("admin.members");
     if (canConfigure) { p.add("admin.settings"); p.add("docs.manage"); }
     return p;
   }

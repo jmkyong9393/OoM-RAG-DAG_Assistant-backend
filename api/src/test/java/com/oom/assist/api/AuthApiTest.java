@@ -51,6 +51,7 @@ class AuthApiTest extends AbstractApiTest {
 
   @Test
   void loginSetsHttpOnlySessionCookieAndReturnsMe() throws Exception {
+    clearConsent(userBackend);   // 첫 로그인: 아직 동의하지 않은 계정
     MvcResult r = login(empBackend, PASSWORD);
     assertThat(r.getResponse().getStatus()).isEqualTo(200);
     Cookie c = sessionCookie(r);
@@ -68,6 +69,7 @@ class AuthApiTest extends AbstractApiTest {
     assertThat(jdbc.sql("SELECT last_login_at IS NOT NULL FROM users WHERE id = ?").param(userBackend).query(Boolean.class).single()).isTrue();
     assertThat(auditCount("login_success", empBackend)).isEqualTo(1L);
     mvc.perform(get("/me").cookie(c)).andExpect(status().isOk()).andExpect(jsonPath("$.name").value("장문경"));
+    mvc.perform(post("/auth/consent").cookie(c)).andExpect(status().isNoContent());   // 동의해야 업무 API 가 열린다
     mvc.perform(get("/logs").cookie(c).header(TenantContextFilter.WORKSPACE_HEADER, wsHr)).andExpect(status().isOk());
   }
 
@@ -107,9 +109,10 @@ class AuthApiTest extends AbstractApiTest {
 
   @Test
   void adminCanUnlock() throws Exception {
+    member(company, userLead, "admin");   // 장문경은 경영지원에도 속해 있다 — 여러 부서에 속한 계정의 잠금은 회사 관리자가 푼다
     jdbc.sql("UPDATE users SET locked_until = now() + interval '10 minute', failed_attempts = 3 WHERE id = ?").param(userBackend).update();
     assertThat(login(empBackend, PASSWORD).getResponse().getStatus()).isEqualTo(423);
-    mvc.perform(as(post("/users/" + userBackend + "/unlock"), userLead, wsSw)).andExpect(status().isNoContent());        // SW admin 배종현이 해제
+    mvc.perform(as(post("/users/" + userBackend + "/unlock"), userLead, wsSw)).andExpect(status().isNoContent());        // 회사 관리자 배종현이 SW 에서 해제
     assertThat(login(empBackend, PASSWORD).getResponse().getStatus()).isEqualTo(200);
     assertThat(auditCount("unlocked_by_admin", empBackend)).isEqualTo(1L);
   }
@@ -192,6 +195,10 @@ class AuthApiTest extends AbstractApiTest {
     assertThat(login.getResponse().getStatus()).isEqualTo(200);
     assertThat((boolean) JsonPath.read(body(login), "$.must_change_password")).isTrue();
     Cookie c = sessionCookie(login);
+    // 새 계정은 동의도 없고 임시 비밀번호다 — 동의하고 비밀번호를 바꾼 뒤에 업무 API 를 쓴다
+    mvc.perform(post("/auth/consent").cookie(c)).andExpect(status().isNoContent());
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON)
+        .content("{\"current_password\": \"" + temp + "\", \"new_password\": \"" + GOOD_NEW + "\"}")).andExpect(status().isNoContent());
     mvc.perform(get("/logs").cookie(c).header(TenantContextFilter.WORKSPACE_HEADER, wsSw)).andExpect(status().isOk());
     mvc.perform(get("/logs").cookie(c).header(TenantContextFilter.WORKSPACE_HEADER, wsHr)).andExpect(status().isForbidden());   // 소속이 아닌 부서 — 로그아웃되지 않게 403
     assertThat(jdbc.sql("SELECT count(*) FROM audit_log WHERE table_name = 'users' AND row_id = ? AND action = 'invite'").param(String.valueOf(newId))

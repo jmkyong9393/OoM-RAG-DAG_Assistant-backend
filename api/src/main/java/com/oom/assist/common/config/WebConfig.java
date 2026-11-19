@@ -1,5 +1,6 @@
 package com.oom.assist.common.config;
 
+import com.oom.assist.auth.AccountGate;
 import com.oom.assist.common.context.TenantContextArgumentResolver;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -8,19 +9,28 @@ import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.web.servlet.config.annotation.ContentNegotiationConfigurer;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/** CORS(Vercel 프로덕션·미리보기 오리진) + 컨트롤러 인자 주입(TenantContext). */
+/** CORS(Vercel 프로덕션·미리보기 오리진) + 컨트롤러 인자 주입(TenantContext) + 계정 상태 확인(AccountGate). */
 @Configuration
 @EnableConfigurationProperties(AppProps.class)
 public class WebConfig implements WebMvcConfigurer {
 
   private final AppProps props;
   private final TenantContextArgumentResolver resolver;
+  private final AccountGate accountGate;
 
-  public WebConfig(AppProps props, TenantContextArgumentResolver resolver) {
+  public WebConfig(AppProps props, TenantContextArgumentResolver resolver, AccountGate accountGate) {
     this.props = props;
     this.resolver = resolver;
+    this.accountGate = accountGate;
+  }
+
+  /** 로그인한 요청마다 계정 상태(동의 · 비밀번호 변경)를 컨트롤러 전에 확인한다. */
+  @Override
+  public void addInterceptors(InterceptorRegistry registry) {
+    registry.addInterceptor(accountGate);
   }
 
   @Override

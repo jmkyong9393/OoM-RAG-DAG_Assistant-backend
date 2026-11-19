@@ -84,7 +84,8 @@ class AccountAdminApiTest extends AbstractApiTest {
         .andExpect(jsonPath("$.workspaces[?(@.id == " + wsSw + ")].permissions[*]", empty()));
     long boss = companyAdmin();
     mvc.perform(asUser(get("/me"), boss)).andExpect(jsonPath("$.permissions", contains("audit.read")))
-        .andExpect(jsonPath("$.workspaces[0].permissions", containsInAnyOrder("admin.settings", "docs.manage")));   // 부서 member 지만 상위 admin
+        .andExpect(jsonPath("$.workspaces[0].permissions", containsInAnyOrder("admin.members", "admin.settings", "docs.manage")))   // 부서 member 지만 회사 관리자 — 멤버 관리도 된다
+        .andExpect(jsonPath("$.workspaces[0].role").value("member"));                                                                // 그 부서에서의 역할은 그대로
   }
 
   @Test

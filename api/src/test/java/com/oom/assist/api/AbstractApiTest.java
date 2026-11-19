@@ -3,6 +3,7 @@ package com.oom.assist.api;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.oom.assist.TestcontainersConfiguration;
+import com.oom.assist.auth.AccountGate;
 import com.oom.assist.common.context.TenantContextFilter;
 import jakarta.servlet.http.Cookie;
 import java.util.HashMap;
@@ -36,6 +37,7 @@ public abstract class AbstractApiTest {
   @Autowired protected MockMvc mvc;
   @Autowired protected JdbcClient jdbc;
   @Autowired protected PasswordEncoder encoder;
+  @Autowired protected AccountGate accountGate;
 
   protected long tenant, company, wsSw, wsHr, userLead, userBackend;
   protected String empLead = "T0001", empBackend = "T0002";
@@ -54,9 +56,19 @@ public abstract class AbstractApiTest {
     member(wsHr, userBackend, "admin");
   }
 
+  /** 지금 처리방침 판에 동의했고 비밀번호도 바꿀 필요가 없는 계정 — 서버가 동의 · 비밀번호 변경을 강제하므로(AccountGate) 그렇지 않으면 업무 API 가 403 이다. */
   protected long user(String name, String title, String employeeNo, String email) {
-    return jdbc.sql("INSERT INTO users (tenant_id, name, title, employee_no, email, password_hash, password_changed_at) VALUES (?, ?, ?, ?, ?, ?, now()) RETURNING id")
+    long id = jdbc.sql("INSERT INTO users (tenant_id, name, title, employee_no, email, password_hash, password_changed_at, consented_at) VALUES (?, ?, ?, ?, ?, ?, now(), now()) RETURNING id")
         .params(tenant, name, title, employeeNo, email, encoder.encode(PASSWORD)).query(Long.class).single();
+    String version = accountGate.policyVersion();
+    if (version != null) jdbc.sql("INSERT INTO user_consents (user_id, policy_version) VALUES (?, ?)").params(id, version).update();
+    return id;
+  }
+
+  /** 동의 전 상태로 되돌린다 — 첫 로그인 · 동의 화면을 보는 테스트용. */
+  protected void clearConsent(long user) {
+    jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(user).update();
+    jdbc.sql("UPDATE users SET consented_at = NULL WHERE id = ?").param(user).update();
   }
 
   protected void member(long ws, long user, String role) {
