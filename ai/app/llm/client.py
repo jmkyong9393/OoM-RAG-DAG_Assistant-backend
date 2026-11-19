@@ -506,16 +506,24 @@ async def summarize_chain(profile: LlmProfile, nodes: list[dict], edges: list[di
 
 # ── OpenAI 호환 호출 ─────────────────────────────────────────────────────────
 
-async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage, max_tokens: int | None = None) -> dict:
-    body = {"model": model, "temperature": 0, "response_format": {"type": "json_object"},
+async def _chat_json(profile: LlmProfile, model: str, system: str, user: str, usage: Usage, max_tokens: int | None = None,
+                     schema: dict | None = None) -> dict:
+    """schema 를 주면 그 JSON 스키마를 지키는 응답만 받는다(strict — 없는 키 · 목록 밖의 값을 낼 수 없다). 없으면 JSON 이기만 하면 된다.
+    스키마 응답을 받지 못하는 공급자 · 모델이면(400 · 422) 스키마 없이 한 번 다시 보낸다 — 값은 받는 쪽이 어차피 다시 검증한다."""
+    fmt = {"type": "json_schema", "json_schema": {"name": "answer", "strict": True, "schema": schema}} if schema else {"type": "json_object"}
+    body = {"model": model, "temperature": 0, "response_format": fmt,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
     if max_tokens:
         body["max_tokens"] = max_tokens
     async with httpx.AsyncClient(timeout=60) as client:
-        for _ in (1, 2):   # 기본 키가 막힌 응답이면 예비 키로 한 번 다시 보낸다
-            r = await client.post(f"{profile.base_url}/chat/completions", headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body)
-            if not (key_rejected(r.status_code, r.text) and switch_to_backup(profile)):
+        for attempt in (1, 2):
+            for _ in (1, 2):   # 기본 키가 막힌 응답이면 예비 키로 한 번 다시 보낸다
+                r = await client.post(f"{profile.base_url}/chat/completions", headers={"Authorization": f"Bearer {api_key_of(profile)}"}, json=body)
+                if not (key_rejected(r.status_code, r.text) and switch_to_backup(profile)):
+                    break
+            if not (schema and attempt == 1 and r.status_code in (400, 422)):
                 break
+            body["response_format"] = {"type": "json_object"}
         r.raise_for_status()
         j = r.json()
         u = j.get("usage") or {}
