@@ -111,10 +111,18 @@ public class UserAdminController {
             rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")), rs.getString("role"), rs.getBoolean("locked"))).list();
   }
 
-  /** 잠금 해제 (현재 워크스페이스 admin, 대상은 그 워크스페이스 멤버). */
+  /**
+   * 잠금 해제(이 부서의 멤버를 관리할 수 있는 사람, 대상은 그 워크스페이스 멤버). 재발급과 같은 조건을 건다(requireManagesAccount) —
+   * 다른 부서의 계정을 자기 부서에 초대한 뒤 잠금을 계속 풀어 주면, 로그인 5회 실패 잠금이 그 계정에는 듣지 않게 된다.
+   * 순서: 멤버 관리 권한(403) → 대상이 이 부서의 멤버인가(404) → 이 계정을 넘겨받아도 되는가(403) → 해제. 권한이 없는 것과 대상이 없는 것을 구분한다.
+   * 여러 부서에 속한 계정은 회사 관리자가 풀거나 15분 뒤 저절로 풀리기를 기다린다. 풀었을 때만 접속기록에 남긴다.
+   */
   @PostMapping("/users/{id}/unlock")
   public ResponseEntity<Void> unlock(@PathVariable long id, TenantContext ctx) {
     requireMemberAdmin(ctx);
+    if (!jdbc.sql("SELECT EXISTS (SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?)").params(ctx.workspaceId(), id)
+        .query(Boolean.class).single()) throw ApiException.notFound("user");
+    requireManagesAccount(ctx.userId(), id);
     int n = jdbc.sql("""
           UPDATE users u SET locked_until = NULL, failed_attempts = 0
           FROM workspace_members m WHERE m.user_id = u.id AND m.workspace_id = ? AND u.id = ?""").params(ctx.workspaceId(), id).update();
@@ -145,12 +153,7 @@ public class UserAdminController {
           WHERE m.workspace_id = ? AND m.user_id = ?""").params(ctx.workspaceId(), id).query().listOfRows().stream().findFirst()
         .orElseThrow(() -> ApiException.notFound("user"));
     if (!"active".equals(u.get("status"))) throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");
-    if (!companyAdmin(ctx.userId()) && jdbc.sql("""
-          SELECT EXISTS (SELECT 1 FROM workspace_members t
-                         WHERE t.user_id = ? AND NOT EXISTS (SELECT 1 FROM workspace_members r
-                                                             WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))""")
-        .params(id, ctx.userId()).query(Boolean.class).single())
-      throw ApiException.forbidden("the account belongs to a workspace you do not manage");
+    requireManagesAccount(ctx.userId(), id);
     String temp = tempPassword((String) u.get("employee_no"));
     jdbc.sql("""
           UPDATE users SET password_hash = ?, must_change_password = true, password_changed_at = now(), locked_until = NULL, failed_attempts = 0
@@ -241,6 +244,21 @@ public class UserAdminController {
    */
   private void requireMemberAdmin(TenantContext ctx) {
     if (!ctx.isAdmin() && !companyAdmin(ctx.userId())) throw ApiException.forbidden("admin only");
+  }
+
+  /**
+   * 이 계정을 넘겨받아도 되는가 — 요청한 사람이 회사 관리자이거나 대상이 속한 모든 워크스페이스의 admin. 재발급 · 잠금 해제가 쓴다. 아니면 403.
+   * 재발급은 임시 비밀번호가 요청한 사람에게 가고, 잠금 해제는 비밀번호를 계속 맞혀 볼 수 있게 한다 — 둘 다 그 계정에 들어가는 길이라
+   * 그것으로 얻는 권한이 요청한 사람이 이미 가진 권한을 넘지 않을 때만 한다. 권한이 아니라 소속을 본다(대상이 다른 부서의 일반 멤버여도 그 부서의 기록을 읽게 된다).
+   * 초대 · 역할 변경 · 제외는 계정에 들어가는 일이 아니라 쓰지 않는다(requireMemberAdmin 만).
+   */
+  private void requireManagesAccount(long requester, long target) {
+    if (!companyAdmin(requester) && jdbc.sql("""
+          SELECT EXISTS (SELECT 1 FROM workspace_members t
+                         WHERE t.user_id = ? AND NOT EXISTS (SELECT 1 FROM workspace_members r
+                                                             WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))""")
+        .params(target, requester).query(Boolean.class).single())
+      throw ApiException.forbidden("the account belongs to a workspace you do not manage");
   }
 
   /** 회사 관리자 = 부서가 아닌 상위(전사 공통) 워크스페이스의 admin 인 활성 계정 (AuditController 와 같은 판정). */

@@ -107,9 +107,10 @@ class AuthApiTest extends AbstractApiTest {
 
   @Test
   void adminCanUnlock() throws Exception {
+    member(company, userLead, "admin");   // 장문경은 경영지원에도 속해 있다 — 여러 부서에 속한 계정의 잠금은 회사 관리자가 푼다
     jdbc.sql("UPDATE users SET locked_until = now() + interval '10 minute', failed_attempts = 3 WHERE id = ?").param(userBackend).update();
     assertThat(login(empBackend, PASSWORD).getResponse().getStatus()).isEqualTo(423);
-    mvc.perform(as(post("/users/" + userBackend + "/unlock"), userLead, wsSw)).andExpect(status().isNoContent());        // SW admin 배종현이 해제
+    mvc.perform(as(post("/users/" + userBackend + "/unlock"), userLead, wsSw)).andExpect(status().isNoContent());        // 회사 관리자 배종현이 SW 에서 해제
     assertThat(login(empBackend, PASSWORD).getResponse().getStatus()).isEqualTo(200);
     assertThat(auditCount("unlocked_by_admin", empBackend)).isEqualTo(1L);
   }
