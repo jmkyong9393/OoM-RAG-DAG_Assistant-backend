@@ -15,7 +15,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 /**
- * 계정 관리 — 임시 비밀번호 재발급(부서 admin) · 비활성화 · 재활성화 · 비활성 목록(회사 관리자, 부서 헤더 없이).
+ * 계정 관리 — 임시 비밀번호 재발급(대상이 속한 모든 워크스페이스의 admin 또는 회사 관리자) · 비활성화 · 재활성화 · 비활성 목록(회사 관리자, 부서 헤더 없이).
  * 배종현 = 회사 관리자 + SW admin, 장문경 = SW member + 경영지원의 하나뿐인 admin, 김하늘 = SW member.
  */
 class UserAccountApiTest extends AbstractApiTest {
@@ -35,11 +35,11 @@ class UserAccountApiTest extends AbstractApiTest {
         .content("{\"employee_no\": \"" + employeeNo + "\", \"password\": \"" + password + "\"}")).andReturn();
   }
 
-  /** 회사 단위 API 는 부서 헤더 없이 부른다. */
   private long sessionsOf(String employeeNo) {
     return jdbc.sql("SELECT count(*) FROM spring_session WHERE principal_name = ?").param(employeeNo).query(Long.class).single();
   }
 
+  /** 회사 단위 API 는 부서 헤더 없이 부른다. */
   private ResultActions deactivate(long actor, long target, String body) throws Exception {
     return mvc.perform(asUser(post("/users/" + target + "/deactivate"), actor).contentType(MediaType.APPLICATION_JSON).content(body));
   }
@@ -67,10 +67,13 @@ class UserAccountApiTest extends AbstractApiTest {
 
   @Test
   void resetPasswordReturnsTempPasswordOnceAndUnlocks() throws Exception {
+    loginCookie(userNew);   // 재발급 전에 만든 세션 (잠그기 전에 로그인해 둔다)
     jdbc.sql("UPDATE users SET locked_until = now() + interval '1 hour', failed_attempts = 5 WHERE id = ?").param(userNew).update();
     MvcResult r = mvc.perform(as(post("/users/" + userNew + "/reset-password"), userLead, wsSw)).andExpect(status().isOk()).andReturn();
     String temp = JsonPath.read(r.getResponse().getContentAsString(StandardCharsets.UTF_8), "$.temp_password");
     assertThat(temp).hasSize(14);
+    assertThat(sessionsOf(empNew)).isZero();                                            // 대상의 기존 세션은 지워진다 (요청한 사람의 세션은 그대로)
+    assertThat(sessionsOf(empLead)).isPositive();
     assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isNotEqualTo(200);   // 예전 비밀번호는 더 쓸 수 없다
     MvcResult in = login(empNew, temp);                                                 // 잠금이 풀렸고 임시 비밀번호로 들어간다
     assertThat(in.getResponse().getStatus()).isEqualTo(200);
@@ -111,6 +114,33 @@ class UserAccountApiTest extends AbstractApiTest {
     assertThat(login(empLead, PASSWORD).getResponse().getStatus()).isEqualTo(200);      // 비밀번호는 바뀌지 않았다
     member(company, userNew, "admin");   // 회사 관리자끼리는 된다
     mvc.perform(as(post("/users/" + userNew + "/reset-password"), userLead, wsSw)).andExpect(status().isOk());
+  }
+
+  @Test
+  void resetPasswordNeedsAdminOfEveryWorkspaceTheTargetBelongsTo() throws Exception {
+    member(wsHr, userNew, "member");   // 김하늘: SW member + 경영지원 member. 장문경은 경영지원 admin 이지만 SW 에서는 member
+    mvc.perform(as(post("/users/" + userNew + "/reset-password"), userBackend, wsHr)).andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));                               // 대상이 다른 부서의 일반 멤버여도 — 권한이 아니라 소속을 본다
+    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(200);      // 비밀번호는 바뀌지 않았다
+    assertThat(auditCount("password_reset_by_admin", userNew)).isZero();
+    mvc.perform(as(post("/users/" + userNew + "/reset-password"), userLead, wsSw)).andExpect(status().isOk());   // 회사 관리자는 경영지원의 admin 이 아니어도 된다
+  }
+
+  @Test
+  void resetPasswordAfterInvitingIntoOwnWorkspaceIs403() throws Exception {
+    // 장문경(경영지원 admin)이 SW 소속인 김하늘을 경영지원에 초대한다 — 이미 있는 계정이면 소속만 추가된다
+    mvc.perform(as(post("/users"), userBackend, wsHr).content("{\"employee_no\": \"" + empNew + "\", \"name\": \"김하늘\"}")).andExpect(status().isCreated());
+    mvc.perform(as(post("/users/" + userNew + "/reset-password"), userBackend, wsHr)).andExpect(status().isForbidden());   // 초대해도 김하늘은 SW 에 그대로 속해 있다
+    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(200);
+  }
+
+  @Test
+  void workspaceAdminResetsAccountThatBelongsOnlyToThatWorkspace() throws Exception {
+    long hrOnly = user("경영지원 멤버", "사원", "T0004", "hr-only@test.local");
+    member(wsHr, hrOnly, "member");
+    MvcResult r = mvc.perform(as(post("/users/" + hrOnly + "/reset-password"), userBackend, wsHr)).andExpect(status().isOk()).andReturn();   // 장문경은 회사 관리자가 아니다
+    String temp = JsonPath.read(r.getResponse().getContentAsString(StandardCharsets.UTF_8), "$.temp_password");
+    assertThat(login("T0004", temp).getResponse().getStatus()).isEqualTo(200);
   }
 
   // ── 비활성화 ────────────────────────────────────────────────────────
@@ -199,7 +229,9 @@ class UserAccountApiTest extends AbstractApiTest {
     jdbc.sql("UPDATE users SET locked_until = now() + interval '1 hour', failed_attempts = 5 WHERE id = ?").param(userNew).update();
     reactivate(userLead, userNew).andExpect(status().isNoContent());
     assertThat(statusOf(userNew)).isEqualTo("active");
-    assertThat(login(empNew, PASSWORD).getResponse().getStatus()).isEqualTo(200);   // 잠금도 풀렸다
+    MvcResult in = login(empNew, PASSWORD);                                         // 잠금도 풀렸다
+    assertThat(in.getResponse().getStatus()).isEqualTo(200);
+    assertThat((boolean) JsonPath.read(in.getResponse().getContentAsString(StandardCharsets.UTF_8), "$.must_change_password")).isTrue();   // 예전 비밀번호로 들어오되 바꿔야 한다
     reactivate(userLead, userNew).andExpect(status().isNoContent());                // 이미 활성이면 그대로 204
     assertThat(auditCount("user_reactivated", userNew)).isEqualTo(1L);
   }

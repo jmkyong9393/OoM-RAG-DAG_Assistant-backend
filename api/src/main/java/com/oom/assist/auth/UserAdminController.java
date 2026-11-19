@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 계정은 관리자 초대로만 만든다(자가 가입 없음). 현재 워크스페이스의 admin 이 사번으로 초대하면
  * 같은 테넌트에 사용자를 만들고(임시 비밀번호 1회 반환, must_change_password) 그 워크스페이스 멤버로 넣는다.
  * 이미 테넌트에 있는 사번이면 멤버십만 추가한다(비활성 계정은 409 — 먼저 재활성화). 목록의 이메일은 마스킹(보호조치 기준 §10).
- * 계정 관리: 임시 비밀번호 재발급은 부서 단위(그 부서의 admin, X-Workspace-Id 필요), 비활성화 · 재활성화 · 비활성 목록은 회사 단위
+ * 계정 관리: 임시 비밀번호 재발급은 부서 단위(그 부서의 admin 이면서 대상이 속한 모든 워크스페이스의 admin 이거나 회사 관리자, X-Workspace-Id 필요), 비활성화 · 재활성화 · 비활성 목록은 회사 단위
  * (회사 관리자, 부서 헤더와 무관 — AuditController 처럼 로그인한 사람으로만 본다).
  */
 @RestController
@@ -127,9 +127,13 @@ public class UserAdminController {
   public record TempPasswordResponse(String tempPassword) {}
 
   /**
-   * 임시 비밀번호 재발급(현재 워크스페이스 admin, 대상은 그 워크스페이스 멤버). 다음 로그인에서 비밀번호를 바꾸게 하고 잠금을 푼다.
+   * 임시 비밀번호 재발급(현재 워크스페이스 admin, 대상은 그 워크스페이스 멤버). 다음 로그인에서 비밀번호를 바꾸게 하고 잠금을 풀고,
+   * 대상의 로그인 세션을 지운다 — 비밀번호가 새어 나갔을 때도 쓰는 기능이라, 지우지 않으면 새어 나간 쪽이 예전 세션을 계속 쓴다.
    * 임시 비밀번호는 이 응답에 한 번만 나온다 — 접속기록에도 남기지 않는다.
-   * 회사 관리자의 비밀번호는 회사 관리자만 재발급한다: 임시 비밀번호가 요청한 사람에게 가므로, 부서 관리자가 그것으로 회사 관리자로 로그인할 수 있다.
+   * 임시 비밀번호가 요청한 사람에게 가므로 재발급은 "그 계정으로 로그인할 수 있게 되는 일"이다. 그래서 요청한 사람이 회사 관리자이거나
+   * 대상이 속한 모든 워크스페이스의 admin 일 때만 한다(아니면 403) — 재발급으로 얻는 권한이 이미 가진 권한을 넘지 않게.
+   * 권한이 아니라 소속을 본다: 대상이 다른 부서의 일반 멤버여도 그 부서의 기록을 읽게 된다. 대상을 자기 부서에 초대해 두고 재발급하는 길도
+   * 이 조건으로 막힌다(초대해도 대상은 원래 부서에 그대로 속해 있다). 회사 관리자의 계정은 전사 공통 워크스페이스에 속하므로 회사 관리자만 재발급한다.
    */
   @PostMapping("/users/{id}/reset-password")
   @Transactional
@@ -141,11 +145,17 @@ public class UserAdminController {
           WHERE m.workspace_id = ? AND m.user_id = ?""").params(ctx.workspaceId(), id).query().listOfRows().stream().findFirst()
         .orElseThrow(() -> ApiException.notFound("user"));
     if (!"active".equals(u.get("status"))) throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");
-    if (companyAdmin(id) && !companyAdmin(ctx.userId())) throw ApiException.forbidden("company admin only for a company admin's password");
+    if (!companyAdmin(ctx.userId()) && jdbc.sql("""
+          SELECT EXISTS (SELECT 1 FROM workspace_members t
+                         WHERE t.user_id = ? AND NOT EXISTS (SELECT 1 FROM workspace_members r
+                                                             WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))""")
+        .params(id, ctx.userId()).query(Boolean.class).single())
+      throw ApiException.forbidden("the account belongs to a workspace you do not manage");
     String temp = tempPassword((String) u.get("employee_no"));
     jdbc.sql("""
           UPDATE users SET password_hash = ?, must_change_password = true, password_changed_at = now(), locked_until = NULL, failed_attempts = 0
           WHERE id = ?""").params(encoder.encode(temp), id).update();
+    endSessions(id);
     auditMember(ctx, id, "password_reset_by_admin", null);
     return new TempPasswordResponse(temp);
   }
@@ -179,19 +189,21 @@ public class UserAdminController {
       if ("dept".equals(w.get("kind")) && adminCount(((Number) w.get("workspace_id")).longValue()) <= 1)
         throw ApiException.conflict("LAST_ADMIN", "workspace needs at least one admin");
     jdbc.sql("UPDATE users SET status = 'inactive' WHERE id = ?").param(id).update();
-    // 세션의 principal_name 은 사번(AppPrincipal.getUsername) — 사번은 전체에서 유일하다(V5). 속성 행은 FK 로 함께 지워진다
-    jdbc.sql("DELETE FROM spring_session WHERE principal_name = (SELECT employee_no FROM users WHERE id = ?)").param(id).update();
+    endSessions(id);
     auditCompany(actor, id, "user_deactivated", reason);
     return ResponseEntity.noContent().build();
   }
 
-  /** 재활성화(회사 관리자). 잠금도 푼다. 이미 활성이면 그대로 204. */
+  /**
+   * 재활성화(회사 관리자). 잠금을 풀고, 다음 로그인에서 비밀번호를 바꾸게 한다 — 퇴사 · 사고로 막았던 계정이 예전 비밀번호 그대로 살아나지 않게.
+   * 이미 활성이면 아무것도 바꾸지 않고 204.
+   */
   @PostMapping("/users/{id}/reactivate")
   @Transactional
   public ResponseEntity<Void> reactivate(@PathVariable long id) {
     Actor actor = companyActor();
     if (!"active".equals(status(id, actor.tenantId()))) {
-      jdbc.sql("UPDATE users SET status = 'active', locked_until = NULL, failed_attempts = 0 WHERE id = ?").param(id).update();
+      jdbc.sql("UPDATE users SET status = 'active', locked_until = NULL, failed_attempts = 0, must_change_password = true WHERE id = ?").param(id).update();
       auditCompany(actor, id, "user_reactivated", null);
     }
     return ResponseEntity.noContent().build();
@@ -246,6 +258,14 @@ public class UserAdminController {
   /** 같은 회사의 비활성화를 줄 세운다 — 회사 관리자 둘이 서로를 동시에 비활성화해 0명이 되는 틈을 막는다(lockMembers 와 같은 방식). */
   private void lockCompany(long tenantId) {
     jdbc.sql("SELECT pg_advisory_xact_lock(?, ?)").params(8, (int) tenantId).query(Object.class).optional();
+  }
+
+  /**
+   * 그 계정의 로그인 세션을 지운다(다음 요청부터 401) — 비활성화 · 임시 비밀번호 재발급에서 쓴다.
+   * 세션의 principal_name 은 사번(AppPrincipal.getUsername)이고 사번은 전체에서 유일하다(V5). 속성 행은 FK 로 함께 지워진다.
+   */
+  private void endSessions(long uid) {
+    jdbc.sql("DELETE FROM spring_session WHERE principal_name = (SELECT employee_no FROM users WHERE id = ?)").param(uid).update();
   }
 
   /** 회사 단위 접속기록 — auditMember 와 같은 모양(table_name = 'users', row_id = 대상), 부서는 비운다. */
