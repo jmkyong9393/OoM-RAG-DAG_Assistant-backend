@@ -71,7 +71,8 @@ public class AuthController {
                    List<WorkspaceMembership> workspaces, boolean mustChangePassword, boolean consentRequired, Instant passwordExpiresAt,
                    boolean companyAdmin, List<String> permissions, String consentVersion, String consentedVersion) {}
   /** null 은 그대로, 빈 문자열은 지움(직급 · 직책 · 이메일). 이름은 지울 수 없다. title 은 예전 화면용 — grade · position 이 없을 때만 직급/직책으로 나눠 넣는다. */
-  public record ProfileRequest(String name, String grade, String position, String title, String email) {}
+  /** primaryWorkspaceId = 메인 부서(로그인 뒤 처음 열릴 부서). 응답의 workspace_id 는 "지금 적용되는 부서"라 이름이 다르다. */
+  public record ProfileRequest(String name, String grade, String position, String title, String email, Long primaryWorkspaceId) {}
   /** version = 화면이 보여 준 처리방침 판. 다르면 그사이 문안이 바뀐 것이다. */
   public record ConsentRequest(String version) {}
 
@@ -187,7 +188,7 @@ public class AuthController {
   java.util.Optional<Me> loadMe(long userId) {
     return jdbc.sql("""
           SELECT id, employee_no, email, name, grade, duty, coalesce(nullif(concat_ws(' · ', grade, duty), ''), title) AS title,
-                 must_change_password, consented_at, password_changed_at,
+                 must_change_password, consented_at, password_changed_at, primary_workspace_id,
                  (SELECT c.policy_version FROM user_consents c WHERE c.user_id = users.id ORDER BY c.consented_at DESC LIMIT 1) AS consented_version,
                  EXISTS (SELECT 1 FROM user_consents c WHERE c.user_id = users.id AND c.policy_version = ?::text) AS consented_current
           FROM users WHERE id = ? AND status = 'active'""").params(policyVersion(), userId)
@@ -206,7 +207,10 @@ public class AuthController {
           boolean companyAdmin = jdbc.sql("""
                 SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
                                WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept')""").param(userId).query(Boolean.class).single();
-          Long home = ws.isEmpty() ? null : ws.get(0).id(); // admin 멤버십이 있으면 그것이 홈
+          // 홈 = 본인이 지정한 메인 부서(지금도 소속일 때만). 지정이 없거나 그 부서에서 빠졌으면 계산값 — admin 멤버십이 있으면 그것, 그다음 번호순
+          Long chosen = u.get("primary_workspace_id") == null ? null : ((Number) u.get("primary_workspace_id")).longValue();
+          Long home = ws.stream().map(WorkspaceMembership::id).filter(id -> id.equals(chosen)).findFirst()
+              .orElse(ws.isEmpty() ? null : ws.get(0).id());
           Timestamp changed = (Timestamp) u.get("password_changed_at");
           Instant expiresAt = changed == null ? null : changed.toInstant().plus(Duration.ofDays(PasswordPolicy.MAX_AGE_DAYS));
           boolean expired = expiresAt == null || expiresAt.isBefore(Instant.now());   // 기준 시각이 없으면(구 계정) 만료로 본다
@@ -231,7 +235,7 @@ public class AuthController {
   public Me updateProfile(@RequestBody ProfileRequest body, HttpServletRequest req) {
     AppPrincipal p = CurrentUser.get().orElseThrow(ApiException::unauthorized);
     if (body == null) throw ApiException.badRequest("VALIDATION", "body is required");
-    Map<String, Object> cur = jdbc.sql("SELECT name, grade, duty, email FROM users WHERE id = ?").param(p.id()).query().singleRow();
+    Map<String, Object> cur = jdbc.sql("SELECT name, grade, duty, email, primary_workspace_id FROM users WHERE id = ?").param(p.id()).query().singleRow();
     String name = body.name() == null ? (String) cur.get("name") : body.name().strip();
     if (name.isEmpty() || name.length() > 50) throw ApiException.badRequest("VALIDATION", "name must be 1~50 characters");
     String[] gp = gradePosition(body.grade(), body.position(), body.title(), (String) cur.get("grade"), (String) cur.get("duty"));
@@ -241,19 +245,30 @@ public class AuthController {
       email = email.toLowerCase();
       if (email.length() > 254 || !email.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) throw ApiException.badRequest("VALIDATION", "invalid email");
     }
+    Long curPrimary = cur.get("primary_workspace_id") == null ? null : ((Number) cur.get("primary_workspace_id")).longValue();
+    Long primary = curPrimary;
+    if (body.primaryWorkspaceId() != null) {   // 소속 부서 목록(workspaces)에 나오는 것만 — 속하지 않은 부서 · 전사 공통은 400
+      if (!jdbc.sql("""
+            SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+                           WHERE m.user_id = ? AND m.workspace_id = ? AND w.kind = 'dept')""")
+          .params(p.id(), body.primaryWorkspaceId()).query(Boolean.class).single())
+        throw ApiException.badRequest("VALIDATION", "primary_workspace_id must be one of your workspaces");
+      primary = body.primaryWorkspaceId();
+    }
     List<String> changed = new java.util.ArrayList<>();
     if (!name.equals(cur.get("name"))) changed.add("name");
     if (!java.util.Objects.equals(grade, cur.get("grade"))) changed.add("grade");
     if (!java.util.Objects.equals(position, cur.get("duty"))) changed.add("position");
     if (!java.util.Objects.equals(email, cur.get("email"))) changed.add("email");
+    if (!java.util.Objects.equals(primary, curPrimary)) changed.add("primary_workspace_id");
     if (changed.contains("email") && email != null && jdbc.sql("""
           SELECT EXISTS (SELECT 1 FROM users o WHERE o.tenant_id = (SELECT tenant_id FROM users WHERE id = ?) AND o.email = ? AND o.id <> ?)""")
         .params(p.id(), email, p.id()).query(Boolean.class).single())
       throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");
     if (!changed.isEmpty()) {
       try {
-        jdbc.sql("UPDATE users SET name = ?, grade = ?, duty = ?, title = ?, email = ? WHERE id = ?")
-            .params(name, grade, position, display(grade, position), email, p.id()).update();
+        jdbc.sql("UPDATE users SET name = ?, grade = ?, duty = ?, title = ?, email = ?, primary_workspace_id = ? WHERE id = ?")
+            .params(name, grade, position, display(grade, position), email, primary, p.id()).update();
       } catch (org.springframework.dao.DuplicateKeyException e) {
         throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");
       }

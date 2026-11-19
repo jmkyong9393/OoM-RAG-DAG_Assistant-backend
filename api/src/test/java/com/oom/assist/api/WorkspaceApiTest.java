@@ -107,10 +107,14 @@ class WorkspaceApiTest extends AbstractApiTest {
   }
 
   @Test
-  void protectedEndpointWithoutMembershipIs401() throws Exception {
-    // userLead 는 HR 소속이 아니다 → 컨텍스트 없음
-    mvc.perform(asUser(get("/logs"), userLead).header(TenantContextFilter.WORKSPACE_HEADER, wsHr)).andExpect(status().isUnauthorized());
-    mvc.perform(asUser(get("/logs"), userLead).header(TenantContextFilter.WORKSPACE_HEADER, "abc")).andExpect(status().isUnauthorized());
-    mvc.perform(asUser(get("/logs"), userLead)).andExpect(status().isUnauthorized());
+  void protectedEndpointWithoutMembershipIs403() throws Exception {
+    // userLead 는 HR 소속이 아니다 → 컨텍스트 없음. 로그인은 했으므로 401(로그인 끊김)이 아니라 403
+    mvc.perform(asUser(get("/logs"), userLead).header(TenantContextFilter.WORKSPACE_HEADER, wsHr)).andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    mvc.perform(asUser(get("/logs"), userLead).header(TenantContextFilter.WORKSPACE_HEADER, "999999999")).andExpect(status().isForbidden())
+        .andExpect(jsonPath("$.code").value("FORBIDDEN"));   // 없는 부서도 같은 응답 — 부서가 있는지 알 수 없게 (R1)
+    mvc.perform(asUser(get("/logs"), userLead).header(TenantContextFilter.WORKSPACE_HEADER, "abc")).andExpect(status().isForbidden());
+    mvc.perform(asUser(get("/logs"), userLead)).andExpect(status().isForbidden());
+    mvc.perform(get("/logs").header(TenantContextFilter.WORKSPACE_HEADER, wsSw)).andExpect(status().isUnauthorized());   // 로그인하지 않았으면 그대로 401
   }
 }

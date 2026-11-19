@@ -77,6 +77,8 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tablePriv("oom_ai", "incident_reports", "INSERT")).isFalse();
     assertThat(tablePriv("oom_api", "incident_reports", "DELETE")).isTrue();    // 새 보고서가 done 이 되면 이전 행을 지운다
     assertThat(tablePriv("oom_ai", "incident_reports", "DELETE")).isTrue();
+    // V17: 메인 부서 칸은 Spring 이 고친다(users 의 테이블 단위 UPDATE)
+    assertThat(priv("oom_api", "users", "primary_workspace_id", "UPDATE")).isTrue();
     // R__ 로 나중에 만든 뷰·함수에도 기본 권한이 적용된다
     assertThat(tablePriv("oom_api", "v_log_nodes", "SELECT")).isTrue();
     assertThat(jdbc.sql("SELECT has_function_privilege('oom_ai', 'get_chain(bigint,bigint,int,int)', 'EXECUTE')").query(Boolean.class).single()).isTrue();

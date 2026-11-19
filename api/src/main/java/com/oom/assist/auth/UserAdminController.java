@@ -27,7 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 계정은 관리자 초대로만 만든다(자가 가입 없음). 현재 워크스페이스의 admin 이 사번으로 초대하면
  * 같은 테넌트에 사용자를 만들고(임시 비밀번호 1회 반환, must_change_password) 그 워크스페이스 멤버로 넣는다.
- * 이미 테넌트에 있는 사번이면 멤버십만 추가한다. 목록의 이메일은 마스킹(보호조치 기준 §10).
+ * 이미 테넌트에 있는 사번이면 멤버십만 추가한다(비활성 계정은 409 — 먼저 재활성화). 목록의 이메일은 마스킹(보호조치 기준 §10).
+ * 계정 관리: 임시 비밀번호 재발급은 부서 단위(그 부서의 admin 이면서 대상이 속한 모든 워크스페이스의 admin 이거나 회사 관리자, X-Workspace-Id 필요), 비활성화 · 재활성화 · 비활성 목록은 회사 단위
+ * (회사 관리자, 부서 헤더와 무관 — AuditController 처럼 로그인한 사람으로만 본다).
  */
 @RestController
 public class UserAdminController {
@@ -61,6 +63,8 @@ public class UserAdminController {
 
     Optional<Long> existing = jdbc.sql("SELECT id FROM users WHERE tenant_id = ? AND lower(employee_no) = lower(?)").params(ctx.tenantId(), empNo)
         .query(Long.class).optional();
+    if (existing.isPresent() && !"active".equals(jdbc.sql("SELECT status FROM users WHERE id = ? FOR SHARE").param(existing.get()).query(String.class).single()))
+      throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");   // 비활성(퇴사 처리) 계정이 그 상태로 다른 부서에 들어가지 않게. FOR SHARE = 확인과 소속 추가 사이에 비활성화가 끼어들지 못하게(lockUser 와 같은 줄)
     boolean created = existing.isEmpty();
     String temp = null;
     long userId;
@@ -120,6 +124,158 @@ public class UserAdminController {
     return ResponseEntity.noContent().build();
   }
 
+  public record TempPasswordResponse(String tempPassword) {}
+
+  /**
+   * 임시 비밀번호 재발급(현재 워크스페이스 admin, 대상은 그 워크스페이스 멤버). 다음 로그인에서 비밀번호를 바꾸게 하고 잠금을 풀고,
+   * 대상의 로그인 세션을 지운다 — 비밀번호가 새어 나갔을 때도 쓰는 기능이라, 지우지 않으면 새어 나간 쪽이 예전 세션을 계속 쓴다.
+   * 임시 비밀번호는 이 응답에 한 번만 나온다 — 접속기록에도 남기지 않는다.
+   * 임시 비밀번호가 요청한 사람에게 가므로 재발급은 "그 계정으로 로그인할 수 있게 되는 일"이다. 그래서 요청한 사람이 회사 관리자이거나
+   * 대상이 속한 모든 워크스페이스의 admin 일 때만 한다(아니면 403) — 재발급으로 얻는 권한이 이미 가진 권한을 넘지 않게.
+   * 권한이 아니라 소속을 본다: 대상이 다른 부서의 일반 멤버여도 그 부서의 기록을 읽게 된다. 대상을 자기 부서에 초대해 두고 재발급하는 길도
+   * 이 조건으로 막힌다(초대해도 대상은 원래 부서에 그대로 속해 있다). 회사 관리자의 계정은 전사 공통 워크스페이스에 속하므로 회사 관리자만 재발급한다.
+   */
+  @PostMapping("/users/{id}/reset-password")
+  @Transactional
+  public TempPasswordResponse resetPassword(@PathVariable long id, TenantContext ctx) {
+    if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    if (id == ctx.userId()) throw ApiException.badRequest("VALIDATION", "change your own password with PATCH /auth/password");
+    Map<String, Object> u = jdbc.sql("""
+          SELECT u.employee_no, u.status FROM workspace_members m JOIN users u ON u.id = m.user_id
+          WHERE m.workspace_id = ? AND m.user_id = ?""").params(ctx.workspaceId(), id).query().listOfRows().stream().findFirst()
+        .orElseThrow(() -> ApiException.notFound("user"));
+    if (!"active".equals(u.get("status"))) throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");
+    if (!companyAdmin(ctx.userId()) && jdbc.sql("""
+          SELECT EXISTS (SELECT 1 FROM workspace_members t
+                         WHERE t.user_id = ? AND NOT EXISTS (SELECT 1 FROM workspace_members r
+                                                             WHERE r.workspace_id = t.workspace_id AND r.user_id = ? AND r.role = 'admin'))""")
+        .params(id, ctx.userId()).query(Boolean.class).single())
+      throw ApiException.forbidden("the account belongs to a workspace you do not manage");
+    String temp = tempPassword((String) u.get("employee_no"));
+    jdbc.sql("""
+          UPDATE users SET password_hash = ?, must_change_password = true, password_changed_at = now(), locked_until = NULL, failed_attempts = 0
+          WHERE id = ?""").params(encoder.encode(temp), id).update();
+    endSessions(id);
+    auditMember(ctx, id, "password_reset_by_admin", null);
+    return new TempPasswordResponse(temp);
+  }
+
+  public record DeactivateRequest(String reason) {}
+
+  /**
+   * 계정 비활성화(회사 관리자). 부서 소속과 작성한 기록은 그대로 둔다 — 로그인이 status = 'active' 를 보므로 새로 로그인할 수 없고,
+   * 이미 로그인해 있던 세션은 여기서 지운다(다음 요청부터 401). 지우지 않으면 계정 상태를 보지 않는 API(/audit, 부서 설정 변경)를 세션이 끝날 때까지 쓸 수 있다.
+   * 자기 자신, 마지막 회사 관리자, 어떤 부서의 마지막 관리자는 409.
+   */
+  @PostMapping("/users/{id}/deactivate")
+  @Transactional
+  public ResponseEntity<Void> deactivate(@PathVariable long id, @RequestBody(required = false) DeactivateRequest body) {
+    Actor actor = companyActor();
+    String reason = body == null || body.reason() == null ? "" : body.reason().strip();
+    if (reason.isEmpty()) throw ApiException.badRequest("REASON_REQUIRED", "reason is required");
+    lockCompany(actor.tenantId());
+    if (!"active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ALREADY_INACTIVE", "already inactive");
+    // 위 status() 가 대상 계정의 행을 잠갔으므로(FOR UPDATE) 여기서부터 대상의 역할 · 소속은 바뀌지 않는다 — 역할 변경 · 제외 · 초대가
+    // 같은 행을 FOR SHARE 로 잡는다(lockUser). 그래서 대상이 admin 인 부서는 한 번만 조회하면 된다.
+    // 그 부서들은 잠가서, 같은 부서의 다른 admin 을 강등 · 제외하는 요청과 줄을 세운 뒤 인원을 센다
+    List<Map<String, Object>> adminOf = jdbc.sql("""
+          SELECT m.workspace_id, w.kind FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
+          WHERE m.user_id = ? AND m.role = 'admin' ORDER BY m.workspace_id""").param(id).query().listOfRows();
+    for (Map<String, Object> w : adminOf) lockMembers(((Number) w.get("workspace_id")).longValue());
+    if (adminOf.stream().anyMatch(w -> !"dept".equals(w.get("kind"))) && companyAdminCount(actor.tenantId()) <= 1)
+      throw ApiException.conflict("LAST_COMPANY_ADMIN", "company needs at least one admin");
+    if (id == actor.id()) throw ApiException.conflict("SELF_DEACTIVATION", "cannot deactivate yourself");
+    for (Map<String, Object> w : adminOf)
+      if ("dept".equals(w.get("kind")) && adminCount(((Number) w.get("workspace_id")).longValue()) <= 1)
+        throw ApiException.conflict("LAST_ADMIN", "workspace needs at least one admin");
+    jdbc.sql("UPDATE users SET status = 'inactive' WHERE id = ?").param(id).update();
+    endSessions(id);
+    auditCompany(actor, id, "user_deactivated", reason);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * 재활성화(회사 관리자). 잠금을 풀고, 다음 로그인에서 비밀번호를 바꾸게 한다 — 퇴사 · 사고로 막았던 계정이 예전 비밀번호 그대로 살아나지 않게.
+   * 이미 활성이면 아무것도 바꾸지 않고 204.
+   */
+  @PostMapping("/users/{id}/reactivate")
+  @Transactional
+  public ResponseEntity<Void> reactivate(@PathVariable long id) {
+    Actor actor = companyActor();
+    if (!"active".equals(status(id, actor.tenantId()))) {
+      jdbc.sql("UPDATE users SET status = 'active', locked_until = NULL, failed_attempts = 0, must_change_password = true WHERE id = ?").param(id).update();
+      auditCompany(actor, id, "user_reactivated", null);
+    }
+    return ResponseEntity.noContent().build();
+  }
+
+  /** 비활성 계정 한 줄 — 멤버 목록 항목(MemberDto)에서 role · locked 를 뺀 모양. */
+  public record InactiveUserDto(long id, String employeeNo, String name, String title, String grade, String position, String emailMasked) {}
+
+  /** 같은 회사의 비활성 계정(회사 관리자). 이메일은 마스킹. */
+  @GetMapping("/users/inactive")
+  public List<InactiveUserDto> inactive() {
+    Actor actor = companyActor();
+    return jdbc.sql("""
+          SELECT id, employee_no, email, name, grade, duty, coalesce(nullif(concat_ws(' · ', grade, duty), ''), title) AS title
+          FROM users WHERE tenant_id = ? AND status = 'inactive' ORDER BY name, id""").param(actor.tenantId())
+        .query((rs, i) -> new InactiveUserDto(rs.getLong("id"), rs.getString("employee_no"), rs.getString("name"), rs.getString("title"),
+            rs.getString("grade"), rs.getString("duty"), Mask.email(rs.getString("email")))).list();
+  }
+
+  private record Actor(long id, long tenantId, String name) {}
+
+  /** 회사 단위 API 의 요청자. TenantContext 를 받지 않는다 — 받으면 부서 헤더에 묶여, 회사 관리자가 소속이 아닌 부서 화면이나 헤더 없이 부를 때 403 이 난다. */
+  private Actor companyActor() {
+    long uid = CurrentUser.id().orElseThrow(ApiException::unauthorized);
+    if (!companyAdmin(uid)) throw ApiException.forbidden("company admin only");
+    Map<String, Object> me = jdbc.sql("SELECT tenant_id, name FROM users WHERE id = ?").param(uid).query().singleRow();
+    return new Actor(uid, ((Number) me.get("tenant_id")).longValue(), (String) me.get("name"));
+  }
+
+  /** 회사 관리자 = 부서가 아닌 상위(전사 공통) 워크스페이스의 admin 인 활성 계정 (AuditController 와 같은 판정). */
+  private boolean companyAdmin(long uid) {
+    return jdbc.sql("""
+          SELECT EXISTS (SELECT 1 FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id JOIN users u ON u.id = m.user_id
+                         WHERE m.user_id = ? AND m.role = 'admin' AND w.kind <> 'dept' AND u.status = 'active')""").param(uid).query(Boolean.class).single();
+  }
+
+  private long companyAdminCount(long tenantId) {
+    return jdbc.sql("""
+          SELECT count(DISTINCT m.user_id) FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id JOIN users u ON u.id = m.user_id
+          WHERE w.tenant_id = ? AND w.kind <> 'dept' AND m.role = 'admin' AND u.status = 'active'""").param(tenantId).query(Long.class).single();
+  }
+
+  /**
+   * 대상 계정의 상태 — 그 행을 잠그고 읽는다(FOR UPDATE): 비활성화 · 재활성화끼리, 그리고 그 계정의 역할 변경 · 제외 · 초대(lockUser)와 줄을 선다.
+   * 다른 회사의 계정 · 없는 번호는 같은 404 — 있는지를 알리지 않는다.
+   */
+  private String status(long id, long tenantId) {
+    return jdbc.sql("SELECT status FROM users WHERE id = ? AND tenant_id = ? FOR UPDATE").params(id, tenantId).query(String.class).optional()
+        .orElseThrow(() -> ApiException.notFound("user"));
+  }
+
+  /** 같은 회사의 비활성화를 줄 세운다 — 회사 관리자 둘이 서로를 동시에 비활성화해 0명이 되는 틈을 막는다(lockMembers 와 같은 방식). */
+  private void lockCompany(long tenantId) {
+    jdbc.sql("SELECT pg_advisory_xact_lock(?, ?)").params(8, (int) tenantId).query(Object.class).optional();
+  }
+
+  /**
+   * 그 계정의 로그인 세션을 지운다(다음 요청부터 401) — 비활성화 · 임시 비밀번호 재발급에서 쓴다.
+   * 세션의 principal_name 은 사번(AppPrincipal.getUsername)이고 사번은 전체에서 유일하다(V5). 속성 행은 FK 로 함께 지워진다.
+   */
+  private void endSessions(long uid) {
+    jdbc.sql("DELETE FROM spring_session WHERE principal_name = (SELECT employee_no FROM users WHERE id = ?)").param(uid).update();
+  }
+
+  /** 회사 단위 접속기록 — auditMember 와 같은 모양(table_name = 'users', row_id = 대상), 부서는 비운다. */
+  private void auditCompany(Actor actor, long uid, String action, String reason) {
+    jdbc.sql("""
+          INSERT INTO audit_log (tenant_id, workspace_id, table_name, row_id, action, actor, source, reason)
+          VALUES (?, NULL, 'users', ?, ?, ?, 'ui', ?)""")
+        .params(actor.tenantId(), String.valueOf(uid), action, actor.name(), reason).update();
+  }
+
   public record RoleRequest(String role) {}
 
   /** 역할 변경(현재 워크스페이스 admin). 자기 자신 강등과 마지막 admin 강등은 409 — 부서에 관리자가 없어지면 아무도 되돌릴 수 없다. */
@@ -129,6 +285,7 @@ public class UserAdminController {
     if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
     String role = body == null ? null : body.role();
     if (!"member".equals(role) && !"admin".equals(role)) throw ApiException.badRequest("VALIDATION", "role must be member|admin");
+    lockUser(id, ctx.tenantId());
     lockMembers(ctx.workspaceId());
     String cur = memberRole(ctx.workspaceId(), id);
     if (!cur.equals(role)) {
@@ -148,6 +305,7 @@ public class UserAdminController {
   public ResponseEntity<Void> removeMember(@PathVariable long ws, @PathVariable long uid, TenantContext ctx) {
     if (ws != ctx.workspaceId()) throw ApiException.badRequest("VALIDATION", "path workspace must match X-Workspace-Id");
     if (!ctx.isAdmin()) throw ApiException.forbidden("admin only");
+    lockUser(uid, ctx.tenantId());
     lockMembers(ws);
     String cur = memberRole(ws, uid);
     if (uid == ctx.userId()) throw ApiException.conflict("SELF_REMOVAL", "cannot remove yourself");
@@ -160,6 +318,16 @@ public class UserAdminController {
   /** 같은 부서의 역할 변경 · 제외를 줄 세운다 — 관리자 둘이 서로를 동시에 강등해 admin 이 0명이 되는 틈을 막는다. */
   private void lockMembers(long ws) {
     jdbc.sql("SELECT pg_advisory_xact_lock(?, ?)").params(7, (int) ws).query(Object.class).optional();
+  }
+
+  /**
+   * 대상 계정의 행을 공유 잠금(FOR SHARE) — 그 계정의 비활성화(status() 의 FOR UPDATE)와 줄을 세운다. 비활성화가 대상이 admin 인 부서를
+   * 조회한 뒤에 대상이 다른 부서의 admin 으로 올라가고 기존 admin 이 내려가면, 그 부서는 확인 없이 admin 0명이 된다.
+   * 잠그는 순서는 어디서나 계정 → 부서(lockMembers) — 순서가 같아야 서로 기다리다 멈추지 않는다.
+   * 같은 회사의 계정만 잠근다 — 없는 번호 · 다른 회사의 계정은 아무것도 잠그지 않고 뒤에서 404.
+   */
+  private void lockUser(long uid, long tenantId) {
+    jdbc.sql("SELECT 1 FROM users WHERE id = ? AND tenant_id = ? FOR SHARE").params(uid, tenantId).query(Integer.class).optional();
   }
 
   private String memberRole(long ws, long uid) {
