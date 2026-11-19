@@ -35,6 +35,9 @@ Thumbs.db
 *.log
 tmp/
 
+# 합성 로그의 ref → 노드 id 대응표 — make load-logs 가 그 DB 의 번호로 만든다(DB 마다 번호가 다르다)
+data/logs/*.ids.json
+
 # 배포 스모크 산출물
 deploy/.smoke-*
 deploy/.smoke.jar
