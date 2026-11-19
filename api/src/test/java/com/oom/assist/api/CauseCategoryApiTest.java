@@ -117,6 +117,27 @@ class CauseCategoryApiTest extends AbstractApiTest {
   }
 
   @Test
+  void preventionIsMarkedOnASuccessLogWithAParent() throws Exception {
+    long root = node(wsSw, "fail", "R", userBackend);
+    long c = node(wsSw, "fail", "원인: 인증서 만료", userBackend);
+    long alarm = node(wsSw, "success", "만료 30일 전 경보 추가", userBackend);
+    long lone = node(wsSw, "success", "상위 없는 기록", userBackend);
+    edge(wsSw, root, c); edge(wsSw, c, alarm);
+    mvc.perform(as(patch("/logs/" + alarm), userBackend, wsSw).content("{\"category\":\"prevention\"}")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.category").value("prevention"));
+    for (long bad : new long[] {root, c, lone}) {   // 루트 · fail · 상위 없는 success
+      mvc.perform(as(patch("/logs/" + bad), userBackend, wsSw).content("{\"category\":\"prevention\"}"))
+          .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("CATEGORY_INVALID"));
+    }
+    mvc.perform(as(patch("/logs/" + alarm), userBackend, wsSw).content("{\"category\":\"cause\"}")).andExpect(status().isBadRequest());   // success 는 원인이 될 수 없다
+    assertThat(category(alarm)).isEqualTo("prevention");
+    mvc.perform(as(patch("/logs/" + alarm), userBackend, wsSw).content("{\"category\":\"\"}")).andExpect(status().isOk());
+    assertThat(category(alarm)).isNull();
+    assertThatThrownBy(() -> jdbc.sql("UPDATE log_nodes SET category = 'prevention' WHERE id = ?").param(c).update())
+        .isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("log_nodes_category_chk");   // DB 도 fail 에는 받지 않는다
+  }
+
+  @Test
   void dbRejectsCauseOnNonFail() {
     long s = node(wsSw, "success", "S", userBackend);
     assertThatThrownBy(() -> jdbc.sql("UPDATE log_nodes SET category = 'cause' WHERE id = ?").param(s).update())

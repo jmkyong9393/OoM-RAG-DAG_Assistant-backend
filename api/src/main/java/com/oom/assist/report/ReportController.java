@@ -153,7 +153,7 @@ public class ReportController {
     if (root.get("root_id") == null || ((Number) root.get("root_id")).longValue() != rootId) throw ApiException.badRequest("REPORT_NOT_ROOT", "root_id must be an incident root");
 
     List<Map<String, Object>> all = jdbc.sql("""
-        SELECT v.id, v.type, v.title, v.body, v.created_at, v.author_name, v.error_code, v.resolution_summary, v.is_cause, v.resolved_at, v.resolve_note
+        SELECT v.id, v.type, v.title, v.body, v.created_at, v.author_name, v.error_code, v.resolution_summary, v.is_cause, v.resolved_at, v.resolve_note, v.category
         FROM bfs_levels(?, ARRAY[?]::bigint[], true) g JOIN v_log_nodes v ON v.id = g.node_id
         WHERE v.status = 'active' OR v.id = ?
         ORDER BY v.created_at, v.id
@@ -184,7 +184,8 @@ public class ReportController {
     String body = (String) rootRow.get("body");
 
     List<Map<String, Object>> timeline = new ArrayList<>(), causes = new ArrayList<>(), items = new ArrayList<>(), others = new ArrayList<>(),
-        sides = new ArrayList<>(), policy = new ArrayList<>(), records = new ArrayList<>(), open = new ArrayList<>();
+        sides = new ArrayList<>(), policy = new ArrayList<>(), records = new ArrayList<>(), open = new ArrayList<>(), prevention = new ArrayList<>();
+    List<String> preventionRefs = new ArrayList<>();   // 팀이 재발 방지 · 후속 조치로 표시한 기록 — AI 는 고르지 않고 이 기록마다 문장만 쓴다
     Set<String> codes = new LinkedHashSet<>();
     int n = 0;
     for (Map<String, Object> r : rows) {
@@ -206,6 +207,10 @@ public class ReportController {
         default -> { }
       }
       if ((kind.equals("cause") || kind.equals("side_issue")) && !followed.contains(id)) open.add(map("text", title, "refs", List.of(ref)));
+      if ("prevention".equals(r.get("category")) && (kind.equals("resolution") || kind.equals("action"))) {
+        preventionRefs.add(ref);
+        prevention.add(map("text", title, "refs", List.of(ref), "owner", null, "due", null));   // AI 가 문장으로 바꾼다. AI 를 끄거나 실패하면 제목 그대로 보인다
+      }
       for (PolicyRefService.RefView p : refs.getOrDefault(id, List.of())) {
         policy.add(map("ref", ref, "relation", p.relation(), "document", p.docTitle() != null ? p.docTitle() : p.policy(),
             "article", p.articleLabel() != null ? p.articleLabel() : p.article(),
@@ -224,8 +229,9 @@ public class ReportController {
         "timeline", timeline, "causes", causes,
         "resolution", map("items", items, "resolve_note", rootRow.get("resolve_note"), "others", others, "note", null),
         "side_issues", sides, "policy", policy,
-        "summary", List.of(), "impact", List.of(), "prevention", List.of(), "open_items", open,
+        "summary", List.of(), "impact", List.of(), "prevention", prevention, "open_items", open,
         "records", records);
+    if (!preventionRefs.isEmpty()) content.put("prevention_refs", preventionRefs);   // 표시가 있을 때만 넣는다 — 없는 장애 건의 지문(sig)은 그대로다
     String text = json.writeValueAsString(content);
     return new Facts(text, md5(text));
   }

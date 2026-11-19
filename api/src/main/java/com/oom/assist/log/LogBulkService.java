@@ -89,8 +89,8 @@ public class LogBulkService {
       String source = it.source() == null ? "bulk" : it.source();
       if (!SOURCES.contains(source)) throw ApiException.badRequest("VALIDATION", ref + ": source must be bulk|synthetic");
       String category = LogService.category(it.category());
-      if (category != null && (!"fail".equals(it.type()) || parentRefsOf(it).isEmpty()))
-        throw ApiException.badRequest("CATEGORY_INVALID", ref + ": category cause needs a fail item with parent_ref");
+      if (!LogService.fits(category, it.type(), !parentRefsOf(it).isEmpty()))
+        throw ApiException.badRequest("CATEGORY_INVALID", ref + ": " + LogService.misfit(category));
 
       // 멱등: 같은 source_ref 가 이미 있으면 재사용
       if (!blank(it.sourceRef())) {
@@ -110,7 +110,7 @@ public class LogBulkService {
         Long pid = resolveParent(ws, p, byRef, ref);
         if (pid != null && !parentIds.contains(pid)) parentIds.add(pid);
       }
-      if (category != null && parentIds.isEmpty()) throw ApiException.badRequest("CATEGORY_INVALID", ref + ": category cause needs a parent");
+      if (category != null && parentIds.isEmpty()) throw ApiException.badRequest("CATEGORY_INVALID", ref + ": " + LogService.misfit(category));
       long id;
       String why = LogService.reason(it.parentReason());
       var refs = policyRefs.normalize(ws, it.policyRefs());   // 잘못된 근거 조문은 여기서 400 → 전체 롤백

@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class LogService {
 
   private static final Set<String> TYPES = Set.of("fail", "success", "ref");
-  private static final Set<String> CATEGORIES = Set.of("cause");
+  private static final Set<String> CATEGORIES = Set.of("cause", "prevention");
 
   private final LogRepository repo;
 
@@ -49,8 +49,7 @@ public class LogService {
     String category = category(req.category());
     Long parentId = req.parentId();
     boolean oneShot = parentId == null && "success".equals(type);
-    if (category != null && (!"fail".equals(type) || parentId == null))
-      throw ApiException.badRequest("CATEGORY_INVALID", "category cause needs a fail log with parent_id");
+    if (!fits(category, type, parentId != null)) throw ApiException.badRequest("CATEGORY_INVALID", misfit(category));
     String causeTitle = blank(req.causeTitle()) ? null : req.causeTitle().strip();
     if (causeTitle != null && !oneShot) throw ApiException.badRequest("VALIDATION", "cause_title is only for a success without parent_id");
     repo.lockWorkspace(ws);
@@ -184,24 +183,32 @@ public class LogService {
     repo.insertEdge(ws, parentId, childId, ctx.userId(), "manual", why);
   }
 
-  /** R14. value = "cause" 면 원인으로 표시, 빈 문자열이면 표시를 지운다. */
+  /** R14. value = "cause" 면 원인으로, "prevention" 이면 재발 방지 · 후속 조치로 표시한다. 빈 문자열이면 표시를 지운다. */
   @Transactional
   public LogNodeDto setCategory(TenantContext ctx, long id, String value) {
     LogNodeDto node = get(ctx, id);
     String category = category(value);
-    if (category != null && (!"fail".equals(node.type()) || repo.isRoot(id)))
-      throw ApiException.badRequest("CATEGORY_INVALID", "category cause needs a fail log with a parent");
+    if (!fits(category, node.type(), !repo.isRoot(id))) throw ApiException.badRequest("CATEGORY_INVALID", misfit(category));
     repo.setCategory(id, category);
     repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), category == null ? "uncategorized" : "categorized",
         ctx.userName(), category, node.title());
     return get(ctx, id);
   }
 
+  /** 표시가 그 기록에 붙을 수 있는가 — 원인은 상위가 있는 fail 에만, 재발 방지 · 후속 조치는 상위가 있는 success 에만(실제로 한 일이어야 한다). */
+  static boolean fits(String category, String type, boolean hasParent) {
+    return category == null || (hasParent && ("cause".equals(category) ? "fail" : "success").equals(type));
+  }
+
+  static String misfit(String category) {
+    return "category " + category + " needs a " + ("cause".equals(category) ? "fail" : "success") + " log with a parent";
+  }
+
   /** 분류 값: 빈 값은 null, 알 수 없는 값은 400. */
   static String category(String s) {
     if (s == null || s.isBlank()) return null;
     String t = s.strip();
-    if (!CATEGORIES.contains(t)) throw ApiException.badRequest("CATEGORY_INVALID", "category must be cause");
+    if (!CATEGORIES.contains(t)) throw ApiException.badRequest("CATEGORY_INVALID", "category must be cause|prevention");
     return t;
   }
 
