@@ -34,7 +34,7 @@ index:         ## data/policies/src/*/meta.json → 변환(chunks.json, PDF 면 
 	  d=$$(dirname "$$m"); s=$$(basename "$$d"); \
 	  if [ -f "$$d/$$s.pdf" ]; then (cd ai && uv run --extra pdf python ../scripts/pdf_locate.py "../data/policies/$$s.chunks.json" --write) || exit 1; fi; \
 	done; \
-	uv run --with "psycopg[binary]" scripts/index_policy.py $(ARGS) && cd ai && uv run python -m app.worker --once --reindex
+	uv run --with "psycopg[binary]" scripts/index_policy.py $(ARGS) && cd ai && uv run --extra graph python -m app.worker --once --reindex
 
 index-revision: ## 개정판 적재(시연용). make index-revision SLUG=retail-refund-2027-01 — data/policies/revisions/<slug> 를 변환·적재하면 supersedes 대상이 폐기된다
 	test -n "$(SLUG)" || { echo "SLUG=<slug> 필요"; exit 1; }
@@ -58,7 +58,7 @@ link-chains:   ## data/chain_records/*.json → 장애 건을 해결한 기록(l
 	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/load_chain_records.py $(ARGS)
 
 worker:        ## 정제 워커 (pending 로그 정제 · 토큰/임베딩 백필). make worker ARGS=--once 는 1회만
-	set -a; . deploy/.env; set +a; cd ai && uv run python -m app.worker $(ARGS)
+	set -a; . deploy/.env; set +a; cd ai && uv run --extra graph python -m app.worker $(ARGS)
 
 test-ai:       ## Python 테스트 (DB 통합 테스트는 로컬 Postgres 가 떠 있을 때만 실행)
 	set -a; . deploy/.env; set +a; cd ai && uv sync -q --extra graph --extra pdf && uv run pytest -q
