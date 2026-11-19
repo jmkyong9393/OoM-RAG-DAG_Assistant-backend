@@ -9,6 +9,7 @@ content 에 없는 번호는 지운다. 키가 없으면(fake) AI 칸 없이 don
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -347,19 +348,49 @@ def marked_problem(raw, src: str) -> str | None:
     return "두 문장" if TWO_SENTENCES.search(text) else "기호" if "+" in text else "길이" if len(text) > MARKED_LEN else None
 
 
-async def write_marked(profile, out: dict, texts: dict[str, str], external: bool, usage: llm.Usage, trace: dict | None = None) -> dict:
+def marked_src(kind: str, text: str) -> str:
+    """표시된 기록 하나를 문장으로 옮기는 호출의 입력 지문. 같으면 같은 요청이다 — 다시 받아도 표현만 흔들린다."""
+    return hashlib.sha256(f"{kind}\n{text}".encode()).hexdigest()[:16]
+
+
+def kept_marked(prev: dict | None) -> dict[int, dict]:
+    """앞 보고서에서 다시 쓸 수 있는 표시된 기록의 문장 — 기록 ID → {text, src}. 번호(N1 …)는 기록이 늘거나 줄면 밀리므로 ID 로 찾는다.
+    조건에 맞게 받은 문장만 든다(marked_src 에 적힌 것) — 제목으로 대신 실린 것 · 모양이 어긋난 채 실린 것은 다음에 다시 받는다."""
+    if not prev:
+        return {}
+    src = prev.get("marked_src") or {}
+    ident = {r["ref"]: r["id"] for r in prev.get("records") or []}
+    out = {}
+    for p in prev.get("prevention") or []:
+        refs = p.get("refs") or []
+        rid = ident.get(refs[0]) if len(refs) == 1 else None
+        if rid is not None and src.get(str(rid)) and isinstance(p.get("text"), str) and p["text"].strip():
+            out[rid] = {"text": p["text"], "src": src[str(rid)]}
+    return out
+
+
+async def write_marked(profile, out: dict, texts: dict[str, str], external: bool, usage: llm.Usage, trace: dict | None = None,
+                       prev: dict | None = None) -> dict:
     """팀이 표시한 재발 방지 기록마다 한 문장 — 기록 하나에 호출 하나, 근거는 그 기록 하나다. 고르는 일은 사람이 했으므로 낱말 · 권고 검증은 걸지 않는다.
-    조건에 못 미치면 무엇이 어긋났는지 알려 주고 한 번 다시 받는다. 그래도 모양만 어긋나면(두 문장 · '+' · 긴 문장) 그 문장을 싣고, 내용이 어긋나거나 호출이 실패하면 그 기록의 제목을 싣는다 — 표시한 기록이 표에서 빠지지 않게."""
+    조건에 못 미치면 무엇이 어긋났는지 알려 주고 한 번 다시 받는다. 그래도 모양만 어긋나면(두 문장 · '+' · 긴 문장) 그 문장을 싣고, 내용이 어긋나거나 호출이 실패하면 그 기록의 제목을 싣는다 — 표시한 기록이 표에서 빠지지 않게.
+    prev = 같은 장애 건의 앞 보고서(content). 기록의 글이 그때와 같으면 호출하지 않고 그 문장을 그대로 쓴다 — 다른 기록을 고쳤을 때 손대지 않은 기록의 문장까지 달라지지 않게."""
     marked = marked_prevention(out)
     if not marked or not out["summary"]:
         return out
     title = {r["ref"]: r["title"] for r in out["records"]}
     kind = {r["ref"]: KIND_KO[r["kind"]] for r in out["records"]}
-    note = {"marked": marked, "raw": {}, "loose": [], "fallback": []}
+    ident = {r["ref"]: r["id"] for r in out["records"]}
+    kept, src = kept_marked(prev), {}   # src = 이번에 조건에 맞게 실은 문장의 입력 지문(기록 ID → 지문) — 다음 보고서가 다시 쓸지 정한다
+    note = {"marked": marked, "raw": {}, "loose": [], "fallback": [], "reused": []}
     if trace is not None:
         trace["marked"] = note
 
     async def one(ref: str) -> dict:
+        h, old = marked_src(kind[ref], texts[ref]), kept.get(ident[ref])
+        if old and old["src"] == h:   # 그 기록의 글이 그대로다
+            note["reused"].append(ref)
+            src[str(ident[ref])] = h
+            return {"text": old["text"], "refs": [ref], "owner": None, "due": None}
         user, again, answers = f"({kind[ref]}) {texts[ref]}", "", []
         for _ in (1, 2):   # 조건에 못 미치면 무엇이 어긋났는지 알려 주고 한 번만 다시 받는다
             try:
@@ -380,10 +411,13 @@ async def write_marked(profile, out: dict, texts: dict[str, str], external: bool
         else:
             if why:
                 note["loose"].append(ref)
+            else:
+                src[str(ident[ref])] = h
             text = llm._clip(raw["text"].strip(), SENTENCE_MAX)
         return {"text": text, "refs": [ref], "owner": None, "due": None}
 
-    return {**out, "prevention": list(await asyncio.gather(*(one(ref) for ref in marked)))}
+    prevention = list(await asyncio.gather(*(one(ref) for ref in marked)))
+    return {**out, "prevention": prevention, "marked_src": src}
 
 
 def report_schema(content: dict) -> dict:
@@ -439,9 +473,11 @@ async def refill_notes(profile, content: dict, out: dict, system: str, user: str
     return filled
 
 
-async def fill(profile, content: dict, bodies: dict[int, str], external: bool, usage: llm.Usage, trace: dict | None = None) -> dict | None:
+async def fill(profile, content: dict, bodies: dict[int, str], external: bool, usage: llm.Usage, trace: dict | None = None,
+               prev: dict | None = None) -> dict | None:
     """AI 칸을 채운 content. openai 모드가 아니거나 키가 없으면 None(호출 측이 AI 칸 없이 끝낸다). 본 호출 1회(답변 모델) + 빠뜨린 것이 있을 때만 보완 호출.
-    trace 를 주면 보완 호출이 무엇을 받고 무엇을 버렸는지 적는다(점검 스크립트용 — 저장하는 content 에는 넣지 않는다)."""
+    trace 를 주면 보완 호출이 무엇을 받고 무엇을 버렸는지 적는다(점검 스크립트용 — 저장하는 content 에는 넣지 않는다).
+    prev 를 주면 표시된 기록의 문장 가운데 글이 바뀌지 않은 기록의 것을 그대로 쓴다(write_marked)."""
     if ai_mode() != "openai" or not profile.has_key:
         return None
     system, user = SYSTEM + (EXTERNAL_RULE if external else ""), render(content, bodies)
@@ -456,7 +492,7 @@ async def fill(profile, content: dict, bodies: dict[int, str], external: bool, u
     texts = record_texts(content, bodies)
     out = await refetch_fix(profile, out, has_sentence, texts, external, usage, trace)
     out = checked_main_prevention(out, texts, trace)
-    out = await write_marked(profile, out, texts, external, usage, trace)
+    out = await write_marked(profile, out, texts, external, usage, trace, prev)
     return await more_prevention(profile, out, texts, external, usage, trace)
 
 
@@ -518,7 +554,7 @@ def reuse(content: dict, src: dict, bodies: dict[int, str]) -> dict | None:
 
 async def fill_one(conn) -> str | None:
     """generating 1건. 처리하는 동안 행 잠금을 쥔 채 끝에 커밋한다(워커가 둘이어도 같은 보고서를 두 번 만들지 않게)."""
-    row = conn.execute("""SELECT id, workspace_id, root_id, audience, content FROM incident_reports
+    row = conn.execute("""SELECT id, workspace_id, root_id, audience, sig, content FROM incident_reports
                           WHERE status = 'generating' ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED""").fetchone()
     if row is None:
         conn.rollback()
@@ -536,7 +572,11 @@ async def fill_one(conn) -> str | None:
         filled = reuse(content, src["content"], bodies) if src else None
         model = src["model"] if filled else prof.model_answer   # 옮겨 쓴 보고서는 토큰 0 · 내부용을 만든 모델
         if filled is None:
-            filled = await fill(prof, content, bodies, row["audience"] == "external", usage)
+            # 앞 보고서 — 기록이 달라져서 다시 만드는 경우에만 본다(sig 가 다르다). 기록이 그대로인데 다시 만드는 것은 새 문장을 받으려는 것이라 옮기지 않는다
+            prev = conn.execute("""SELECT content FROM incident_reports WHERE workspace_id = %s AND root_id = %s AND audience = %s AND status = 'done'
+                                   AND prompt_version = %s AND model = %s AND sig <> %s AND id < %s ORDER BY id DESC LIMIT 1""",
+                                (row["workspace_id"], row["root_id"], row["audience"], PROMPT_VERSION, prof.model_answer, row["sig"], row["id"])).fetchone()
+            filled = await fill(prof, content, bodies, row["audience"] == "external", usage, prev=prev["content"] if prev else None)
         if filled is not None and row["audience"] == "external":   # 옮겨 쓴 문장이든 새로 받은 문장이든 이름 · 직책을 바꿔 쓴다
             filled = externalize(filled, *people(conn, row["workspace_id"]))
         if filled is not None and not filled["summary"]:   # 한눈에 보기는 늘 한 문장 이상 — 비었으면 빈 결과다. 실패로 남겨 이전 보고서를 지우지 않는다
