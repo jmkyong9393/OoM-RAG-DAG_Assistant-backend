@@ -74,6 +74,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-ithr-004",
+      "category": "prevention",
       "error_code": "CONSENT_REQUIRED",
       "keywords": [
         "전자 동의서",
@@ -192,6 +193,7 @@
       "parent_ref": "r2-eval",
       "source": "synthetic",
       "source_ref": "syn-ithr-010",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "평가 입력 기한",
@@ -248,6 +250,7 @@
       "parent_ref": "r2-reason",
       "source": "synthetic",
       "source_ref": "syn-ithr-013",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "불합격 메일",
@@ -311,6 +314,7 @@
       "parent_ref": "r3-proof",
       "source": "synthetic",
       "source_ref": "syn-ithr-016",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "제안 발송 조건",
@@ -411,6 +415,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-ithr-021",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "겸직 신고",
@@ -529,6 +534,7 @@
       "parent_ref": "r5-root",
       "source": "synthetic",
       "source_ref": "syn-ithr-027",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "입찰 기간",
@@ -634,6 +640,7 @@
       "parent_ref": "r6-notice",
       "source": "synthetic",
       "source_ref": "syn-ithr-032",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "반환 안내 고정",
@@ -713,6 +720,7 @@
       "parent_ref": "r7-early",
       "source": "synthetic",
       "source_ref": "syn-ithr-036",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "필수 항목 축소",
@@ -754,6 +762,7 @@
       ],
       "source": "synthetic",
       "source_ref": "syn-ithr-038",
+      "category": "prevention",
       "error_code": null,
       "keywords": [
         "파기",
