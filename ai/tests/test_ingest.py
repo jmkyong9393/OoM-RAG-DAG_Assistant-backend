@@ -138,6 +138,43 @@ def test_upload_job_converts_then_indexes_as_document(tmp_path, monkeypatch, adm
         admin_conn.execute("DELETE FROM audit_log WHERE table_name = 'policy_documents' AND label LIKE %s", (f"%{tag}%",))
 
 
+def test_page_number_lines_are_found_and_only_those_lines_are_stripped():
+    """쪽 번호로 보이는 줄('- 1 -' · '-2-' · '3 / 5' · 'Page 4 of 5')만 잡는다 — 목록 번호 · 숫자만 있는 줄 · 표의 줄 · 날짜는 그대로 둔다."""
+    md = "제1조(목적) 본문이다.\n- 1 -\n1. 첫째 호\n12\n| 1 / 5 | 표의 칸 |\n-2-\n2026-11-20\n제2조(적용) 3 / 5 는 비율이다.\n3 / 5\nPage 4 of 5\n"
+    assert [x["text"] for x in convert.page_number_lines(md)] == ["- 1 -", "-2-", "3 / 5", "Page 4 of 5"]
+    assert convert.page_number_lines(md)[0]["line"] == 2
+    out = convert.strip_page_numbers(md)
+    assert out == "제1조(목적) 본문이다.\n1. 첫째 호\n12\n| 1 / 5 | 표의 칸 |\n2026-11-20\n제2조(적용) 3 / 5 는 비율이다.\n" and convert.page_number_lines(out) == []
+
+
+@requires_db
+def test_page_numbers_are_reported_and_removed_only_when_the_reviewer_asks(tmp_path, monkeypatch, admin_conn):
+    """쪽 번호 줄은 변환 보고에 알리기만 하고 그대로 둔다. 검수자가 지우라고 고르면(report.strip_page_numbers) 그때 지우고 표시는 없앤다."""
+    from psycopg.types.json import Jsonb
+    from app.retrieval import db
+    monkeypatch.setenv("UPLOADS_DIR", str(tmp_path))
+    tag = uuid.uuid4().hex[:8]
+    body = MD + "- 1 -\n"
+    uid = admin_conn.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()["id"]
+    up = admin_conn.execute("""INSERT INTO policy_uploads (workspace_id, original_name, format, size_bytes, sha256, original_path, slug, title, version, uploaded_by, markdown)
+                               VALUES (2, '시험.md', 'md', %s, 'x', %s, %s, '쪽 번호 시험', '2026-11', %s, %s) RETURNING id""",
+                            (len(body), f"{tag}/original.md", f"test-upload-pageno-{tag}", uid, body)).fetchone()["id"]
+    try:
+        with db.connect() as conn:
+            assert jobs.convert_one(conn) == "review"
+        row = admin_conn.execute("SELECT markdown, report FROM policy_uploads WHERE id = %s", (up,)).fetchone()
+        assert "- 1 -" in row["markdown"] and [x["text"] for x in row["report"]["page_numbers"]] == ["- 1 -"]
+        assert [w for w in row["report"]["warnings"] if "쪽 번호" in w]
+        admin_conn.execute("UPDATE policy_uploads SET status = 'converting', report = report || %s WHERE id = %s", (Jsonb({"strip_page_numbers": True}), up))
+        with db.connect() as conn:
+            assert jobs.convert_one(conn) == "review"
+        row = admin_conn.execute("SELECT markdown, report FROM policy_uploads WHERE id = %s", (up,)).fetchone()
+        assert "- 1 -" not in row["markdown"] and row["report"]["page_numbers"] == [] and "strip_page_numbers" not in row["report"]
+        assert not [w for w in row["report"]["warnings"] if "쪽 번호" in w] and row["report"]["article_count"] == 3
+    finally:
+        admin_conn.execute("DELETE FROM policy_uploads WHERE id = %s", (up,))
+
+
 @requires_db
 def test_reviewed_markdown_gets_the_same_cleanup_as_a_fresh_conversion(tmp_path, monkeypatch, admin_conn):
     """검수자가 변환본을 고쳐 저장하면(converting + markdown 있음) 그 글도 후처리를 거친다 — '부칙' 줄이 제목이 되어 부칙 제1조가 본문 제1조와 겹치지 않는다."""

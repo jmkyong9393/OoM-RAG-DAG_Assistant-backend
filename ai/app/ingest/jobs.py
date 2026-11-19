@@ -10,7 +10,8 @@ import types
 from pathlib import Path
 
 from app.config import uploads_dir
-from app.ingest.convert import ConversionError, _scripts, normalize, ocr_suspects, pdf_page_texts, preview, to_markdown
+from app.ingest.convert import (ConversionError, _scripts, normalize, ocr_suspects, page_number_lines, pdf_page_texts, preview,
+                                strip_page_numbers, to_markdown)
 
 PAGES_FILE = "pages.json"   # 원본 옆에 두는 쪽별 글자(PDF)
 SOURCE_TYPE = {"pdf": "pdf", "hwp": "hwp", "hwpx": "hwp"}   # 그 밖(docx · md · txt)은 markdown — policy_documents.source_type 허용값
@@ -31,6 +32,7 @@ def convert_one(conn) -> str | None:
     from psycopg.types.json import Jsonb
     try:
         report = dict(row["report"] or {})
+        strip = bool(report.pop("strip_page_numbers", False))   # 검수자가 쪽 번호 줄을 지우라고 고른 경우 — Spring 이 변환본 저장 때 적어 둔다
         if row["markdown"] is None:
             orig = uploads_dir() / row["original_path"]
             md, extracted = to_markdown(orig, row["format"])
@@ -40,7 +42,12 @@ def convert_one(conn) -> str | None:
             report["extract"] = extracted
         else:
             md = normalize(row["markdown"])   # 검수자가 고친 글도 같은 후처리 — '부칙' 줄을 그대로 쓰면 부칙 제1조가 본문 제1조와 겹친다
+        if strip:
+            md = strip_page_numbers(md)
         report.update(preview(md))
+        report["page_numbers"] = page_number_lines(md)
+        if report["page_numbers"]:
+            report["warnings"].append(f"쪽 번호로 보이는 줄 {len(report['page_numbers'])}개가 본문에 들어 있습니다 — 검수 화면에서 지울 수 있습니다")
         ocr_pages = (report.get("extract") or {}).get("ocr_pages") or []
         if ocr_pages:   # 스캔본: 검수자가 원본과 대조할 줄을 짚어 준다
             report["ocr_suspects"] = ocr_suspects(md)

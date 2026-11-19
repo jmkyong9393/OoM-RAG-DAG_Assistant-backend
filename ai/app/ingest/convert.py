@@ -182,6 +182,20 @@ def ocr_suspects(markdown: str, limit: int = 30) -> list[dict]:
 
 
 # ── 조문 미리보기 ───────────────────────────────────────────────
+# 쪽 아래의 쪽 번호가 본문에 딸려 온 줄 — '- 1 -' · '1 / 5' · 'Page 1 of 5'. 숫자만 있는 줄은 목록 번호 · 표의 값과 가를 수 없어 넣지 않는다
+PAGE_NO = re.compile(r"^\s*(?:[-–—]\s*\d{1,3}\s*[-–—]|\d{1,3}\s*/\s*\d{1,3}|page\s*\d{1,3}(?:\s*(?:of|/)\s*\d{1,3})?)\s*$", re.I)
+
+
+def page_number_lines(markdown: str, limit: int = 30) -> list[dict]:
+    """쪽 번호로 보이는 줄(줄 번호 1부터). 지울지는 검수자가 고른다 — 저절로 지우지 않는다."""
+    return [{"line": no, "text": line.strip()[:40]} for no, line in enumerate(markdown.splitlines(), 1) if PAGE_NO.match(line)][:limit]
+
+
+def strip_page_numbers(markdown: str) -> str:
+    """쪽 번호로 보이는 줄을 뺀다."""
+    return "\n".join(line for line in markdown.splitlines() if not PAGE_NO.match(line)).strip() + "\n"
+
+
 ARTICLE_LABEL = re.compile(r"^(부칙\s*)?제\s*\d+\s*조(의\s*\d+)?|^\[?\s*별표|^Q\s*\d+", re.I)
 
 
