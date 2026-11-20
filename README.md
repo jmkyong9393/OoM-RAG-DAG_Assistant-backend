@@ -168,7 +168,8 @@ curl -N -b cj -X POST localhost:8080/api/v1/chat -H 'Content-Type: application/j
 | 보고서 문장 점검 | `cd ai && uv run python ../eval/report_checks.py --list --json <경로>` | api 가 떠 있어야 합니다 |
 
 - **변경 확인은 대표 묶음으로 합니다** — `data/eval_sample/`(평가 질문 43건 · 핵심 점검 11항목, 전체의 약 10%). 전체 측정은 AI 호출이 많아 매번 돌리지 않습니다. 답변에 넘어가는 근거를 바꾸는 데이터 변경 뒤에도 묶음을 돌립니다.
-- 측정에 `--record` 를 붙이면 결과가 DB 에 남아 대시보드에 나옵니다. 저장된 결과를 다른 서버로 옮길 때는 `eval/export_eval_runs.py` → `make load-eval` 을 씁니다.
+- **대시보드의 평가 값은 측정이 끝나는 순간 바뀝니다.** `make eval-full OUT=<결과 폴더>` 가 전체를 측정하면서 검색 · 답변 품질을 DB 에 기록하고(`--record`), 배포용 파일 `data/eval/eval_runs.json` 도 다시 만듭니다. 서버에서는 측정을 돌리지 않으므로 그 파일을 커밋하면 `make load-eval`(운영은 `bootstrap` 의 `eval` 단계)이 옮깁니다. 측정 시각이 같아 두 번 들어가지 않습니다.
+- 실험으로 스크립트를 따로 돌릴 때는 `--record` 를 붙이지 않는 한 대시보드를 건드리지 않습니다(다른 임베딩 · 재순위 없는 검색 값이 대시보드를 덮어쓰지 않게).
 - PR 마다 CI(`.github/workflows/ci.yml`)가 돕니다 — 키 패턴 · 금지 단어 검사, Python 테스트, Spring 테스트, 규정 원문 변환 점검.
 
 ## 배포

@@ -18,6 +18,7 @@ import os
 import statistics
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,12 +68,17 @@ def eval_rows(rows: list[dict], mode: str, k: int, model: str | None, version: s
     return out
 
 
-def record(rows: list[dict], mode: str, k: int, model: str | None, version: str) -> int:
-    """eval_runs 에 부서별 행과 전체 행을 넣는다. 넣은 행 수를 돌려준다."""
+def record(rows: list[dict], mode: str, k: int, model: str | None, version: str, run_at: str | None = None) -> int:
+    """eval_runs 에 부서별 행과 전체 행을 넣는다. 넣은 행 수를 돌려준다. run_at 은 측정 시각 — 결과 파일(--json)에도 같은 값을 남겨, 그 파일을 내보내 다시 넣어도 겹치지 않는다."""
     import psycopg
     from load_eval_runs import insert
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        return insert(conn, eval_rows(rows, mode, k, model, version))
+        return insert(conn, [{**r, "run_at": run_at} for r in eval_rows(rows, mode, k, model, version)])
+
+
+def now_utc() -> str:
+    """측정 시각. 초 단위, UTC."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def main() -> int:
@@ -153,21 +159,23 @@ def main() -> int:
             print("  + " + q)
         for q in loss:
             print("  - " + q)
+    measured = now_utc()
+    # 결과 파일을 먼저 쓴다 — 기록이 실패해도 돈 들여 잰 결과는 남는다
+    if a.json:
+        a.json.parent.mkdir(parents=True, exist_ok=True)
+        a.json.write_text(json.dumps({"k": a.k, "vector": use_vec, "measured_at": measured, "summary": hits, "rows": rows}, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"\nwrote {a.json}")
     if a.record:
         if a.k != 5 or a.files:
             print("--record 는 k=5 · 전체 평가셋일 때만 쓴다 (eval_runs.hit_at_5)"); return 1
-        n = record(rows, best, a.k, prof.embedding_model if use_vec else None, "evalset v1")
-        print(f"eval_runs 에 {n}행 기록 (부서별 + 전체)")
+        n = record(rows, best, a.k, prof.embedding_model if use_vec else None, "evalset v1", measured)
+        print(f"eval_runs 에 {n}행 기록 (부서별 + 전체) — 대시보드에 바로 나온다")
     misses = [r for r in rows if not all(r[m]["hit"] for m in modes)]
     if misses:
         print("\n놓친 질의:")
         for r in misses:
             absent = f" absent={r['expect_absent']}" if r["expect_absent"] else ""
             print(f"  [{r['kind']}] {r['query']!r} expect={r['expect']}{absent} " + " ".join(f"{m}:{r[m]['top']}" for m in modes))
-    if a.json:
-        a.json.parent.mkdir(parents=True, exist_ok=True)
-        a.json.write_text(json.dumps({"k": a.k, "vector": use_vec, "summary": hits, "rows": rows}, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"\nwrote {a.json}")
     return 0
 
 

@@ -21,6 +21,7 @@ import math
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -165,12 +166,12 @@ def eval_rows(rows: list[dict], judge: str, answer_model: str, emb_model: str, b
     return out
 
 
-def record(rows: list[dict], judge: str, prof, emb_model: str, baseline: float | None, version: str) -> int:
-    """eval_runs 에 부서별 행과 전체 행을 넣는다. 넣은 행 수를 돌려준다."""
+def record(rows: list[dict], judge: str, prof, emb_model: str, baseline: float | None, version: str, run_at: str | None = None) -> int:
+    """eval_runs 에 부서별 행과 전체 행을 넣는다. 넣은 행 수를 돌려준다. run_at 은 측정 시각 — 결과 파일(--json)에도 같은 값을 남긴다."""
     import psycopg
     from load_eval_runs import insert
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
-        return insert(conn, eval_rows(rows, judge, prof.model_answer, emb_model, baseline, version))
+        return insert(conn, [{**r, "run_at": run_at} for r in eval_rows(rows, judge, prof.model_answer, emb_model, baseline, version)])
 
 
 async def main() -> int:
@@ -219,14 +220,16 @@ async def main() -> int:
     rows = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows]
     print(f"\n충실도 {s['faithfulness']} (문장 {s['meta']['supported']}/{s['meta']['statements']}, 답변 {s['meta']['faithfulness_n']}건)   "
           f"관련성 {s['answer_relevance']} ({s['n']}건, 답을 피한 답변 {s['meta']['noncommittal']}, 엇갈린 쌍 기준선 {base}, {emb_prof.embedding_model})   채점 모델 {judge}")
+    measured = datetime.now(timezone.utc).replace(microsecond=0).isoformat()   # 측정 시각. 기록과 결과 파일이 같은 값을 쓴다
+    # 결과 파일을 먼저 쓴다 — 기록이 실패해도 돈 들여 잰 결과는 남는다
+    if a.json:
+        a.json.parent.mkdir(parents=True, exist_ok=True)
+        a.json.write_text(json.dumps({"summary": s, "measured_at": measured, "judge_model": judge, "answer_model": prof.model_answer, "relevance_embedding": emb_prof.embedding_model, "relevance_baseline": base, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"wrote {a.json}")
     if a.record:
         if a.files:
             print("--record 는 전체 점검표일 때만 쓴다"); return 1
-        print(f"eval_runs 에 {record(rows, judge, prof, emb_prof.embedding_model, base, 'answer_checks v1')}행 기록 (부서별 + 전체)")
-    if a.json:
-        a.json.parent.mkdir(parents=True, exist_ok=True)
-        a.json.write_text(json.dumps({"summary": s, "judge_model": judge, "answer_model": prof.model_answer, "relevance_embedding": emb_prof.embedding_model, "relevance_baseline": base, "rows": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
-        print(f"wrote {a.json}")
+        print(f"eval_runs 에 {record(rows, judge, prof, emb_prof.embedding_model, base, 'answer_checks v1', measured)}행 기록 (부서별 + 전체) — 대시보드에 바로 나온다")
     return 0
 
 

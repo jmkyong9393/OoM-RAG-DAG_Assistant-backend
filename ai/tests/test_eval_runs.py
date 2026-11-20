@@ -50,6 +50,18 @@ def test_export_picks_rerank_column_and_stamps_measured_time(tmp_path):
     assert total["meta"]["source"] == f"실험 A · {tmp_path.parent.name}/{tmp_path.name}/hit.json"
 
 
+def test_export_prefers_measured_time_written_in_result(tmp_path):
+    hit = tmp_path / "hit.json"
+    body = {"k": 5, "summary": {"hybrid": {}}, "rows": [hit_row(1, "policy", True, 1)]}
+    hit.write_text(json.dumps({**body, "measured_at": "2026-11-20T01:02:03+00:00"}), encoding="utf-8")
+    os.utime(hit, (1_700_000_000, 1_700_000_000))
+    assert {r["run_at"] for r in ex.from_hit(hit, None, "emb", "")} == {"2026-11-20T01:02:03+00:00"}, "결과에 적힌 측정 시각이 파일 시각보다 우선"
+    q = tmp_path / "q.json"
+    q.write_text(json.dumps({"judge_model": "j", "answer_model": "a", "relevance_embedding": "e", "measured_at": "2026-11-20T04:05:06+00:00",
+                             "rows": [quality_row(1, 1.0, 0.7)]}), encoding="utf-8")
+    assert {r["run_at"] for r in ex.from_quality(q, None, "")} == {"2026-11-20T04:05:06+00:00"}
+
+
 def test_export_rejects_non_k5(tmp_path):
     hit = tmp_path / "hit.json"
     hit.write_text(json.dumps({"k": 3, "summary": {"hybrid": {}}, "rows": []}), encoding="utf-8")
