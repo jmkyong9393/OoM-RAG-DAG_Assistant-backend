@@ -2,6 +2,7 @@ package com.oom.assist.log;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
+import com.oom.assist.common.util.Limits;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,10 @@ public class LogService {
     String type = req.type();
     if (type == null || !TYPES.contains(type)) throw ApiException.badRequest("INVALID_TYPE", "type must be fail|success|ref");
     if (blank(req.title()) || blank(req.body())) throw ApiException.badRequest("VALIDATION", "title and body are required");
+    Limits.max(req.title(), Limits.LOG_TITLE, "title");
+    Limits.max(req.body(), Limits.LOG_BODY, "body");
+    Limits.max(req.problemTitle(), Limits.LOG_TITLE, "problem_title");
+    Limits.max(req.causeTitle(), Limits.LOG_TITLE, "cause_title");
     long ws = ctx.workspaceId();
     String edgeReason = reason(req.edgeReason());
     String category = category(req.category());
@@ -99,6 +104,7 @@ public class LogService {
    */
   @Transactional
   public LogNodeDto setResolved(TenantContext ctx, long id, boolean resolved, String note, List<Long> resolvedNodeIds) {
+    Limits.max(note, Limits.NOTE, "note");
     LogNodeDto node = get(ctx, id);
     if (!repo.isRoot(id)) throw ApiException.conflict("NOT_ROOT", "only a root (장애 건) can be resolved");
     if ("ref".equals(node.type())) throw ApiException.conflict("REF_ROOT", "ref root cannot be resolved");
@@ -130,6 +136,7 @@ public class LogService {
   /** R5. */
   @Transactional
   public StatusResult setStatus(TenantContext ctx, long id, String status, String reason, boolean cascade) {
+    Limits.max(reason, Limits.NOTE, "reason");
     LogNodeDto node = get(ctx, id);
     List<Long> affected = new ArrayList<>();
     if ("deprecated".equals(status)) {

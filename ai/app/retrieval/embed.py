@@ -34,6 +34,17 @@ def embed(profile: LlmProfile, texts: list[str]) -> list[list[float]] | None:
     return [d["embedding"] for d in data]
 
 
+EMBED_CHARS = 6000   # 한 건의 입력을 먼저 이 길이로 자른다. 모델의 한도는 토큰 수라(한글은 한 자가 1~2토큰) 이 길이로도 넘칠 수 있다
+
+
 def embed_one(profile: LlmProfile, text: str) -> list[float] | None:
-    v = embed(profile, [text])
-    return v[0] if v else None
+    """글 하나의 벡터. 입력 한도를 넘어 400 이 오면 앞쪽 절반으로 줄여 다시 보낸다 — 긴 글도 앞부분의 뜻으로 검색되게."""
+    text = text[:EMBED_CHARS]
+    while True:
+        try:
+            v = embed(profile, [text])
+            return v[0] if v else None
+        except httpx.HTTPStatusError as e:
+            if getattr(e.response, "status_code", None) != 400 or len(text) <= EMBED_CHARS // 8:
+                raise
+            text = text[:len(text) // 2]

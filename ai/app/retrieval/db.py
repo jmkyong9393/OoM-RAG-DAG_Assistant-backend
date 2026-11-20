@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -32,6 +33,17 @@ def workspace_settings(conn, ws: int) -> dict[str, Any]:
     if not row:
         return {"policy_enabled": False, "case_enabled": True, "settings": {}}
     return {"policy_enabled": row["policy_enabled"], "case_enabled": row["case_enabled"], "settings": row["settings"] or {}}
+
+
+def known_code(conn, ws: int, query: str) -> str | None:
+    """질문에 글자 그대로 들어 있는 이 부서 기록의 오류 코드. 정규식(영문 1~4자 + 숫자 3~4자)이 못 잡는 모양(ORA-12154 · OOMKilled)을
+    저장된 값으로 찾는다 — 기록 정리는 본문에 적힌 코드를 모양과 상관없이 저장하기 때문이다. 여럿이면 가장 긴 것."""
+    rows = conn.execute("""SELECT DISTINCT error_code FROM log_nodes
+                           WHERE workspace_id = %s AND status = 'active' AND length(error_code) >= 5""", (ws,)).fetchall()
+    text = query.upper()
+    hits = [r["error_code"] for r in rows
+            if re.search(rf"(?<![A-Z0-9]){re.escape(r['error_code'].upper())}(?![A-Z0-9])", text)]
+    return max(hits, key=len) if hits else None
 
 
 def classify_context(conn, ws: int, error_code: str | None) -> dict[str, bool]:

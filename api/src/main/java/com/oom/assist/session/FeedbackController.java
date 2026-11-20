@@ -2,6 +2,7 @@ package com.oom.assist.session;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
+import com.oom.assist.common.util.Limits;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
@@ -26,9 +27,13 @@ public class FeedbackController {
   @PostMapping("/feedback")
   @Transactional
   public ResponseEntity<Void> feedback(@Valid @RequestBody FeedbackRequest body, TenantContext ctx) {
-    boolean exists = jdbc.sql("SELECT EXISTS (SELECT 1 FROM search_sessions WHERE id = ? AND workspace_id = ?)")
-        .params(body.sessionId(), ctx.workspaceId()).query(Boolean.class).single();
-    if (!exists) throw ApiException.notFound("session");
+    var found = jdbc.sql("SELECT user_id FROM search_sessions WHERE id = ? AND workspace_id = ?")
+        .params(body.sessionId(), ctx.workspaceId()).query().listOfRows();
+    if (found.isEmpty()) throw ApiException.notFound("session");
+    // 만족 응답은 질문 하나에 하나뿐이라, 질문한 사람만 남기고 바꾸고 지운다
+    if (!(found.get(0).get("user_id") instanceof Number owner) || owner.longValue() != ctx.userId())
+      throw ApiException.forbidden("only the person who asked can rate this answer");
+    Limits.max(body.comment(), Limits.COMMENT, "comment");
     if (body.score() == null) {
       jdbc.sql("DELETE FROM answer_feedback WHERE session_id = ?").param(body.sessionId()).update();
     } else {

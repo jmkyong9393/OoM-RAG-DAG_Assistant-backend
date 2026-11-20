@@ -35,22 +35,22 @@ public class SearchSessionController {
   public record Citations(List<String> verified, List<String> unverified) {}
   public record SearchSession(long id, long workspaceId, String userName, String query, String intent, String mode, String status,
       String answerText, List<Map<String, Object>> policy, Map<String, Object> chain, Citations citations, Latency latency,
-      Integer score, OffsetDateTime createdAt) {}
+      Integer score, OffsetDateTime createdAt, boolean mine) {}   // mine = 내가 한 질문(만족 응답은 질문한 사람만 남긴다)
 
   @GetMapping("/sessions")
   public List<SearchSession> list(@RequestParam(defaultValue = "30") int limit, TenantContext ctx) {
     return jdbc.sql("SELECT * FROM v_search_sessions WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT ?")
-        .params(ctx.workspaceId(), Math.max(1, Math.min(limit, 200))).query().listOfRows().stream().map(this::map).toList();
+        .params(ctx.workspaceId(), Math.max(1, Math.min(limit, 200))).query().listOfRows().stream().map(r -> map(r, ctx.userId())).toList();
   }
 
   @GetMapping("/sessions/{id}")
   public SearchSession get(@PathVariable long id, TenantContext ctx) {
     return jdbc.sql("SELECT * FROM v_search_sessions WHERE workspace_id = ? AND id = ?").params(ctx.workspaceId(), id)
-        .query().listOfRows().stream().findFirst().map(this::map).orElseThrow(() -> ApiException.notFound("session"));
+        .query().listOfRows().stream().findFirst().map(r -> map(r, ctx.userId())).orElseThrow(() -> ApiException.notFound("session"));
   }
 
   @SuppressWarnings("unchecked")
-  private SearchSession map(Map<String, Object> r) {
+  private SearchSession map(Map<String, Object> r, long me) {
     List<Map<String, Object>> policy = parseList(r.get("policy_refs"));
     Map<String, Object> chain = parseMap(r.get("chain_ref"));
     // id → ref 매핑
@@ -61,7 +61,8 @@ public class SearchSessionController {
     Latency latency = new Latency(intOrNull(r.get("retrieval_ms")), intOrNull(r.get("first_token_ms")), intOrNull(r.get("total_ms")));
     return new SearchSession(((Number) r.get("id")).longValue(), ((Number) r.get("workspace_id")).longValue(), (String) r.get("user_name"),
         (String) r.get("query"), (String) r.get("intent"), (String) r.get("mode"), (String) r.get("status"), (String) r.get("answer_text"),
-        policy, chain, citations, latency, intOrNull(r.get("score")), Times.offset(r.get("created_at")));
+        policy, chain, citations, latency, intOrNull(r.get("score")), Times.offset(r.get("created_at")),
+        r.get("user_id") instanceof Number u && u.longValue() == me);
   }
 
   private static List<String> toRefs(Object pgArray, Map<String, String> refOf) {
