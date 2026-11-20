@@ -2,6 +2,7 @@ package com.oom.assist.log;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
+import com.oom.assist.common.util.Limits;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -86,6 +87,9 @@ public class LogBulkService {
       if (byRef.containsKey(ref)) throw ApiException.badRequest("VALIDATION", "duplicate ref " + ref);
       if (it.type() == null || !TYPES.contains(it.type())) throw ApiException.badRequest("INVALID_TYPE", ref + ": type must be fail|success|ref");
       if (blank(it.title()) || blank(it.body())) throw ApiException.badRequest("VALIDATION", ref + ": title and body are required");
+      Limits.max(it.title(), Limits.LOG_TITLE, ref + ": title");
+      Limits.max(it.body(), Limits.LOG_BODY, ref + ": body");
+      Limits.max(it.problemTitle(), Limits.LOG_TITLE, ref + ": problem_title");
       String source = it.source() == null ? "bulk" : it.source();
       if (!SOURCES.contains(source)) throw ApiException.badRequest("VALIDATION", ref + ": source must be bulk|synthetic");
       String category = LogService.category(it.category());

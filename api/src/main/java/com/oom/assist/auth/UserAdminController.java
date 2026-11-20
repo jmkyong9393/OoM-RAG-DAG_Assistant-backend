@@ -2,6 +2,7 @@ package com.oom.assist.auth;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
+import com.oom.assist.common.util.Limits;
 import com.oom.assist.common.util.Mask;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -59,6 +60,11 @@ public class UserAdminController {
     requireMemberAdmin(ctx);
     String role = body.role() == null ? "member" : body.role();
     if (!role.equals("member") && !role.equals("admin")) throw ApiException.badRequest("VALIDATION", "role must be member|admin");
+    Limits.max(body.name(), Limits.NAME, "name");
+    Limits.max(body.grade(), Limits.GRADE, "grade");
+    Limits.max(body.position(), Limits.GRADE, "position");
+    Limits.max(body.title(), 2 * Limits.GRADE + 3, "title");   // 예전 화면의 "직급 · 직책" 한 칸
+    Limits.max(body.email(), Limits.EMAIL, "email");
     String empNo = body.employeeNo().trim().toUpperCase();
     String email = body.email() == null || body.email().isBlank() ? null : body.email().trim().toLowerCase();
 
@@ -75,6 +81,9 @@ public class UserAdminController {
     if (created) {
       if (jdbc.sql("SELECT count(*) FROM users WHERE lower(employee_no) = lower(?)").param(empNo).query(Long.class).single() > 0)
         throw ApiException.conflict("EMPLOYEE_NO_TAKEN", "employee_no already used in another tenant");
+      if (email != null && jdbc.sql("SELECT EXISTS (SELECT 1 FROM users WHERE tenant_id = ? AND email = ?)").params(ctx.tenantId(), email)
+          .query(Boolean.class).single())
+        throw ApiException.conflict("EMAIL_TAKEN", "email already used by another account");   // 내 정보 수정(PATCH /me)과 같은 코드
       temp = tempPassword(empNo);
       // 직급 · 직책이 오면 그대로, 예전 화면처럼 title 만 오면 DB 규칙(title_parts)으로 나눈다
       Map<String, Object> gp = jdbc.sql("""
@@ -99,7 +108,8 @@ public class UserAdminController {
           VALUES (?, ?, 'users', ?, ?, ?, 'ui', ?)""")
         .params(ctx.tenantId(), ctx.workspaceId(), String.valueOf(userId), created ? "invite" : "add_member", ctx.userName(), "role=" + role).update();
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(new InviteResponse(userId, empNo, body.name().trim(), ctx.workspaceId(), role, created, temp));
+        .body(new InviteResponse(userId, empNo, jdbc.sql("SELECT name FROM users WHERE id = ?").param(userId).query(String.class).single(),   // 기존 계정이면 요청의 이름이 아니라 그 계정의 이름
+            ctx.workspaceId(), role, created, temp));
   }
 
   /**
@@ -186,6 +196,7 @@ public class UserAdminController {
     Actor actor = companyActor();
     String reason = body == null || body.reason() == null ? "" : body.reason().strip();
     if (reason.isEmpty()) throw ApiException.badRequest("REASON_REQUIRED", "reason is required");
+    Limits.max(reason, Limits.NOTE, "reason");
     lockCompany(actor.tenantId());
     if (!"active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ALREADY_INACTIVE", "already inactive");
     // 위 status() 가 대상 계정의 행을 잠갔으므로(FOR UPDATE) 여기서부터 대상의 역할 · 소속은 바뀌지 않는다 — 역할 변경 · 제외 · 초대가
@@ -232,6 +243,7 @@ public class UserAdminController {
     Actor actor = companyActor();
     if ("active".equals(status(id, actor.tenantId()))) throw ApiException.conflict("ACCOUNT_ACTIVE", "deactivate the account first");
     String reason = body == null || body.reason() == null ? "" : body.reason().strip();
+    Limits.max(reason, Limits.NOTE, "reason");
     endSessions(id);
     jdbc.sql("DELETE FROM workspace_members WHERE user_id = ?").param(id).update();
     jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(id).update();
