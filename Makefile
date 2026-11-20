@@ -1,7 +1,7 @@
 # 로컬 개발 진입점. Windows는 Git Bash 또는 WSL에서 실행.
 COMPOSE := docker compose -f deploy/docker-compose.yml --env-file deploy/.env
 
-.PHONY: pdf up down migrate api ai index index-revision worker seed seed-reset load-logs test test-ai psql logs link-policies link-chains load-eval
+.PHONY: pdf up down migrate api ai index index-revision worker seed seed-reset load-logs test test-ai psql logs link-policies link-chains load-eval eval-full
 
 up:            ## postgres 기동
 	$(COMPOSE) up -d postgres
@@ -53,6 +53,9 @@ link-policies: ## data/alignment/*.json → 사례 노드의 근거 조문(attri
 
 load-eval:     ## data/eval/eval_runs.json → eval_runs (저장된 평가 결과 → 대시보드 지표, LLM 호출 없음). 멱등
 	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/load_eval_runs.py $(ARGS)
+
+eval-full:     ## 전체 측정(실제 AI 호출 — 한 번에 약 2달러) → 끝난 단계부터 대시보드에 바로 반영 + data/eval/eval_runs.json 갱신. make eval-full OUT=<결과를 둘 폴더>
+	bash eval/run_full.sh "$(OUT)"
 
 link-chains:   ## data/chain_records/*.json → 장애 건을 해결한 기록(log_resolutions) · 간선 연결 사유. make load-logs 뒤에. 멱등
 	set -a; . deploy/.env; set +a; uv run --with "psycopg[binary]" scripts/load_chain_records.py $(ARGS)

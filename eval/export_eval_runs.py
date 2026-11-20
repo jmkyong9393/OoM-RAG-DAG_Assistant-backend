@@ -1,6 +1,7 @@
 """저장된 평가 결과(--json) → data/eval/eval_runs.json. LLM·임베딩 호출 없음.
 
-hit_at_k.py · answer_quality.py 의 --json 결과를 --record 와 같은 행으로 바꾸고, 측정 시각(결과 파일이 쓰인 시각)을 붙인다.
+hit_at_k.py · answer_quality.py 의 --json 결과를 --record 와 같은 행으로 바꾸고, 측정 시각을 붙인다(결과에 적힌 measured_at, 옛 결과는 파일이 쓰인 시각).
+--record 로 이미 넣은 DB 에 이 파일을 다시 넣어도 측정 시각이 같아 겹치지 않는다.
 운영 DB 는 이 파일을 bootstrap 의 eval 단계(scripts/load_eval_runs.py)로 받는다 — 서버에서 평가를 다시 돌리지 않는다.
 
 실행: cd ai && uv run python ../eval/export_eval_runs.py --hit <hit.json> [--hit-mode rerank] --quality <q1.json> [--quality <q2.json>]
@@ -27,8 +28,10 @@ def source_of(path: Path, label: str) -> str:
     return f"{label} · {rel}" if label else rel
 
 
-def measured_at(path: Path) -> str:
-    """결과 파일이 쓰인 시각(평가가 끝난 시각). 초 단위, UTC."""
+def measured_at(path: Path, data: dict | None = None) -> str:
+    """측정 시각. 결과에 적혀 있으면 그 값, 없으면(옛 결과) 파일이 쓰인 시각. 초 단위, UTC."""
+    if data and data.get("measured_at"):
+        return data["measured_at"]
     return datetime.fromtimestamp(int(path.stat().st_mtime), timezone.utc).isoformat()
 
 
@@ -37,7 +40,7 @@ def from_hit(path: Path, mode: str | None, embedding_model: str, source: str) ->
     mode = mode or ("rerank" if "rerank" in data["summary"] else "hybrid")
     if data["k"] != 5:
         raise SystemExit(f"{path.name}: k={data['k']} — eval_runs.hit_at_5 는 k=5 결과만 넣는다")
-    at = measured_at(path)
+    at = measured_at(path, data)
     return [{**r, "run_at": at, "meta": {**r["meta"], "source": source_of(path, source)}}
             for r in hit_at_k.eval_rows(data["rows"], mode, 5, embedding_model, "evalset v1")]
 
@@ -47,7 +50,7 @@ def from_quality(path: Path, answer_model: str | None, source: str) -> list[dict
     model = data.get("answer_model") or answer_model
     if not model:
         raise SystemExit(f"{path.name}: 답변 모델 기록이 없다 — --answer-model 로 준다")
-    at = measured_at(path)
+    at = measured_at(path, data)
     rows = answer_quality.eval_rows(data["rows"], data["judge_model"], model, data["relevance_embedding"],
                                     data.get("relevance_baseline"), "answer_checks v1")
     return [{**r, "run_at": at, "meta": {**r["meta"], "source": source_of(path, source)}} for r in rows]
