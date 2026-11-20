@@ -42,7 +42,7 @@ async def refine_one(conn, row: dict, tokenizer_cache: dict[int, Tokenizer]) -> 
     tokens = tok.tokens(text)
     try:
         prof = load_profile(db.workspace_settings(conn, ws)["settings"].get("llm_profile", "default"))
-        result = await llm.refine(prof, row["title"], row["body"], tok, llm.Usage())
+        result = await llm.refine(prof, row["title"], row["body"], tok, llm.Usage(), row.get("type"))
         vec = await asyncio.to_thread(embed.embed_one, prof, text)
         # 키워드도 토큰에 섞어 어휘 검색이 정제 결과를 활용하게 한다
         kw_tokens = tok.tokens(" ".join(result.keywords)) if result.keywords else ""

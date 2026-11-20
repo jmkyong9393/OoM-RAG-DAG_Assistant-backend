@@ -51,6 +51,22 @@ async def test_refine_fake_extracts_code_keywords_summary(prof):
     assert r.resolution_summary and r.resolution_summary.startswith("FAQ 연동 API 호출이")
 
 
+def test_refine_system_depends_on_log_type_and_has_no_example_code():
+    fail, success, ref = llm.refine_system("fail"), llm.refine_system("success"), llm.refine_system("ref")
+    assert "해결했다고 쓰지 않는다" in fail and "해결했다고 쓰지 않는다" not in success
+    assert "무엇을 했고" in success and "무엇에 관한 자료" in ref
+    assert llm.refine_system(None) == fail, "유형을 모르면 없는 해결을 쓰지 않는 쪽으로"
+    assert "504" not in fail and "E-403" not in fail, "예시 코드를 넣으면 기록에 없는 그 코드가 결과로 나온다"
+
+
+def test_code_in_text_drops_codes_not_written_in_the_log():
+    text = "원인: 결제사 연동 타임아웃을 3초에서 30초로 잘못 올림\n승인 응답이 8초까지 늘어남. PG-TIMEOUT 이 반복."
+    assert llm.code_in_text("PG-TIMEOUT", text) and llm.code_in_text("pg timeout", text)
+    assert not llm.code_in_text("HTTP 504", text) and not llm.code_in_text(None, text) and not llm.code_in_text("", text)
+    assert llm.code_in_text("HTTP 504", "FAQ 연동 API 타임아웃(504)"), "HTTP 상태 코드는 숫자만 적혀 있어도 된다"
+    assert not llm.code_in_text("HTTP 504", "응답이 5040ms 걸림")
+
+
 def test_render_context_marks_deprecated_and_indents():
     ctx = llm._render_context(
         [{"ref": "P1", "doc_title": "D", "article_label": "제1조", "text": "t"}],

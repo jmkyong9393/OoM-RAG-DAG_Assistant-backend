@@ -406,16 +406,43 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
 
 # ── 정제 ─────────────────────────────────────────────────────────────────────
 
-async def refine(profile: LlmProfile, title: str, body: str, tokenizer: Tokenizer, usage: Usage) -> RefineResult:
+# 정제 지시문. 오류 코드 · 조치의 예시를 넣지 않는다 — 넣으면 기록에 없는 그 값이 결과로 나온다
+REFINE_SYSTEM = """사내 업무 기록 한 건에서 검색에 쓸 정보를 뽑는다. JSON {"error_code": 문자열|null, "keywords": [문자열, …], "resolution_summary": 문자열|null} 만 낸다.
+- error_code: 기록에 글자 그대로 적힌 오류 코드 하나. 적혀 있지 않으면 null 이다. 증상을 보고 짐작해 만들지 않는다.
+- keywords: 기록에 나온 낱말로 3~6개. 짧게.
+- resolution_summary: 기록에 적힌 내용만으로 쓴 한 문장. '~습니다'로 끝낸다. 기록에 없는 조치나 결과를 더하지 않는다. """
+# 기록 유형별로 요약이 담을 것 — 유형을 모르면 문제 · 원인 기록으로 본다(없는 해결을 쓰지 않는 쪽)
+REFINE_FOCUS = {
+    "fail": "이 기록은 문제나 원인을 적은 것이다 — 무엇이 문제(원인)였는지 쓴다. 기록에 해결했다는 말이 없으면 해결했다고 쓰지 않는다.",
+    "success": "이 기록은 한 조치를 적은 것이다 — 무엇을 했고 어떻게 됐는지 쓴다.",
+    "ref": "이 기록은 절차나 자료를 적은 것이다 — 무엇에 관한 자료인지 쓴다.",
+}
+
+
+def refine_system(kind: str | None) -> str:
+    return REFINE_SYSTEM + REFINE_FOCUS.get(kind or "", REFINE_FOCUS["fail"])
+
+
+def code_in_text(code: str | None, text: str) -> bool:
+    """LLM 이 낸 오류 코드가 기록에 실제로 적혀 있는가. 공백 · 하이픈 차이는 넘기고, HTTP 상태 코드는 숫자만 적혀 있어도 된다."""
+    if not code:
+        return False
+    core = lambda s: re.sub(r"[\s\-_]", "", s).upper()
+    if core(code) in core(text):
+        return True
+    m = re.fullmatch(r"HTTP\s?(\d{3})", code.strip(), re.I)
+    return bool(m and re.search(rf"(?<!\d){m.group(1)}(?!\d)", text))
+
+
+async def refine(profile: LlmProfile, title: str, body: str, tokenizer: Tokenizer, usage: Usage, kind: str | None = None) -> RefineResult:
+    """kind: 기록 유형(fail · success · ref). 요약이 무엇을 담을지 정한다."""
     text = f"{title}\n{body}"
     code = extract_error_code(text)
     if ai_mode() == "openai" and profile.has_key:
-        system = ("Extract from a Korean work log: error_code (string or null, e.g. E-403, HTTP 504), keywords (3-6 short Korean/English terms), "
-                  "resolution_summary (one Korean sentence of how it was resolved, or null). Reply JSON only.")
-        data = await _chat_json(profile, profile.model_light, system, text, usage)
+        data = await _chat_json(profile, profile.model_light, refine_system(kind), text, usage)
         try:
             r = RefineResult(**data)
-            if not r.error_code and code:
+            if not code_in_text(r.error_code, text):   # 기록에 없는 코드는 버리고 정규식으로 찾은 값을 쓴다
                 r.error_code = code
             return r
         except Exception:
