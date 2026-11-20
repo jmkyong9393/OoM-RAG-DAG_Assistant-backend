@@ -423,15 +423,26 @@ def refine_system(kind: str | None) -> str:
     return REFINE_SYSTEM + REFINE_FOCUS.get(kind or "", REFINE_FOCUS["fail"])
 
 
+# 숫자만 적힌 HTTP 상태 코드 — 따로 선 세 자리 수이고 뒤에 단위가 붙지 않아야 한다("500건" · "500 ms" 는 수량이다)
+_UNIT = r"(?:건|개|명|원|초|분|시간|일|주|회|번|대|줄|행|배|자|ms|MB|GB|KB|px|%)"
+
+
+def status_in_text(digits: str, text: str) -> bool:
+    """세 자리 수가 기록에 HTTP 상태 코드로 적혀 있는가."""
+    d = re.escape(digits)
+    return bool(re.search(rf"(?<![\d.]){d}(?![\d.]|{_UNIT}|\s+{_UNIT}(?![가-힣A-Za-z]))", text, re.I))
+
+
 def code_in_text(code: str | None, text: str) -> bool:
     """LLM 이 낸 오류 코드가 기록에 실제로 적혀 있는가. 공백 · 하이픈 차이는 넘기고, HTTP 상태 코드는 숫자만 적혀 있어도 된다."""
-    if not code:
-        return False
     core = lambda s: re.sub(r"[\s\-_]", "", s).upper()
-    if core(code) in core(text):
-        return True
-    m = re.fullmatch(r"HTTP\s?(\d{3})", code.strip(), re.I)
-    return bool(m and re.search(rf"(?<!\d){m.group(1)}(?!\d)", text))
+    c = core(code or "")
+    if len(c) < 3:   # 빈 값 · 기호뿐인 값 · 한두 글자는 코드로 보지 않는다(빈 문자열은 어느 글에나 들어 있다)
+        return False
+    m = re.fullmatch(r"(?:HTTP)?([1-5]\d{2})", c)
+    if m:            # 숫자뿐이거나 HTTP + 숫자 — 그 수가 상태 코드로 적힌 자리에 있어야 한다
+        return (c.startswith("HTTP") and c in core(text)) or status_in_text(m.group(1), text)
+    return c in core(text)
 
 
 async def refine(profile: LlmProfile, title: str, body: str, tokenizer: Tokenizer, usage: Usage, kind: str | None = None) -> RefineResult:

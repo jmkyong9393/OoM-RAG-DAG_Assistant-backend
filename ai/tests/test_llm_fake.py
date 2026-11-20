@@ -64,7 +64,13 @@ def test_code_in_text_drops_codes_not_written_in_the_log():
     assert llm.code_in_text("PG-TIMEOUT", text) and llm.code_in_text("pg timeout", text)
     assert not llm.code_in_text("HTTP 504", text) and not llm.code_in_text(None, text) and not llm.code_in_text("", text)
     assert llm.code_in_text("HTTP 504", "FAQ 연동 API 타임아웃(504)"), "HTTP 상태 코드는 숫자만 적혀 있어도 된다"
+    assert llm.code_in_text("HTTP 504", "FAQ API 호출이 HTTP 504 로 실패") and llm.code_in_text("HTTP 401", "CDN이 401 응답을 캐싱")
+    assert llm.code_in_text("503", "상태 코드 503 이 반복") and llm.code_in_text("HTTP 429", "429 에러가 반복")
     assert not llm.code_in_text("HTTP 504", "응답이 5040ms 걸림")
+    assert not llm.code_in_text("HTTP 500", "주문 500건 처리 중 지연") and not llm.code_in_text("500", "주문 500건 처리 중 지연"), "수량은 상태 코드가 아니다"
+    assert not llm.code_in_text("HTTP 500", "응답 500건이 밀림") and not llm.code_in_text("HTTP 500", "응답 500 건 처리")
+    assert llm.code_in_text("HTTP 500", "상태 코드 500 원인은 설정 오류"), "'500 원인'의 '원'은 단위가 아니다"
+    assert not llm.code_in_text("---", text) and not llm.code_in_text("-", text) and not llm.code_in_text("E1", "E1 오류"), "기호뿐이거나 너무 짧은 값은 코드가 아니다"
 
 
 def test_render_context_marks_deprecated_and_indents():
