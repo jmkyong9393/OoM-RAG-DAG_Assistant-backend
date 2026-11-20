@@ -43,9 +43,10 @@ async def test_classify_and_refine_use_json_mode(openai_mode):
     call = openai_mode.calls[-1]["body"]
     assert call["model"] == "stub-light" and call["response_format"] == {"type": "json_object"} and call["temperature"] == 0
     assert "error code detected" not in call["messages"][1]["content"]
-    rr = await llm.refine(prof, "HTTP 504 타임아웃", "커넥션 풀 확장으로 해결", Tokenizer(), u)
+    rr = await llm.refine(prof, "HTTP 504 타임아웃", "커넥션 풀 확장으로 해결", Tokenizer(), u, "success")
     assert rr.keywords == ["스텁", "키워드", "정제"]
     assert rr.error_code == "HTTP 504", "LLM 이 코드를 비우면 정규식 추출값으로 보완한다"
+    assert "무엇을 했고" in openai_mode.calls[-1]["body"]["messages"][0]["content"], "기록 유형에 맞는 요약 지시가 간다"
     assert u.prompt_tokens == 84 and u.completion_tokens == 14
 
 

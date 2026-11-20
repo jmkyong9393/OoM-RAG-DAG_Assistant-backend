@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
             if "classify" in system:
                 intent = "both" if ("규정" in user and ("오류" in user or "에러" in user)) else "policy" if "규정" in user else "troubleshoot"
                 content = json.dumps({"intent": intent, "reason": "stub"})
-            elif "Extract" in system:
+            elif "업무 기록 한 건" in system:
                 content = json.dumps({"error_code": None, "keywords": ["스텁", "키워드", "정제"], "resolution_summary": "스텁이 정리한 해결 요약."})
             elif "트러블슈팅 기록 묶음" in system:
                 content = json.dumps({"summary": "스텁 체인 요약입니다."})
