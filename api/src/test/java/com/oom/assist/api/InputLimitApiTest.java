@@ -1,6 +1,7 @@
 package com.oom.assist.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -62,6 +63,9 @@ class InputLimitApiTest extends AbstractApiTest {
     long s = jdbc.sql("INSERT INTO search_sessions (workspace_id, user_id, query, mode, status) VALUES (?, ?, 'q', 'dag_only', 'done') RETURNING id")
         .params(wsSw, userBackend).query(Long.class).single();
     mvc.perform(as(post("/feedback"), userBackend, wsSw).content("{\"session_id\":" + s + ",\"score\":1}")).andExpect(status().isNoContent());
+    // 질문 기록은 내 질문인지 알려 준다 — 화면이 남의 질문에서 만족 버튼을 끈다
+    mvc.perform(as(get("/sessions/" + s), userBackend, wsSw)).andExpect(jsonPath("$.mine").value(true));
+    mvc.perform(as(get("/sessions/" + s), userLead, wsSw)).andExpect(jsonPath("$.mine").value(false));
     // 같은 부서의 다른 사람은 바꾸지도 지우지도 못한다
     mvc.perform(as(post("/feedback"), userLead, wsSw).content("{\"session_id\":" + s + ",\"score\":-1}"))
         .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("FORBIDDEN"));
