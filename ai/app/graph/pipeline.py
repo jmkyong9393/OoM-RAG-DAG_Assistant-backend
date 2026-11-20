@@ -38,6 +38,7 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         with db.connect() as conn:
             ws = db.workspace_settings(conn, workspace_id)
             terms = db.user_terms(conn)
+            error_code = error_code or db.known_code(conn, workspace_id, query)
             cctx = db.classify_context(conn, workspace_id, error_code)
             stale_vec = _stale_vectors(conn, ws)
             scope_docs = db.scope_documents(conn, workspace_id)

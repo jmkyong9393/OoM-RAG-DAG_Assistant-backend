@@ -148,6 +148,7 @@ EXTRACT = {"pdf": pdf_text, "docx": docx_text, "hwp": hwp_text, "hwpx": hwpx_tex
 
 def normalize(text: str) -> str:
     """공통 후처리: pandoc 이스케이프(\\[ \\] 등) 제거, '부칙' 줄을 제목으로(부칙 제1조가 본문 제1조와 섞이지 않게), 줄끝 공백."""
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)   # 널 문자는 DB 에 저장되지 않는다 — PDF 추출 글에 섞여 오는 제어 문자를 뺀다
     text = re.sub(r"\\([\[\]()*_#|<>])", r"\1", text)
     text = re.sub(r"(?m)^\s*부\s*칙\s*$", "## 부칙", text)
     return re.sub(r"[ \t]+$", "", text, flags=re.M).strip() + "\n"

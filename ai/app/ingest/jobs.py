@@ -59,6 +59,8 @@ def convert_one(conn) -> str | None:
     except Exception as e:  # noqa: BLE001 — 도구 없음 · 깨진 파일 · 예상 못 한 오류 모두 실패로 남겨 다음 주기에 같은 건을 되풀이하지 않는다
         conn.rollback()
         msg = str(e) if isinstance(e, ConversionError) else f"{type(e).__name__}: {e}"
+        if type(e).__name__ == "BadZipFile":   # hwpx · docx 는 zip 묶음이다
+            msg = "파일이 손상되었거나 확장자와 다른 형식입니다"
         conn.execute("UPDATE policy_uploads SET status = 'failed', error = %s, updated_at = now() WHERE id = %s", (msg[:500], row["id"]))
         result = "failed"
     conn.commit()
