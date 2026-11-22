@@ -2,6 +2,7 @@ package com.oom.assist.document;
 
 import com.oom.assist.common.context.TenantContext;
 import com.oom.assist.common.error.ApiException;
+import com.oom.assist.common.util.Limits;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -84,6 +85,9 @@ public class PolicyUploadController {
     String ext = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "";
     if (!FORMATS.contains(ext)) throw ApiException.badRequest("UNSUPPORTED_FORMAT", "supported: " + String.join(", ", FORMATS.stream().sorted().toList()));
     if (title == null || title.isBlank() || version == null || version.isBlank()) throw ApiException.badRequest("VALIDATION", "title and version are required");
+    Limits.max(title, Limits.DOC_TITLE, "title");
+    Limits.max(version, Limits.DOC_VERSION, "version");
+    Limits.max(docType, Limits.DOC_VERSION, "doc_type");
     if (slug == null || !SLUG.matcher(slug).matches()) throw ApiException.badRequest("VALIDATION", "slug must be lowercase letters, digits, hyphens (3~80)");
     long ws = targetWorkspace(scope, ctx);
     requireManager(ws, ctx);
@@ -168,6 +172,7 @@ public class PolicyUploadController {
     if (!Set.of("review", "failed").contains(u.status())) throw ApiException.conflict("NOT_IN_REVIEW", "status is " + u.status());
     String reason = body == null ? null : blankToNull(body.reason());
     if (reason == null) throw ApiException.badRequest("REASON_REQUIRED", "reason is required to reject");
+    Limits.max(reason, Limits.NOTE, "reason");
     jdbc.sql("UPDATE policy_uploads SET status = 'rejected', reject_reason = ?, reviewed_by = ?, reviewed_at = now(), updated_at = now() WHERE id = ?")
         .params(reason, ctx.userId(), id).update();
     audit(ctx, u.workspaceId(), id, "rejected", reason);
