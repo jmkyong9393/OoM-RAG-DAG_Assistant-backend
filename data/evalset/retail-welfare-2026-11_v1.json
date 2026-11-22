@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 1, "kind": "policy", "query": "본인 결혼하면 회사에서 경조금 얼마 나와요?", "expect": ["c:retail-welfare-2026-11-a5-1"], "note": "기본 | 제5조 ① | 본인 결혼 500,000원. 사유별 금액은 별표의 경조금 지급 기준과 같음"},
+  {"workspace_id": 1, "kind": "policy", "query": "경조금은 언제까지 신청해야 하나요?", "expect": ["c:retail-welfare-2026-11-a6-1"], "note": "기본 | 제6조 ①③ | 사유가 생긴 날부터 30일 이내에 인사 시스템으로 신청, 기한이 지나면 지급하지 않음. 부득이한 사정이면 그 사정이 없어진 날부터 30일 이내"},
+  {"workspace_id": 1, "kind": "policy", "query": "부부가 같이 다니는데 출산 축하금 둘 다 받아요?", "expect": ["c:retail-welfare-2026-11-a8-1"], "note": "기본 | 제8조 ①② | 본인 결혼만 각각 지급하고, 출산처럼 부부에게 같은 사유가 생기면 한 사람에게만 지급"},
+  {"workspace_id": 1, "kind": "policy", "query": "건강검진 받는 날은 근무를 어떻게 처리해요?", "expect": ["c:retail-welfare-2026-11-a13-1"], "note": "기본 | 제13조 ①② | 휴가·휴직 규정에 따라 공가 반일(4시간). 교대 근무자는 근무표가 정해지기 전에 예정일을 알려 조정"},
+  {"workspace_id": 1, "kind": "policy", "query": "복지 포인트는 1년에 얼마나 나오고 언제 줘요?", "expect": ["c:retail-welfare-2026-11-a16-1"], "note": "기본 | 제16조 ① | 해마다 600,000포인트를 1월에 지급"},
+  {"workspace_id": 1, "kind": "policy", "query": "직원 할인은 몇 퍼센트고 한도가 있나요?", "expect": ["c:retail-welfare-2026-11-a23-1"], "note": "기본 | 제23조 ①② | 매장과 온라인몰 10퍼센트, 본인과 배우자 합쳐 할인 전 금액으로 연 구매 한도 3,000,000원"},
+  {"workspace_id": 1, "kind": "policy", "query": "자녀 대학 등록금 지원은 조건이 어떻게 돼요?", "expect": ["c:retail-welfare-2026-11-a25-1"], "note": "기본 | 제25조 ①② | 근속 3년 이상, 학기당 1,500,000원 한도, 자녀 2명까지, 자녀 1명당 8학기까지"},
+  {"workspace_id": 1, "kind": "policy", "query": "주 20시간 알바인데 복지포인트 똑같이 줌?", "expect": ["c:retail-welfare-2026-11-a16-1"], "note": "의역(구어) | 제16조 ③ | 단시간 근로자는 1주 소정근로시간을 40시간으로 나눈 비율로 지급, 20시간이면 300,000포인트"},
+  {"workspace_id": 1, "kind": "policy", "query": "일하다 유니폼 찢어지면 내 돈으로 사야 됨?", "expect": ["c:retail-welfare-2026-11-a21-1"], "note": "의역(구어) | 제21조 ①③ | 업무 중 찢어지거나 오염된 근무복은 무상으로 교체, 본인 과실이어도 변상금을 임금에서 공제하지 않음"},
+  {"workspace_id": 1, "kind": "policy", "query": "직원가로 산 거 중고로 팔다 걸리면 어떻게 돼?", "expect": ["c:retail-welfare-2026-11-a24-1"], "note": "의역(구어) | 제24조 ①② | 되팔기 금지. 확인되면 할인액을 돌려받고 직원 할인 자격 1년간 정지, 징계는 취업규칙"},
+  {"workspace_id": 1, "kind": "policy", "query": "심리상담 일년에 몇번까지 무료에요", "expect": ["c:retail-welfare-2026-11-a14-1"], "note": "의역(오타) | 제14조 ①② | 외부 전문기관 심리상담 연 6회까지 무료, 회사는 이용 인원 합계만 통보받음"},
+  {"workspace_id": 1, "kind": "policy", "query": "할머니 돌아가시면 조의금 얼마 나와요?", "expect": ["c:retail-welfare-2026-11-s33-1"], "note": "표 | 별표 1 조부모 및 형제자매 사망 행 | 200,000원, 외조부모 포함, 조화는 없음"},
+  {"workspace_id": 1, "kind": "policy", "query": "물류센터 안전화는 얼마나 자주 새로 줘요?", "expect": ["c:retail-welfare-2026-11-s35-1"], "note": "표 | 별표 3 안전화 행 | 입사할 때 지급하고 이후 1년마다, 닳거나 파손되면 기간 전에도 교체"},
+  {"workspace_id": 1, "kind": "policy", "query": "근무복 잃어버리면 변상금을 월급에서 떼나요?", "expect": ["c:retail-welfare-2026-11-a21-1"], "note": "교차 | 제21조 ③④ (+ 급여 규정 제21조 ②③) | 임금에서 공제하지 않음. 고의나 중대한 과실로 변상 책임이 있으면 급여 규정에 따라 임금과 별도의 절차로 청구", "expect_also": ["c:retail-payroll-2026-11-a21-1"]},
+  {"workspace_id": 1, "kind": "policy", "query": "폭언 고객 때문에 받은 상담도 연 6회에 들어가요?", "expect": ["c:retail-welfare-2026-11-a14-1"], "note": "교차 | 제14조 ④ (+ 고객응대 근로자 보호 지침 제16조 ①) | 들어가지 않음. 폭언등을 겪은 근로자의 상담은 고객응대 근로자 보호 지침에 따르고 이 규정의 횟수에서 빼지 않음"}
+]
