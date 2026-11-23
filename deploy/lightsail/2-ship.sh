@@ -20,36 +20,51 @@ git fetch -q origin
 [ -n "$(git branch -r --contains HEAD)" ] || { echo "커밋 $SHA 가 원격에 없습니다 — 먼저 푸시하세요"; exit 1; }
 REPO_URL=$(git remote get-url origin)
 
-step "이미지 빌드 — api · ai ($SHA)"
-docker build -q -t "oom-api:$SHA" api
-docker build -q -f ai/Dockerfile -t "oom-ai:$SHA" .
+# 이미지 태그 = 그 이미지에 들어가는 경로를 마지막으로 바꾼 커밋. 규정 문서 · 데이터 · 배포 설정만 고치면 태그가 그대로라 빌드도 전송도 건너뛴다.
+# 서버 레포는 늘 $SHA — 데이터 적재 · 마운트 파일은 레포에서, 앱 코드 · 마이그레이션은 이미지에서 온다(경로가 같으면 내용도 같다)
+ATAG=$(git log -1 --format=%h HEAD -- api)
+AI_SRC=$(awk '/^COPY / && !/--from/ {for (i = 2; i < NF; i++) print $i}' ai/Dockerfile)   # ai 이미지가 복사하는 경로를 Dockerfile 에서 읽는다
+ITAG=$(git log -1 --format=%h HEAD -- ai/Dockerfile $AI_SRC)
+build() { docker image inspect "$1" >/dev/null 2>&1 && echo "  $1 — 이미 있음, 건너뜀" || docker build -q --label oom.project=assist -t "$@"; }   # 표식: trim-images.sh 가 이 프로젝트 것만 지운다
+step "이미지 빌드 — api ($ATAG) · ai ($ITAG), 레포 $SHA"
+build "oom-api:$ATAG" api
+build "oom-ai:$ITAG" -f ai/Dockerfile .
 step "이미지 빌드 — web ($FRONT_REF, 프론트 레포는 읽기만)"
 git -C "$FRONT_DIR" fetch -q origin
 FSHA=$(git -C "$FRONT_DIR" rev-parse --short "$FRONT_REF")
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-git -C "$FRONT_DIR" archive "$FRONT_REF" | tar -x -C "$TMP"
-docker build -q -t "oom-web:$FSHA" "$TMP"
+docker image inspect "oom-web:$FSHA" >/dev/null 2>&1 || git -C "$FRONT_DIR" archive "$FRONT_REF" | tar -x -C "$TMP"
+build "oom-web:$FSHA" "$TMP"
 
 step "서버 준비 대기 (첫 부팅의 Docker 설치)"
 for i in $(seq 1 60); do $SSH 'test -f /var/lib/oom-user-data.done && docker version >/dev/null 2>&1' 2>/dev/null && break; sleep 10; done
 $SSH 'docker version --format "docker {{.Server.Version}}" && free -m | sed -n 2,3p'
 
-step "이미지 전송 (압축해서 ssh 로 — 수 분)"
-docker save "oom-api:$SHA" "oom-ai:$SHA" "oom-web:$FSHA" | gzip | $SSH 'gunzip | docker load'
+step "이미지 전송 (서버에 없는 것만, 압축해서 ssh 로 — 수 분)"
+SEND=""; for img in "oom-api:$ATAG" "oom-ai:$ITAG" "oom-web:$FSHA"; do
+  $SSH "docker image inspect $img >/dev/null 2>&1" && echo "  $img — 서버에 있음, 건너뜀" || SEND="$SEND $img"
+done
+# gzip -1: 기본 압축과 크기 차이는 작고 압축이 훨씬 빠르다
+[ -z "$SEND" ] || docker save $SEND | gzip -1 | $SSH 'gunzip | docker load'
 
 step "서버의 레포를 같은 커밋으로 ($SHA)"
 $SSH "set -e; [ -d oom/.git ] || git clone -q '$REPO_URL' oom; cd oom && git fetch -q origin && git checkout -q --detach $SHA && git log --oneline -1"
 
 step "운영 설정 올리기 (deploy/.env, 이미지 태그 반영)"
-sed -e "s|^API_IMAGE=.*|API_IMAGE=oom-api:$SHA|" -e "s|^AI_IMAGE=.*|AI_IMAGE=oom-ai:$SHA|" -e "s|^WEB_IMAGE=.*|WEB_IMAGE=oom-web:$FSHA|" deploy/.env.prod \
+sed -e "s|^API_IMAGE=.*|API_IMAGE=oom-api:$ATAG|" -e "s|^AI_IMAGE=.*|AI_IMAGE=oom-ai:$ITAG|" -e "s|^WEB_IMAGE=.*|WEB_IMAGE=oom-web:$FSHA|" deploy/.env.prod \
   | $SSH 'umask 077; cat > oom/deploy/.env'
 
 step "기동 — bootstrap.sh ${*:-(seed data eval)}"
 $SSH "cd oom/deploy && bash bootstrap.sh $*"
+
+step "옛 이미지 정리 — 서버 (종류마다 지금 + 직전 하나)"
+$SSH "cd oom && bash deploy/trim-images.sh api=$ATAG ai=$ITAG web=$FSHA; df -h / | tail -1"
 
 step "확인"
 ORIGIN=$(grep ^SITE_ORIGIN= deploy/.env.prod | cut -d= -f2)
 for i in $(seq 1 30); do s=$(curl -ks -o /dev/null -w '%{http_code}' "$ORIGIN/api/v1/actuator/health" || true); [ "$s" = 200 ] && break; sleep 5; done
 echo "health $s · 대문 $(curl -ks -o /dev/null -w '%{http_code}' "$ORIGIN/")"
 $SSH 'docker stats --no-stream --format "  {{.Name}}\t{{.MemUsage}}" | grep oom-prod; free -m | sed -n 2,3p'
-echo; echo "주소: $ORIGIN   (backend $SHA · web $FSHA, $(( $(date +%s) - t0 ))s)"
+step "옛 이미지 정리 — 이 PC (종류마다 지금 + 직전 하나)"
+bash deploy/trim-images.sh api=$ATAG ai=$ITAG web=$FSHA
+echo; echo "주소: $ORIGIN   (레포 $SHA · api $ATAG · ai $ITAG · web $FSHA, $(( $(date +%s) - t0 ))s)"
