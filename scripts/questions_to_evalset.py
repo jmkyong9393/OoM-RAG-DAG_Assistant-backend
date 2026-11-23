@@ -7,6 +7,7 @@ questions.md 표의 '정답 조문' 열을 변환 결과(<slug>.chunks.json)의 
   별표 2 설치 후 대형 가전·가구 행 → [별표 2] 청크 중 그 글자가 들어 있는 행(청크). 공백은 무시하고 비교
   (+ 제20조 ②)            → 같은 문서면 expect 에 추가
   (+ 급여 규정 제18조 ①)  → 다른 문서면 expect_also(둘째 문서의 정답). 그 부서에서 검색되지 않는 문서(다른 부서 규정)면 note 에만 남김
+  (= 취업규칙 제3조 ③)    → 다른 문서의 조문도 같은 답을 준다 — 어느 쪽을 찾아도 정답(expect 에 추가). (+ …) 앞에 쓴다
 항을 안 쓴 조문은 그 조문의 청크 전부. 매핑이 0건이면 오류로 멈춘다(평가셋에 빈 정답이 들어가지 않게).
 
 실행: uv run scripts/questions_to_evalset.py --meta data/policies/src/<slug>/meta.json [--out data/evalset]
@@ -43,6 +44,12 @@ def split_refs(answer: str) -> tuple[str, str]:
     """'제4조 ④ (+ 고객응대 근로자 보호 지침 제11조 ①)' → ('제4조 ④', '고객응대 근로자 보호 지침 제11조 ①')"""
     m = re.search(r"\(\+\s*(.*?)\)\s*$", answer)
     return (answer[: m.start()].strip(), m.group(1).strip()) if m else (answer.strip(), "")
+
+
+def split_either(own: str) -> tuple[str, str]:
+    """'제19조 ④⑤ (= 취업규칙 제3조 ③)' → ('제19조 ④⑤', '취업규칙 제3조 ③')"""
+    m = re.search(r"\(=\s*(.*?)\)\s*$", own)
+    return (own[: m.start()].strip(), m.group(1).strip()) if m else (own, "")
 
 
 def map_article(chunks: list[dict], slug: str, n: str, sub: str | None, hang: str) -> list[str]:
@@ -137,7 +144,13 @@ def main() -> int:
     items, bad = [], []
     for r in rows:
         own, other = split_refs(r["answer"])
+        own, either = split_either(own)
         expect = map_refs(own, chunks, slug)
+        if either:   # 다른 문서의 조문도 정답 — 그 부서에서 검색되는 문서여야 한다
+            same, out_of_scope = map_cross(either, docs, scope)
+            if not same or out_of_scope:
+                bad.append((r["no"], f"(= {either})"))
+            expect += [x for x in same if x not in expect]
         # (+ …) 가 같은 문서 조문이면(문서명 없이 '제N조'/'별표'로 시작) expect 에 추가
         if other and re.match(r"(제\d+조|별표)", other):
             expect += [x for x in map_refs(other, chunks, slug) if x not in expect]
@@ -156,6 +169,11 @@ def main() -> int:
         return 1
     a.out.mkdir(parents=True, exist_ok=True)
     dest = a.out / f"{slug}_v1.json"
+    if dest.exists():   # expect_alt(같은 값이 조문과 별표 양쪽에 적힌 문항의 대체 정답)는 손으로 넣는다 — 다시 만들 때 지우지 않는다
+        kept = {it["query"]: it["expect_alt"] for it in json.loads(dest.read_text(encoding="utf-8")) if it.get("expect_alt")}
+        for i, it in enumerate(items):   # 원래 자리(expect 바로 뒤)에 둔다 — 다시 만들어도 파일이 바뀌지 않게
+            if it["query"] in kept:
+                items[i] = {k: v for key, val in it.items() for k, v in ([(key, val), ("expect_alt", kept[it["query"]])] if key == "expect" else [(key, val)])}
     body = ",\n".join("  " + json.dumps(it, ensure_ascii=False) for it in items)   # seed_v1.json 과 같은 한 줄 한 건
     dest.write_text("[\n" + body + "\n]\n", encoding="utf-8")
     print(f"wrote {dest.relative_to(ROOT) if dest.is_relative_to(ROOT) else dest}: {len(items)}건")
