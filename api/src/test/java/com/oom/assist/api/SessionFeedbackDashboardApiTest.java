@@ -46,6 +46,24 @@ class SessionFeedbackDashboardApiTest extends AbstractApiTest {
   }
 
   @Test
+  void sessionsAndUnansweredQuestionsStayWithTheAsker() throws Exception {
+    long s = session(wsSw, "done", "policy", "답 없음", new String[0], new String[0], 100);   // userBackend(SW 개발 member)의 질문, 근거 0건
+    long staff = user("신입", "사원", "T0031", "staff31@test.local");
+    member(wsSw, staff, "member");
+    // 질문 기록: 부서 관리자와 동료에게 보이지 않는다
+    mvc.perform(as(get("/sessions"), userBackend, wsSw)).andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].mine").value(true));
+    mvc.perform(as(get("/sessions"), userLead, wsSw)).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(as(get("/sessions"), staff, wsSw)).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(as(get("/sessions/" + s), userLead, wsSw)).andExpect(status().isNotFound());
+    // 대시보드의 "근거 없이 끝난 질문": 비율은 모두에게, 문장은 부서 관리자에게 전부 · 그 밖에는 본인 것만
+    mvc.perform(as(get("/dashboard/summary"), userLead, wsSw)).andExpect(jsonPath("$.no_evidence.rate").value(100.0))
+        .andExpect(jsonPath("$.no_evidence.recent", hasSize(1)));
+    mvc.perform(as(get("/dashboard/summary"), userBackend, wsSw)).andExpect(jsonPath("$.no_evidence.recent", hasSize(1)));
+    mvc.perform(as(get("/dashboard/summary"), staff, wsSw)).andExpect(jsonPath("$.no_evidence.rate").value(100.0))
+        .andExpect(jsonPath("$.no_evidence.recent", hasSize(0)));
+  }
+
+  @Test
   void feedbackUpsertsAndNullWithdraws() throws Exception {
     long s = session(wsSw, "done", "troubleshoot", "a", new String[0], new String[0], 1);
     mvc.perform(as(post("/feedback"), userBackend, wsSw).content("{\"session_id\":" + s + ",\"score\":1}")).andExpect(status().isNoContent());
