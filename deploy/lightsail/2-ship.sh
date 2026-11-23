@@ -3,12 +3,12 @@
 # 사용: bash deploy/lightsail/2-ship.sh <서버 IP> [bootstrap.sh 인자…]     예) … 1.2.3.4            첫 배포(시드 · 규정 · 사례 · 평가 결과 적재)
 #                                                                             … 1.2.3.4 seed eval  데이터 재색인 없이
 # 준비: Docker 실행 중, deploy/.env.prod(make-env.sh), 백엔드 작업 트리가 깨끗하고 푸시돼 있을 것(서버는 같은 커밋을 GitHub 에서 받는다)
-# 환경: KEY(기본 ~/.ssh/oom-assist.pem) · FRONT_DIR(프론트 레포, 기본 ../OoM-RAG-DAG_Assistant) · FRONT_REF(기본 origin/fronend) · SSH_USER(기본 ubuntu)
+# 환경: KEY(기본 ~/.ssh/oom-assist.pem) · FRONT_DIR(프론트 레포, 기본 ../OoM-RAG-DAG_Assistant) · FRONT_REF(기본 origin/main) · SSH_USER(기본 ubuntu)
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 IP=${1:?서버 IP}; shift
 KEY=${KEY:-$HOME/.ssh/oom-assist.pem}; SSH_USER=${SSH_USER:-ubuntu}
-FRONT_DIR=${FRONT_DIR:-../OoM-RAG-DAG_Assistant}; FRONT_REF=${FRONT_REF:-origin/fronend}
+FRONT_DIR=${FRONT_DIR:-../OoM-RAG-DAG_Assistant}; FRONT_REF=${FRONT_REF:-origin/main}
 SSH="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30 $SSH_USER@$IP"
 t0=$(date +%s); step() { echo; echo "== [$(( $(date +%s) - t0 ))s] $*"; }
 
