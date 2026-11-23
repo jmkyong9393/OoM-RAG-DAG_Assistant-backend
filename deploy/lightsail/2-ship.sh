@@ -34,8 +34,12 @@ step "서버 준비 대기 (첫 부팅의 Docker 설치)"
 for i in $(seq 1 60); do $SSH 'test -f /var/lib/oom-user-data.done && docker version >/dev/null 2>&1' 2>/dev/null && break; sleep 10; done
 $SSH 'docker version --format "docker {{.Server.Version}}" && free -m | sed -n 2,3p'
 
-step "이미지 전송 (압축해서 ssh 로 — 수 분)"
-docker save "oom-api:$SHA" "oom-ai:$SHA" "oom-web:$FSHA" | gzip | $SSH 'gunzip | docker load'
+step "이미지 전송 (서버에 없는 것만, 압축해서 ssh 로 — 수 분)"
+SEND=""; for img in "oom-api:$SHA" "oom-ai:$SHA" "oom-web:$FSHA"; do
+  $SSH "docker image inspect $img >/dev/null 2>&1" && echo "  $img — 서버에 있음, 건너뜀" || SEND="$SEND $img"
+done
+# gzip -1: 기본 압축과 크기 차이는 작고 압축이 훨씬 빠르다
+[ -z "$SEND" ] || docker save $SEND | gzip -1 | $SSH 'gunzip | docker load'
 
 step "서버의 레포를 같은 커밋으로 ($SHA)"
 $SSH "set -e; [ -d oom/.git ] || git clone -q '$REPO_URL' oom; cd oom && git fetch -q origin && git checkout -q --detach $SHA && git log --oneline -1"
@@ -46,6 +50,9 @@ sed -e "s|^API_IMAGE=.*|API_IMAGE=oom-api:$SHA|" -e "s|^AI_IMAGE=.*|AI_IMAGE=oom
 
 step "기동 — bootstrap.sh ${*:-(seed data eval)}"
 $SSH "cd oom/deploy && bash bootstrap.sh $*"
+
+step "옛 이미지 정리 (지금 쓰는 태그만 남긴다 — 갱신 배포마다 약 1.8GB 가 쌓인다)"
+$SSH "docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^oom-(api|ai|web):' | grep -vx -e 'oom-api:$SHA' -e 'oom-ai:$SHA' -e 'oom-web:$FSHA' | xargs -r docker rmi >/dev/null; docker image prune -f >/dev/null; df -h / | tail -1"
 
 step "확인"
 ORIGIN=$(grep ^SITE_ORIGIN= deploy/.env.prod | cut -d= -f2)

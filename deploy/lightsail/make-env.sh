@@ -48,7 +48,7 @@ rows = [
     ("# 로그인 전 대문에 보여 줄 데모 회사(비우면 빈 목록)", None),
     ("PUBLIC_TENANT", "retail"),
     ("AI_MODE", "openai"),
-] + [(k, local.get(k, "")) for k in ("LLM_PROFILE_DEFAULT_BASE_URL", "LLM_PROFILE_DEFAULT_API_KEY", "LLM_PROFILE_DEFAULT_MODEL_LIGHT",
+] + [(k, local.get(k, "")) for k in ("LLM_PROFILE_DEFAULT_BASE_URL", "LLM_PROFILE_DEFAULT_API_KEY", "LLM_PROFILE_DEFAULT_API_KEY_BACKUP", "LLM_PROFILE_DEFAULT_MODEL_LIGHT",
                                      "LLM_PROFILE_DEFAULT_MODEL_ANSWER", "LLM_PROFILE_DEFAULT_EMBEDDING_MODEL")] + [
     ("# 이미지 태그는 2-ship.sh 가 올릴 때 채운다", None),
     ("API_IMAGE", ""), ("AI_IMAGE", ""), ("WEB_IMAGE", ""),

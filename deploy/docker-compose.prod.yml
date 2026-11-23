@@ -19,8 +19,14 @@ x-ai-env: &ai-env
   POLICY_RERANK: ${POLICY_RERANK:-1}
   WORKER_POLL_SEC: ${WORKER_POLL_SEC:-5}
 
+# 컨테이너 로그 회전 — 기본 json-file 은 상한이 없어 오래 띄우면 디스크를 채운다
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
 services:
   postgres:
+    logging: *logging
     image: pgvector/pgvector:pg16
     container_name: oom-prod-postgres
     environment:
@@ -39,6 +45,7 @@ services:
     mem_limit: 512m
 
   flyway:
+    logging: *logging
     image: flyway/flyway:11
     profiles: ["migrate"]
     depends_on:
@@ -54,6 +61,7 @@ services:
       migrate
 
   api:
+    logging: *logging
     image: ${API_IMAGE:-oom-api:local}
     build: ../api
     environment:
@@ -92,11 +100,13 @@ services:
     mem_limit: 1g
 
   ai:
+    logging: *logging
     image: ${AI_IMAGE:-oom-ai:local}
     build: {context: .., dockerfile: ai/Dockerfile}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
     environment:
       <<: *ai-env
       WORKER_EMBEDDED: "1"                   # 정제 워커를 같은 프로세스(스레드)에서 — kiwi 모델 공유로 ≈500 MB 절감
+      MALLOC_ARENA_MAX: "2"                  # 스레드마다 생기는 glibc 메모리 영역 수를 묶어 장시간 가동 때 RSS 가 불어나는 것을 막는다(예방)
     volumes:
       - oom-prod-uploads:/data/uploads       # 업로드 변환 · 등록(워커)이 원본을 읽고 검수본을 쓴다
     depends_on:
@@ -113,6 +123,7 @@ services:
 
   # 일회성 데이터 적재(시드 · 규정 색인 · 사례 · 근거 연결 · 체인 기록). 호스트에서 bash bootstrap.sh — 멱등
   bootstrap:
+    logging: *logging
     image: ${AI_IMAGE:-oom-ai:local}
     build: {context: .., dockerfile: ai/Dockerfile}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
     profiles: ["bootstrap"]
@@ -132,6 +143,7 @@ services:
     mem_limit: 1g
 
   web:
+    logging: *logging
     image: ${WEB_IMAGE:?set WEB_IMAGE (프론트 레포 Dockerfile 로 빌드한 이미지)}
     environment:
       HOSTNAME: 0.0.0.0
@@ -141,10 +153,17 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]   # node alpine 이미지의 busybox wget
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
     restart: unless-stopped
     mem_limit: 512m
 
   caddy:
+    logging: *logging
     image: caddy:2
     ports:
       - "80:80"
@@ -156,8 +175,10 @@ services:
       - oom-prod-caddy-data:/data
       - oom-prod-caddy-config:/config
     depends_on:
-      - api
-      - web
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy   # 뜨는 중인 web 으로 첫 요청이 가 502 가 나지 않게
     restart: unless-stopped
     mem_limit: 128m
 
