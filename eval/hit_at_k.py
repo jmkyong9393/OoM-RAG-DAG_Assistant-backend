@@ -37,7 +37,7 @@ def search(conn, item: dict, mode: str, tokens: str, vec, k: int) -> list[str]:
     v = vec if mode in ("vec", "hybrid") else None
     if kind == "policy":
         return [f"c:{r['id']}" for r in db.search_chunks(conn, ws, t, v, k)]
-    code = extract_error_code(item["query"]) if mode != "vec" else None
+    code = (extract_error_code(item["query"]) or db.known_code(conn, ws, item["query"])) if mode != "vec" else None   # 파이프라인과 같은 순서
     return [f"n:{r['node_id']}" for r in db.search_case_entry(conn, ws, t, v, code, k)]   # 파이프라인이 쓰는 진입점 검색
 
 
