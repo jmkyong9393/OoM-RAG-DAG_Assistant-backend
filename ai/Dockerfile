@@ -14,4 +14,5 @@ COPY scripts/build_policy_json.py scripts/index_policy.py scripts/hwpx_to_md.py 
 COPY ai/app app
 RUN uv sync --frozen --no-dev --extra graph
 EXPOSE 8000
-CMD ["uv", "run", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# uv 를 거치지 않고 가상환경의 uvicorn 을 바로 — 종료 신호가 앱에 곧장 가고 감싸는 프로세스가 남지 않는다
+CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
