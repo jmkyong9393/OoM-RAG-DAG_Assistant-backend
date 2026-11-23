@@ -672,37 +672,46 @@
   {
    "log": "hr-ga_v1",
    "ref": "h4-night",
-   "relation": "gap",
-   "topic": "당직자의 야간·통제 구역 출입 권한 기준",
-   "note": "제15조 ④는 통제 구역 권한을 따로 부여한다고만 정한다. 당직자에게 무엇을 기본으로 줄지 기준이 없다"
+   "relation": "follows",
+   "note": "제15조 ⑤가 당직자에게 당직 시간 동안 야간 출입 구역 권한을 자동으로 주고, 통제 구역은 정보보안책임자 승인으로만 준다고 정했다(권한 세트 재정의 검토가 규정이 됨)",
+   "policy": "retail-infosec-2026-11",
+   "article": "제15조"
   },
   {
    "log": "hr-ga_v1",
    "ref": "h5-root",
-   "relation": "gap",
-   "topic": "전자결재 운영 기준",
-   "note": "전자결재의 장애 대응·대결·독촉 기준을 정한 규정이 없다"
+   "relation": "follows",
+   "note": "전자결재 운영 지침 제10조 · 제11조 — 장애 신고 · 공지 · 임시저장 문서 다시 상신",
+   "policy": "retail-approval-2026-11",
+   "article": "제10조"
   },
   {
    "log": "hr-ga_v1",
    "ref": "h5-deputy",
-   "relation": "gap",
-   "topic": "휴가 중 대결자 지정",
-   "note": "대결자 지정 의무를 정한 규정이 없다"
+   "relation": "follows",
+   "note": "제7조 ①의 대결자 지정 의무를 지키지 않아 생긴 문제",
+   "policy": "retail-approval-2026-11",
+   "article": "제7조"
   },
   {
    "log": "hr-ga_v1",
    "ref": "h5-deputy-fix",
-   "relation": "gap",
-   "topic": "휴가 중 대결자 지정",
-   "note": "화면에서 필수 입력으로 막았지만 규정에는 없다"
+   "relation": "follows",
+   "note": "휴가 등록 때 대결자 필수 입력(제7조 ①), 미지정 문서는 부서장 일괄 지정(제7조 ④)",
+   "policy": "retail-approval-2026-11",
+   "article": "제7조"
   },
   {
    "log": "hr-ga_v1",
    "ref": "h5-track",
-   "relation": "gap",
-   "topic": "결재 지연 독촉·에스컬레이션 기한",
-   "note": "3일 독촉·7일 에스컬레이션은 현장이 정한 값이다"
+   "relation": "follows",
+   "note": "현장이 정한 3일 독촉 · 7일 에스컬레이션을 제6조가 그대로 정했다",
+   "policy": "retail-approval-2026-11",
+   "article": "제6조",
+   "values": [
+    "3일",
+    "7일"
+   ]
   },
   {
    "log": "hr-ga_v1",
@@ -852,9 +861,10 @@
   {
    "log": "cs_v1",
    "ref": "s2-interest",
-   "relation": "gap",
-   "topic": "환불 지연이자의 이율·산정 방법과 입점 판매자 귀책 시 부담 주체",
-   "note": "제14조 ②는 지연이자를 지급한다고만 정한다. 이율 수치, 일수 계산, 판매자 귀책 건의 선지급·구상 절차가 없다"
+   "relation": "follows",
+   "note": "제14조 ②가 연 15퍼센트 지연배상금과 판매자 귀책 건의 회사 선지급 · 정산 대금 공제를 정했다",
+   "policy": "retail-refund-2026-11",
+   "article": "제14조"
   },
   {
    "log": "cs_v1",
@@ -869,9 +879,10 @@
   {
    "log": "cs_v1",
    "ref": "s3-fee",
-   "relation": "gap",
-   "topic": "설치 상품 단순 변심 반품 시 철거·회수비 부담 기준",
-   "note": "별표 2는 택배 반품배송비와 도서·산간 대형가구만 정한다. 설치 기사 방문 철거비 항목이 없다"
+   "relation": "follows",
+   "note": "별표 2에 설치 상품 철거 · 회수비 행을 더했다(30,000원까지 회원 부담, 회사 잘못 안내는 회사 부담)",
+   "policy": "retail-refund-2026-11",
+   "article": "별표 2"
   },
   {
    "log": "cs_v1",
@@ -932,9 +943,10 @@
   {
    "log": "cs_v1",
    "ref": "s4-tax",
-   "relation": "gap",
-   "topic": "해외직구 반품 시 관부가세 환급 절차와 회사 지원 범위",
-   "note": "제22조 ④는 관부가세가 포함되거나 따로 부과될 수 있다고만 정한다. 반품 뒤 환급을 누가 어떻게 신청하는지 없다"
+   "relation": "follows",
+   "note": "제22조 ④ — 계약과 다른 상품 반품이면 회사가 관세 환급 서류를 준비하고 관부가세를 먼저 돌려준다",
+   "policy": "retail-refund-2026-11",
+   "article": "제22조"
   },
   {
    "log": "cs_v1",
@@ -950,9 +962,10 @@
   {
    "log": "cs_v1",
    "ref": "s5-rule",
-   "relation": "gap",
-   "topic": "영수증 분실 시 구매 확인 대체 수단",
-   "note": "제24조 ①은 영수증 지참만 정한다. 카드 승인 내역·멤버십 구매 이력을 인정하는지 기준이 없다"
+   "relation": "follows",
+   "note": "제24조 ⑥ — 멤버십 구매 이력 · 카드 승인 내역으로 확인되면 매장 관리자 승인으로 환불",
+   "policy": "retail-refund-2026-11",
+   "article": "제24조"
   },
   {
    "log": "cs_v1",
@@ -1052,9 +1065,10 @@
   {
    "log": "cs_v1",
    "ref": "s7-check",
-   "relation": "gap",
-   "topic": "도용으로 등록 연락처가 변경됐을 때의 대체 본인확인 수단",
-   "note": "고객 계정·보안 FAQ Q6은 본인이 연락처를 바꾼 경우만 안내한다. 제3자가 변경한 경우의 확인 수단과 승인 절차가 없다"
+   "relation": "follows",
+   "note": "FAQ Q6 — 도용자가 연락처를 바꾼 경우 연계정보(CI) 대조와 보안 담당자 승인으로 되돌린다",
+   "policy": "retail-security-faq-2026-11",
+   "article": "Q6"
   },
   {
    "log": "cs_v1",

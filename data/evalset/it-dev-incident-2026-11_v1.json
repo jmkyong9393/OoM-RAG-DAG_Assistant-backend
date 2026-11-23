@@ -13,5 +13,6 @@
   {"workspace_id": 21, "kind": "policy", "query": "HA 쓰는 DB 고객 월 가용률이 97% 나오면 크레딧 몇 %야?", "expect": ["c:it-dev-incident-2026-11-s17-1"], "expect_alt": ["c:it-dev-incident-2026-11-a14-1"], "note": "표 | 별표 2 크레딧 비율 행 | 95% 이상 99.0% 미만 구간이라 25%"},
   {"workspace_id": 21, "kind": "policy", "query": "파트너 앱 API는 10분에 몇 번까지 호출할 수 있어?", "expect": ["c:it-dev-incident-2026-11-s33-1"], "note": "표 | 별표 3 대표 수치 행 | 10분 3,000회·처리 600초, 버킷 40·초당 2회"},
   {"workspace_id": 21, "kind": "policy", "query": "SEV-1이랑 SEV-2는 사후분석 회의 잡는 기한이 달라?", "expect": ["c:it-dev-incident-2026-11-a17-1"], "note": "비교 | 제17조 ② | SEV-1은 3일(달력일), SEV-2는 5영업일 안"},
-  {"workspace_id": 21, "kind": "policy", "query": "Soft 동결이랑 Hard 동결은 막는 범위가 어떻게 달라?", "expect": ["c:it-dev-incident-2026-11-a23-1"], "note": "비교 | 제23조 ①② | Soft는 C2 이상 인프라 변경·배포 후 마이그레이션, Hard는 모든 배포·변경·피처 플래그 전환"}
+  {"workspace_id": 21, "kind": "policy", "query": "Soft 동결이랑 Hard 동결은 막는 범위가 어떻게 달라?", "expect": ["c:it-dev-incident-2026-11-a23-1"], "note": "비교 | 제23조 ①② | Soft는 C2 이상 인프라 변경·배포 후 마이그레이션, Hard는 모든 배포·변경·피처 플래그 전환"},
+  {"workspace_id": 21, "kind": "policy", "query": "허용 IP 10개 넘는 서버는 어떻게 등록해?", "expect": ["c:it-dev-incident-2026-11-a29-1"], "note": "기본 | 제29조 ④ | 출구 주소를 하나로 묶어(NAT) 등록하거나, 보안 검토를 거쳐 회사가 승인한 주소 대역으로 등록"}
 ]

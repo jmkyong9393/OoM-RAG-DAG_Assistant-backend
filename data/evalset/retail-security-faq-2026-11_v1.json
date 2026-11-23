@@ -13,5 +13,6 @@
   {"workspace_id": 3, "kind": "policy", "query": "자기 정보 털렸다는 통보 받은 고객은 어디서 확인해요?", "expect": ["c:retail-security-faq-2026-11-q18-1"], "note": "의역 | Q18 | 유출 여부 조회 화면에서 내 정보가 포함됐는지 확인"},
   {"workspace_id": 3, "kind": "policy", "query": "결제에 걸어둔 카드 비번 계속 틀려서 막혔대요 어디서 풀어야 되요?", "expect": ["c:retail-security-faq-2026-11-q12-1"], "note": "의역(오타) | Q12 | 3회 잘못 넣어 카드가 잠기면 카드사 고객센터에서 비밀번호 재설정"},
   {"workspace_id": 3, "kind": "policy", "query": "구매회원이랑 판매회원은 탈퇴 후 재가입 제한 기간이 달라?", "expect": ["c:retail-security-faq-2026-11-q15-1"], "note": "비교 | Q15 | 스스로 탈퇴한 회원은 30일, 판매회원은 2개월"},
-  {"workspace_id": 3, "kind": "policy", "query": "탈퇴 후 부정 이용 회원 정보랑 결제 기록은 보관 기간이 달라?", "expect": ["c:retail-security-faq-2026-11-q17-1"], "note": "비교 | Q17 | 부정 이용 확인 회원 정보는 탈퇴 후 1년, 대금결제 기록은 5년 보관"}
+  {"workspace_id": 3, "kind": "policy", "query": "탈퇴 후 부정 이용 회원 정보랑 결제 기록은 보관 기간이 달라?", "expect": ["c:retail-security-faq-2026-11-q17-1"], "note": "비교 | Q17 | 부정 이용 확인 회원 정보는 탈퇴 후 1년, 대금결제 기록은 5년 보관"},
+  {"workspace_id": 3, "kind": "policy", "query": "해킹당해서 연락처가 남의 번호로 바뀌었는데 어떻게 찾아?", "expect": ["c:retail-security-faq-2026-11-q6-1"], "note": "의역(구어) | Q6 | 계정을 잠근 채 본인 명의 휴대폰 본인인증 결과를 가입 때 연계정보(CI)와 대조하고, 보안 담당자 승인으로 연락처를 되돌림. 구두 확인만으로 비밀번호를 발급하지 않음"}
 ]
