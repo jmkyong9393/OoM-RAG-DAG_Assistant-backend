@@ -191,7 +191,10 @@ bash bootstrap.sh                    # DB → 마이그레이션 → 데이터 �
 
 # 운영 구성을 로컬에서 먼저 확인할 때
 cd deploy && cp .env.example .env.smoke && bash smoke.sh
+WEB_IMAGE=<프론트 이미지> bash smoke.sh --web --quick   # 실제 프론트 이미지까지 넣은 리허설
 ```
+
+Lightsail 에 올릴 때는 `deploy/lightsail/`(서버 생성 · 운영 설정 · 이미지 전송 · 기동을 명령 네 줄로 — 그 폴더의 README).
 
 - 서버의 레포 체크아웃과 api · ai 이미지는 **같은 커밋**이어야 합니다. 어긋나면 api 가 뜰 때 뷰 재적용이 실패합니다.
 - 모든 단계는 다시 돌려도 됩니다. 데이터만 고쳤으면 `bash bootstrap.sh data`.

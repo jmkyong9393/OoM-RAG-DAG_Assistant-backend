@@ -2,11 +2,12 @@
 # 운영 compose 를 로컬에서 끝까지 돌려보는 스모크: 이미지 빌드 → postgres → flyway → bootstrap.sh(api → 데이터 적재 → ai·web(스텁)·caddy) → Caddy 경유로 health·로그인·로그 목록·SSE.
 # 사용: deploy/ 에서  bash smoke.sh [--keep] [--quick]   (.env.smoke 필요 — .env.example 의 운영 절 참고)
 #   --keep: 끝나고 내리지 않음 · --quick: 데이터는 시드 + 평가 결과만(규정 색인·사례 정제의 임베딩·LLM 호출 없이)
+#   --web: web 스텁 대신 실제 프론트 이미지로(배포 전 리허설). 이미지는 환경변수 WEB_IMAGE 로 준다
 set -euo pipefail
 cd "$(dirname "$0")"
-KEEP=0; STEPS="seed data eval"
-for a in "$@"; do case "$a" in --keep) KEEP=1;; --quick) STEPS="seed eval";; *) echo "알 수 없는 인자: $a"; exit 2;; esac; done
-export COMPOSE_FILES="-f docker-compose.prod.yml -f docker-compose.smoke.yml" ENV_FILE=.env.smoke
+KEEP=0; STEPS="seed data eval"; OVERRIDE=docker-compose.smoke.yml
+for a in "$@"; do case "$a" in --keep) KEEP=1;; --quick) STEPS="seed eval";; --web) OVERRIDE=docker-compose.rehearsal.yml;; *) echo "알 수 없는 인자: $a"; exit 2;; esac; done
+export COMPOSE_FILES="-f docker-compose.prod.yml -f $OVERRIDE" ENV_FILE=.env.smoke
 C="docker compose $COMPOSE_FILES --env-file $ENV_FILE"
 t0=$(date +%s)
 step() { echo; echo "== [$(( $(date +%s) - t0 ))s] $*"; }
@@ -54,8 +55,9 @@ curl -sN -b ./.smoke.jar -H "X-Workspace-Id: 1" -H "Content-Type: application/js
       if [ "$line" = "event:done" ]; then break; fi
     done; } | tee ./.smoke-sse.txt
 grep -q "event:done" ./.smoke-sse.txt || { echo "SSE 가 done 없이 끝났다 (api·ai 로그 확인)"; exit 1; }
-step "web 스텁 (/)"
-curl -s http://localhost/ | head -c 80; echo
+step "web (/) — 스텁이면 한 줄, 실제 프론트면 대문 · 로그인 화면의 상태 코드"
+if [ "$OVERRIDE" = docker-compose.smoke.yml ]; then curl -s http://localhost/ | head -c 80; echo
+else for p in / /login; do c=$(curl -s -o /dev/null -w "%{http_code}" -L "http://localhost$p"); echo "  GET $p → $c"; [ "$c" = 200 ] || { echo "프론트가 $p 에 200 을 주지 않는다"; exit 1; }; done; fi
 step "컨테이너 메모리"
 docker stats --no-stream --format "  {{.Name}}\t{{.MemUsage}}" | grep -E "oom-prod"
 if [ "$KEEP" = 0 ]; then
