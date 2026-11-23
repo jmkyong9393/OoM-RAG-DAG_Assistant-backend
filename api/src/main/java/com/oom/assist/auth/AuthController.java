@@ -28,6 +28,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,16 +49,18 @@ public class AuthController {
   private final JdbcClient jdbc;
   private final LoginAttempts attempts;
   private final AccountGate gate;
+  private final PasswordHistory history;
   private final Path privacyPolicyPath;
 
   public AuthController(AuthenticationManager authManager, SecurityContextRepository contextRepo, PasswordEncoder encoder, JdbcClient jdbc,
-      LoginAttempts attempts, AccountGate gate, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
+      LoginAttempts attempts, AccountGate gate, PasswordHistory history, @Value("${oom.legal.privacy-policy-path}") String privacyPolicyPath) {
     this.authManager = authManager;
     this.contextRepo = contextRepo;
     this.encoder = encoder;
     this.jdbc = jdbc;
     this.attempts = attempts;
     this.gate = gate;
+    this.history = history;
     this.privacyPolicyPath = Path.of(privacyPolicyPath);
   }
 
@@ -123,7 +126,7 @@ public class AuthController {
   /** 비밀번호 작성규칙 (로그인 화면·변경 화면 안내문). 공개. */
   @GetMapping("/auth/password-policy")
   public Map<String, Object> passwordPolicy() {
-    return Map.of("rule", PasswordPolicy.RULE_TEXT, "max_age_days", PasswordPolicy.MAX_AGE_DAYS,
+    return Map.of("rule", PasswordPolicy.RULE_TEXT, "max_age_days", PasswordPolicy.MAX_AGE_DAYS, "reuse_block_count", PasswordHistory.RECENT,
         "lock_after_failures", LoginAttempts.MAX_FAILURES, "lock_minutes", LoginAttempts.LOCK_MINUTES);
   }
 
@@ -151,13 +154,16 @@ public class AuthController {
   }
 
   @PatchMapping("/auth/password")
+  @Transactional
   public ResponseEntity<Void> changePassword(@Valid @RequestBody PasswordChangeRequest body, HttpServletRequest req, HttpServletResponse res) {
     AppPrincipal p = CurrentUser.get().orElseThrow(ApiException::unauthorized);
     String hash = jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(p.id()).query(String.class).optional().orElse(null);
     if (hash == null || !encoder.matches(body.currentPassword(), hash)) throw ApiException.forbidden("current password mismatch");
     List<String> bad = PasswordPolicy.violations(body.newPassword(), p.employeeNo());
     if (body.newPassword().equals(body.currentPassword())) bad.add("이전 비밀번호와 달라야 합니다");
+    else if (history.reused(p.id(), body.newPassword())) bad.add("최근에 쓴 비밀번호 " + PasswordHistory.RECENT + "개와 달라야 합니다");
     if (!bad.isEmpty()) throw ApiException.badRequest("PASSWORD_POLICY", String.join(" / ", bad));
+    history.retire(p.id(), hash);
     String newHash = encoder.encode(body.newPassword());
     jdbc.sql("UPDATE users SET password_hash = ?, must_change_password = false, password_changed_at = now() WHERE id = ?")
         .params(newHash, p.id()).update();

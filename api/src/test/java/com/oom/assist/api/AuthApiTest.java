@@ -163,6 +163,40 @@ class AuthApiTest extends AbstractApiTest {
   }
 
   @Test
+  void recentPasswordsCannotBeReused() throws Exception {
+    String a = "Qw!zetk-7391m", b = "Lp#vubr-5827k", c3 = "Hd@mosf-4619t";
+    Cookie c = sessionCookie(login(empLead, PASSWORD));
+    String tpl = "{\"current_password\": \"%s\", \"new_password\": \"%s\"}";
+    mvc.perform(get("/auth/password-policy")).andExpect(jsonPath("$.reuse_block_count").value(3));
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(PASSWORD, a))).andExpect(status().isNoContent());
+    // A → 처음 것: 직전 비밀번호로 되돌리지 못한다
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(a, PASSWORD)))
+        .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("PASSWORD_POLICY"))
+        .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("최근에 쓴 비밀번호 3개")));
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(a, b))).andExpect(status().isNoContent());
+    // 지금 것(B)과 그 앞의 둘(A · 처음 것)이 최근 3개다
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(b, PASSWORD))).andExpect(status().isBadRequest());
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(b, a))).andExpect(status().isBadRequest());
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(b, c3))).andExpect(status().isNoContent());
+    // 세 번 바꾼 뒤에는 처음 것이 최근 3개에서 빠진다. 이력은 비교에 쓰는 만큼만 남는다
+    assertThat(jdbc.sql("SELECT count(*) FROM user_password_history WHERE user_id = ?").param(userLead).query(Long.class).single()).isEqualTo(2L);
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(c3, PASSWORD))).andExpect(status().isNoContent());
+  }
+
+  @Test
+  void adminResetDoesNotOpenAWayBackToTheOldPassword() throws Exception {
+    long staff = user("신입", "사원", "T0033", "staff33@test.local");
+    member(wsSw, staff, "member");
+    String temp = JsonPath.read(mvc.perform(as(post("/users/" + staff + "/reset-password"), userLead, wsSw)).andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString(), "$.temp_password");
+    Cookie c = sessionCookie(login("T0033", temp));
+    String tpl = "{\"current_password\": \"%s\", \"new_password\": \"%s\"}";
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(temp, PASSWORD)))
+        .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("최근에 쓴")));
+    mvc.perform(patch("/auth/password").cookie(c).contentType(MediaType.APPLICATION_JSON).content(tpl.formatted(temp, GOOD_NEW))).andExpect(status().isNoContent());
+  }
+
+  @Test
   void expiredPasswordForcesChange() throws Exception {
     jdbc.sql("UPDATE users SET password_changed_at = now() - interval '181 days' WHERE id = ?").param(userLead).update();
     assertThat((boolean) JsonPath.read(body(login(empLead, PASSWORD)), "$.must_change_password")).isTrue();
