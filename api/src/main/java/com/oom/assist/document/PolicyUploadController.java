@@ -41,6 +41,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * 규정 원본 업로드 → (AI 워커) 자동 변환 → 검수 → 승인 → (AI 워커) 등록. 원본과 검수한 MD 는 저장소(oom.storage.uploads-dir)에 남긴다.
  * 권한은 문서 관리와 같다: 대상 워크스페이스(부서 또는 전사 공통) 또는 그 상위의 admin. 목록 · 상세는 이 부서와 상위의 업로드.
+ * 승인되지 않은 업로드(변환 중 · 검수 중 · 반려 · 실패)는 문서 관리자에게만 보인다 — 발표 전 규정 초안이 소속 직원에게 새지 않게.
  */
 @RestController
 public class PolicyUploadController {
@@ -53,6 +54,10 @@ public class PolicyUploadController {
       (SELECT name FROM users WHERE id = u.uploaded_by) AS uploaded_by, (SELECT name FROM users WHERE id = u.reviewed_by) AS reviewed_by,
       EXISTS (SELECT 1 FROM workspace_members m WHERE m.user_id = ? AND m.role = 'admin'
               AND m.workspace_id IN (SELECT workspace_ancestors(u.workspace_id))) AS can_manage""";
+  // 문서 관리자가 아니면 승인된 업로드만 본다
+  private static final String VISIBLE = """
+       AND (u.status = 'approved' OR EXISTS (SELECT 1 FROM workspace_members m WHERE m.user_id = ? AND m.role = 'admin'
+            AND m.workspace_id IN (SELECT workspace_ancestors(u.workspace_id))))""";
 
   private final JdbcClient jdbc;
   private final ObjectMapper json;
@@ -126,13 +131,13 @@ public class PolicyUploadController {
   @GetMapping("/documents/uploads")
   public List<UploadDto> list(@RequestParam(required = false) String status, TenantContext ctx) {
     return jdbc.sql("SELECT " + COLS + ", NULL AS markdown FROM policy_uploads u WHERE u.workspace_id IN (SELECT workspace_ancestors(?))"
-            + " AND (?::text IS NULL OR u.status = ?) ORDER BY u.created_at DESC, u.id DESC LIMIT 200")
-        .params(ctx.userId(), ctx.workspaceId(), status, status).query(this::map).list();
+            + VISIBLE + " AND (?::text IS NULL OR u.status = ?) ORDER BY u.created_at DESC, u.id DESC LIMIT 200")
+        .params(ctx.userId(), ctx.workspaceId(), ctx.userId(), status, status).query(this::map).list();
   }
 
   @GetMapping("/documents/uploads/{id}")
   public UploadDto get(@PathVariable long id, TenantContext ctx) {
-    return find(id, ctx, true);
+    return visible(id, ctx, true);
   }
 
   /** 검수 중 변환본을 고친다. 조문 미리보기는 워커가 다시 만든다(status review → converting → review, 글자 추출은 다시 하지 않음).
@@ -192,7 +197,7 @@ public class PolicyUploadController {
   /** 원본 파일 내려받기(올린 이름 그대로). */
   @GetMapping("/documents/uploads/{id}/original")
   public ResponseEntity<Resource> original(@PathVariable long id, TenantContext ctx) {
-    UploadDto u = find(id, ctx, false);
+    UploadDto u = visible(id, ctx, false);
     String rel = jdbc.sql("SELECT original_path FROM policy_uploads WHERE id = ?").param(id).query(String.class).single();
     Path p = root.resolve(rel).normalize();
     if (!p.startsWith(root) || !Files.exists(p)) throw ApiException.notFound("original file");
@@ -204,7 +209,7 @@ public class PolicyUploadController {
   /** 변환본(검수 중이면 지금 고친 것, 승인 뒤면 보관한 검수본과 같음) 내려받기. */
   @GetMapping("/documents/uploads/{id}/markdown")
   public ResponseEntity<String> markdown(@PathVariable long id, TenantContext ctx) {
-    UploadDto u = find(id, ctx, true);
+    UploadDto u = visible(id, ctx, true);
     if (u.markdown() == null) throw ApiException.notFound("markdown");
     String file = u.slug() + ".md";
     return ResponseEntity.ok()
@@ -229,6 +234,13 @@ public class PolicyUploadController {
   private UploadDto managed(long id, TenantContext ctx) {
     UploadDto u = find(id, ctx, false);
     if (!u.canManage()) throw ApiException.forbidden("document admin required");
+    return u;
+  }
+
+  /** 읽기용 — 문서 관리자가 아니면 승인된 것만. 승인 전 초안은 있는지도 알리지 않는다(404). */
+  private UploadDto visible(long id, TenantContext ctx, boolean withMarkdown) {
+    UploadDto u = find(id, ctx, withMarkdown);
+    if (!u.canManage() && !"approved".equals(u.status())) throw ApiException.notFound("upload");
     return u;
   }
 

@@ -65,6 +65,32 @@ class PolicyUploadApiTest extends AbstractApiTest {
   }
 
   @Test
+  void draftsAreHiddenFromMembersUntilApproved() throws Exception {
+    String body = mvc.perform(upload(userBackend, wsHr, "개정안.md", MD, "test-draft-v1", "dept")).andExpect(status().isAccepted())
+        .andReturn().getResponse().getContentAsString();
+    long id = com.jayway.jsonpath.JsonPath.parse(body).read("$.id", Long.class);
+    long staff = user("신입", "사원", "T0032", "staff32@test.local");
+    member(wsHr, staff, "member");
+    // 승인 전: 같은 부서 직원에게는 목록에도 없고, 번호를 알아도 404 (원본 · 변환본 포함)
+    mvc.perform(as(get("/documents/uploads"), staff, wsHr)).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(as(get("/documents/uploads/" + id), staff, wsHr)).andExpect(status().isNotFound());
+    mvc.perform(as(get("/documents/uploads/" + id + "/original"), staff, wsHr)).andExpect(status().isNotFound());
+    mvc.perform(as(get("/documents/uploads/" + id + "/markdown"), staff, wsHr)).andExpect(status().isNotFound());
+    mvc.perform(as(post("/documents/uploads/" + id + "/approve"), staff, wsHr)).andExpect(status().isForbidden());   // 바꾸는 요청은 전처럼 403
+    for (String st : new String[] {"review", "failed", "rejected", "indexing"}) {
+      jdbc.sql("UPDATE policy_uploads SET status = ?, markdown = '제1조(목적) 초안' WHERE id = ?").params(st, id).update();
+      mvc.perform(as(get("/documents/uploads"), staff, wsHr)).andExpect(jsonPath("$", hasSize(0)));
+      mvc.perform(as(get("/documents/uploads/" + id + "/markdown"), staff, wsHr)).andExpect(status().isNotFound());
+    }
+    mvc.perform(as(get("/documents/uploads"), userBackend, wsHr)).andExpect(jsonPath("$", hasSize(1)));   // 문서 관리자는 그대로 본다
+    // 승인 뒤: 발표된 규정이므로 직원도 목록 · 원본 · 변환본을 본다
+    jdbc.sql("UPDATE policy_uploads SET status = 'approved' WHERE id = ?").param(id).update();
+    mvc.perform(as(get("/documents/uploads"), staff, wsHr)).andExpect(jsonPath("$", hasSize(1))).andExpect(jsonPath("$[0].can_manage").value(false));
+    mvc.perform(as(get("/documents/uploads/" + id + "/original"), staff, wsHr)).andExpect(status().isOk()).andExpect(content().bytes(MD));
+    mvc.perform(as(get("/documents/uploads/" + id + "/markdown"), staff, wsHr)).andExpect(status().isOk());
+  }
+
+  @Test
   void uploadValidatesFormatSlugTargetAndPermission() throws Exception {
     mvc.perform(upload(userBackend, wsHr, "규정.exe", MD, "test-rule-v1", "dept")).andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("UNSUPPORTED_FORMAT"));
