@@ -139,12 +139,17 @@ class LogApiTest extends AbstractApiTest {
   }
 
   @Test
-  void resolveWithActiveSuccessDescendantNeedsNoNoteAndIgnoresGivenNote() throws Exception {
+  void resolveWithActiveSuccessDescendantNeedsNoNoteAndKeepsItOnlyWithoutResolvingLogs() throws Exception {
     long root = node(wsSw, "fail", "장애", userBackend);
     long fix = node(wsSw, "success", "해결", userBackend);
     edge(wsSw, root, fix);
-    mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"note\":\"무시됨\"}"))
+    mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true}"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.resolved_at").isNotEmpty()).andExpect(jsonPath("$.resolve_note").isEmpty());
+    // 해결 기록을 고르지 않았으면 메모가 해결 경위라 남기고, 골랐으면 남기지 않는다
+    mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"note\":\"재부팅으로 해결\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.resolve_note").value("재부팅으로 해결"));
+    mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"resolved_node_ids\":[" + fix + "],\"note\":\"무시됨\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.resolve_note").isEmpty());
   }
 
   // ── 폐기·복원 (R5) ────────────────────────────────────────────────────

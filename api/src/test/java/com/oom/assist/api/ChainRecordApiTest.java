@@ -104,6 +104,13 @@ class ChainRecordApiTest extends AbstractApiTest {
     mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"resolved_node_ids\":[]}"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.resolved_node_ids", empty()));
 
+    // 성공 기록이 있어도 하나도 고르지 않으면 메모가 해결 경위라 남기고, 고르면 메모는 남기지 않는다
+    mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"resolved_node_ids\":[],\"note\":\" 협력사 쪽 설정 변경으로 해결 \"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.resolved_node_ids", empty()))
+        .andExpect(jsonPath("$.resolve_note").value("협력사 쪽 설정 변경으로 해결"));
+    mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"resolved_node_ids\":[" + f1 + "],\"note\":\"메모\"}"))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.resolve_note").isEmpty());
+
     // 완료를 되돌리면 해결 기록도 비운다
     mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":true,\"resolved_node_ids\":[" + f1 + "]}")).andExpect(status().isOk());
     mvc.perform(as(patch("/logs/" + root), userBackend, wsSw).content("{\"resolved\":false}"))

@@ -99,7 +99,7 @@ public class LogService {
   }
 
   /**
-   * R4 · R13. note 는 활성 success 자손이 없을 때만 필수이며 그때만 저장한다.
+   * R4 · R13. note 는 활성 success 자손이 없을 때만 필수이고, 완료 뒤 해결 기록이 비어 있을 때만 저장한다.
    * resolvedNodeIds: 이 장애 건을 해결한 기록. null 이면 지금 기록을 그대로 두고, 목록이면 통째로 바꾼다([] 는 비움).
    */
   @Transactional
@@ -126,8 +126,10 @@ public class LogService {
     }
     boolean hasSuccess = repo.hasActiveSuccessDescendant(ctx.workspaceId(), id);
     if (!hasSuccess && blank(note)) throw ApiException.conflict("NOTE_REQUIRED", "no success log under this root; note required");
-    repo.setResolved(id, OffsetDateTime.now(), hasSuccess ? null : note.trim());
-    repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), "resolved", ctx.userName(), hasSuccess ? null : note.trim(), node.title());
+    // 해결 기록이 하나도 없으면(성공 기록이 없거나 고르지 않았다) 메모가 해결 경위를 대신하므로 저장한다
+    String kept = blank(note) || !repo.resolvedNodes(ctx.workspaceId(), id).isEmpty() ? null : note.trim();
+    repo.setResolved(id, OffsetDateTime.now(), kept);
+    repo.audit(ctx.tenantId(), ctx.workspaceId(), "log_nodes", String.valueOf(id), "resolved", ctx.userName(), kept, node.title());
     return get(ctx, id);
   }
 
