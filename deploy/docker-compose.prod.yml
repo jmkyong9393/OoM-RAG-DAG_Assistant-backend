@@ -63,7 +63,7 @@ services:
   api:
     logging: *logging
     image: ${API_IMAGE:-oom-api:local}
-    build: ../api
+    build: {context: ../api, labels: {oom.project: assist}}   # 표식: 정리 스크립트가 이 프로젝트 이미지만 지운다
     environment:
       PORT: "8080"
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oom}
@@ -102,7 +102,7 @@ services:
   ai:
     logging: *logging
     image: ${AI_IMAGE:-oom-ai:local}
-    build: {context: .., dockerfile: ai/Dockerfile}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
+    build: {context: .., dockerfile: ai/Dockerfile, labels: {oom.project: assist}}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
     environment:
       <<: *ai-env
       WORKER_EMBEDDED: "1"                   # 정제 워커를 같은 프로세스(스레드)에서 — kiwi 모델 공유로 ≈500 MB 절감
@@ -125,7 +125,7 @@ services:
   bootstrap:
     logging: *logging
     image: ${AI_IMAGE:-oom-ai:local}
-    build: {context: .., dockerfile: ai/Dockerfile}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
+    build: {context: .., dockerfile: ai/Dockerfile, labels: {oom.project: assist}}   # 맥락은 레포 루트 — scripts/ 의 변환 · 색인 모듈을 이미지에 넣는다
     profiles: ["bootstrap"]
     environment:
       <<: *ai-env

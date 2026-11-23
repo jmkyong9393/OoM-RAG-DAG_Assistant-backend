@@ -25,7 +25,7 @@ REPO_URL=$(git remote get-url origin)
 ATAG=$(git log -1 --format=%h HEAD -- api)
 AI_SRC=$(awk '/^COPY / && !/--from/ {for (i = 2; i < NF; i++) print $i}' ai/Dockerfile)   # ai 이미지가 복사하는 경로를 Dockerfile 에서 읽는다
 ITAG=$(git log -1 --format=%h HEAD -- ai/Dockerfile $AI_SRC)
-build() { docker image inspect "$1" >/dev/null 2>&1 && echo "  $1 — 이미 있음, 건너뜀" || docker build -q -t "$@"; }
+build() { docker image inspect "$1" >/dev/null 2>&1 && echo "  $1 — 이미 있음, 건너뜀" || docker build -q --label oom.project=assist -t "$@"; }   # 표식: trim-images.sh 가 이 프로젝트 것만 지운다
 step "이미지 빌드 — api ($ATAG) · ai ($ITAG), 레포 $SHA"
 build "oom-api:$ATAG" api
 build "oom-ai:$ITAG" -f ai/Dockerfile .
@@ -57,12 +57,14 @@ sed -e "s|^API_IMAGE=.*|API_IMAGE=oom-api:$ATAG|" -e "s|^AI_IMAGE=.*|AI_IMAGE=oo
 step "기동 — bootstrap.sh ${*:-(seed data eval)}"
 $SSH "cd oom/deploy && bash bootstrap.sh $*"
 
-step "옛 이미지 정리 (지금 쓰는 태그만 남긴다 — 갱신 배포마다 약 1.8GB 가 쌓인다)"
-$SSH "docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^oom-(api|ai|web):' | grep -vx -e 'oom-api:$ATAG' -e 'oom-ai:$ITAG' -e 'oom-web:$FSHA' | xargs -r docker rmi >/dev/null; docker image prune -f >/dev/null; df -h / | tail -1"
+step "옛 이미지 정리 — 서버 (종류마다 지금 + 직전 하나)"
+$SSH "cd oom && bash deploy/trim-images.sh api=$ATAG ai=$ITAG web=$FSHA; df -h / | tail -1"
 
 step "확인"
 ORIGIN=$(grep ^SITE_ORIGIN= deploy/.env.prod | cut -d= -f2)
 for i in $(seq 1 30); do s=$(curl -ks -o /dev/null -w '%{http_code}' "$ORIGIN/api/v1/actuator/health" || true); [ "$s" = 200 ] && break; sleep 5; done
 echo "health $s · 대문 $(curl -ks -o /dev/null -w '%{http_code}' "$ORIGIN/")"
 $SSH 'docker stats --no-stream --format "  {{.Name}}\t{{.MemUsage}}" | grep oom-prod; free -m | sed -n 2,3p'
+step "옛 이미지 정리 — 이 PC (종류마다 지금 + 직전 하나)"
+bash deploy/trim-images.sh api=$ATAG ai=$ITAG web=$FSHA
 echo; echo "주소: $ORIGIN   (레포 $SHA · api $ATAG · ai $ITAG · web $FSHA, $(( $(date +%s) - t0 ))s)"

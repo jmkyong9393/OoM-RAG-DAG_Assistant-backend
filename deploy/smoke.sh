@@ -64,5 +64,6 @@ if [ "$KEEP" = 0 ]; then
   step "정리 (볼륨 포함)"
   $C down -v
   rm -f ./.smoke.jar ./.smoke-login.json ./.smoke-q.json ./.smoke-sse.txt
+  docker image prune -f --filter label=oom.project=assist >/dev/null   # 다시 빌드하며 태그를 잃은 옛 :local 층(이 프로젝트 것만)
 fi
 echo; echo "done in $(( $(date +%s) - t0 ))s"
