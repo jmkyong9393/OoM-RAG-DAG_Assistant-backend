@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 21, "kind": "policy", "query": "공통 근무시간은 몇 시부터 몇 시까지야?", "expect": ["c:it-work-system-2026-11-a7-1"], "note": "기본 | 제7조 ② | 11:00 ~ 16:00 이고 회의와 협업 일정은 이 시간 안에 잡음"},
+  {"workspace_id": 21, "kind": "policy", "query": "하루에 최소 몇 시간은 일해야 돼?", "expect": ["c:it-work-system-2026-11-a8-1"], "note": "기본 | 제8조 ① | 근무일에는 1일 최소 4시간 이상 근무"},
+  {"workspace_id": 21, "kind": "policy", "query": "이번 달에 채워야 하는 근로시간은 어떻게 계산해?", "expect": ["c:it-work-system-2026-11-a5-1"], "note": "기본 | 제5조 ①② | 정산기간은 1개월이고 총 근로시간은 그 달 소정근로일수에 8시간을 곱한 시간"},
+  {"workspace_id": 21, "kind": "policy", "query": "이번 달 근무시간이 모자라면 다음 달에 채워도 돼?", "expect": ["c:it-work-system-2026-11-a10-1"], "note": "기본 | 제10조 ①② | 부족 시간은 다음 달로 넘기지 않고 본인 선택에 따라 연차휴가에서 차감하거나 무급으로 처리"},
+  {"workspace_id": 21, "kind": "policy", "query": "재택근무는 일주일에 며칠까지 할 수 있어?", "expect": ["c:it-work-system-2026-11-a15-1"], "note": "기본 | 제15조 ① | 선택적 근로시간제 대상자는 주 2일 이내"},
+  {"workspace_id": 21, "kind": "policy", "query": "다음 주 재택근무 날짜는 언제까지 등록해야 해?", "expect": ["c:it-work-system-2026-11-a16-1"], "note": "기본 | 제16조 ① | 전주 목요일까지 근태 시스템에 등록하고 등록하면 조직장 승인 없이 확정"},
+  {"workspace_id": 21, "kind": "policy", "query": "재택근무 중에 메신저는 얼마 안에 답해야 해?", "expect": ["c:it-work-system-2026-11-a20-1"], "note": "기본 | 제20조 ② | 공통 근무시간에는 메신저 연락에 30분 안에 응답"},
+  {"workspace_id": 21, "kind": "policy", "query": "매일 집에서 일하는 상시 재택은 누가 승인하고 얼마마다 갱신해?", "expect": ["c:it-work-system-2026-11-a18-1"], "note": "기본 | 제18조 ①② | 임신·육아·돌봄·장애 사유로 조직장과 피플팀 승인을 받고 3개월 단위로 갱신"},
+  {"workspace_id": 21, "kind": "policy", "query": "집 말고 카페에서 재택해도 됨?", "expect": ["c:it-work-system-2026-11-a19-1"], "note": "의역(구어) | 제19조 ①② | 재택근무 장소는 신고한 자택이고 카페 같은 공공장소와 해외에서는 할 수 없음"},
+  {"workspace_id": 21, "kind": "policy", "query": "이번 달에 더 일한 건 수당으로 줘 아님 다음 달에 덜 일해?", "expect": ["c:it-work-system-2026-11-a9-1"], "note": "의역(구어) | 제9조 ①② | 총 근로시간을 넘은 시간은 연장근로수당으로 지급하고 다음 달 근로시간에서 빼는 방식으로 대신하지 않음"},
+  {"workspace_id": 21, "kind": "policy", "query": "밤 10시 넘어서까지 일하려면 미리 말해야 됨?", "expect": ["c:it-work-system-2026-11-a13-1"], "note": "의역(구어) | 제13조 ①② | 22:00 이후의 근무와 휴일 근무는 조직장의 사전 승인을 받고 급한 업무는 다음 근무일까지 사후 승인"},
+  {"workspace_id": 21, "kind": "policy", "query": "입사하고 바로 재텍근무 할수있나요", "expect": ["c:it-work-system-2026-11-a15-1"], "note": "의역(오타) | 제15조 ② | 입사 후 1개월 동안은 사무실로 출근"},
+  {"workspace_id": 21, "kind": "policy", "query": "고객지원 오후조는 몇 시부터 몇 시까지 근무해?", "expect": ["c:it-work-system-2026-11-s34-1"], "note": "표 | 별표 1 오후조 행 | 13:00 ~ 22:00 근무, 휴게시간 1시간"},
+  {"workspace_id": 21, "kind": "policy", "query": "근무일이 21일인 달은 총 몇 시간을 일해야 돼?", "expect": ["c:it-work-system-2026-11-s36-1"], "note": "표 | 별표 3 소정근로일이 21일인 달의 총 근로시간 행 | 21일 × 8시간으로 168시간"},
+  {"workspace_id": 21, "kind": "policy", "query": "재택하는 날 근무시간에 외부 유료 강의를 해도 돼?", "expect": ["c:it-work-system-2026-11-a20-1"], "note": "교차 | 제20조 ④ (+ 윤리·행동규범과 AI 윤리 규정 제9조 ③) | 재택근무 중 근무시간에는 다른 영리 활동을 하지 않으며, 유상 강의 같은 외부 활동은 윤리·행동규범과 AI 윤리 규정에 따라 조직장 등과 미리 협의함", "expect_also": ["c:it-ethics-2026-11-a9-1"]}
+]

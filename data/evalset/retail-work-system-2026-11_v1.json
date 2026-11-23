@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 3, "kind": "policy", "query": "시차출퇴근 하면 출근은 몇 시부터 몇 시 사이에 해?", "expect": ["c:retail-work-system-2026-11-a4-1"], "note": "기본 | 제4조 ② | 08:00 ~ 10:00 사이에서 30분 단위로 고르고 1일 8시간 근로는 그대로 유지"},
+  {"workspace_id": 3, "kind": "policy", "query": "다음 달 시차출퇴근은 언제까지 신청해야 돼?", "expect": ["c:retail-work-system-2026-11-a5-1"], "note": "기본 | 제5조 ① | 다음 달 분을 전월 25일까지 인사 시스템으로 신청하고 부서장 승인"},
+  {"workspace_id": 3, "kind": "policy", "query": "다음 달 근무표는 언제까지 나와?", "expect": ["c:retail-work-system-2026-11-a8-1"], "note": "기본 | 제8조 ① | 관리자가 매월 20일까지 근태 단말과 인사 시스템에 게시"},
+  {"workspace_id": 3, "kind": "policy", "query": "이미 나온 근무표를 회사가 바꾸려면 어떻게 해야 해?", "expect": ["c:retail-work-system-2026-11-a9-1"], "note": "기본 | 제9조 ① | 근무일 3일 전까지 본인의 동의를 받아야 바꿀 수 있음"},
+  {"workspace_id": 3, "kind": "policy", "query": "퇴근하고 다음 출근까지 최소 몇 시간은 쉬게 해 줘?", "expect": ["c:retail-work-system-2026-11-a10-1"], "note": "기본 | 제10조 ①② | 11시간 이상 휴식을 주고 마감조 다음 날 오픈조에는 배치하지 않음"},
+  {"workspace_id": 3, "kind": "policy", "query": "동료랑 근무 바꾸려면 언제까지 승인받아야 해?", "expect": ["c:retail-work-system-2026-11-a11-1"], "note": "기본 | 제11조 ①② | 근무일 2일 전까지 두 사람이 함께 신청해 관리자 승인, 1주 근로시간이 40시간을 넘지 않는 범위"},
+  {"workspace_id": 3, "kind": "policy", "query": "연장근로를 미리 승인 못 받았으면 어떻게 해?", "expect": ["c:retail-work-system-2026-11-a15-1"], "note": "기본 | 제15조 ①② | 시작 전에 인사 시스템으로 승인받는 것이 기본이고 미리 받기 어려우면 다음 영업일까지 사후 승인"},
+  {"workspace_id": 3, "kind": "policy", "query": "6일 연달아 일했는데 내일도 나오래요 이거 되는 거예요?", "expect": ["c:retail-work-system-2026-11-a10-1"], "note": "의역(구어) | 제10조 ③ | 연속 근무는 6일 이내로 함"},
+  {"workspace_id": 3, "kind": "policy", "query": "임신했는데 밤 늦게 끝나는 마감조 계속 서야 됨?", "expect": ["c:retail-work-system-2026-11-a18-1", "c:retail-work-system-2026-11-s31-1"], "note": "의역(구어) | 제18조 ①②, 별표 3 임신 중인 근로자 행 | 임신 중에는 시간외근로를 시키지 않고 오후 10시부터 오전 6시까지와 휴일에는 일하게 하지 않음, 요구하면 쉬운 근로로 전환"},
+  {"workspace_id": 3, "kind": "policy", "query": "알바인데 계약한 시간보다 더 나오라 하면 무조건 해야 됨?", "expect": ["c:retail-work-system-2026-11-a14-1"], "note": "의역(구어) | 제14조 ②③ | 그때마다 본인 동의가 필요하고 초과근로는 1주 12시간을 넘을 수 없으며 동의하지 않아도 불리하게 대우하지 않음"},
+  {"workspace_id": 3, "kind": "policy", "query": "본사 직원 재텍근무는 한달에 몇일까지 되나여", "expect": ["c:retail-work-system-2026-11-a23-1"], "note": "의역(오타) | 제23조 ② | 임신·육아·가족 돌봄·감염병·부상 사유로 부서장 승인을 받아 월 4일 이내"},
+  {"workspace_id": 3, "kind": "policy", "query": "물류센터 야간조는 몇 시부터 몇 시까지 일해?", "expect": ["c:retail-work-system-2026-11-s29-1"], "note": "표 | 별표 1 야간조 행 | 물류센터 21:00 ~ 06:00 근무, 휴게시간 1시간"},
+  {"workspace_id": 3, "kind": "policy", "query": "명절 때 근무표는 며칠 전에 알려 줘?", "expect": ["c:retail-work-system-2026-11-s30-1", "c:retail-work-system-2026-11-a22-1"], "note": "표 | 별표 2 성수기 근무표 게시 행 (+ 제22조 ①) | 성수기 기간이 시작되기 14일 전까지 게시"},
+  {"workspace_id": 3, "kind": "policy", "query": "지각하면 월급에서 벌금처럼 더 떼 가?", "expect": ["c:retail-work-system-2026-11-a21-1"], "note": "교차 | 제21조 ③ (+ 급여 규정 제18조 ②) | 지각으로 일하지 않은 시간의 임금 처리는 급여 규정에 따르며, 급여 규정은 실제로 일하지 않은 시간만큼만 계산하고 벌금 형식의 추가 공제를 하지 않음", "expect_also": ["c:retail-payroll-2026-11-a18-1"]},
+  {"workspace_id": 3, "kind": "policy", "query": "재택근무하는 날 회사 사내망 접속은 어디에 신청해?", "expect": ["c:retail-work-system-2026-11-a24-1"], "note": "교차 | 제24조 ② (+ VPN·원격접속 운영지침 제12조 ①) | 재택근무 때 사내망 접속은 VPN·원격접속 운영지침에 따르며, 그 지침에 따라 접속 목적과 기간을 적어 보안 포털에서 미리 신청함", "expect_also": ["c:retail-vpn-2026-11-a12-1"]}
+]

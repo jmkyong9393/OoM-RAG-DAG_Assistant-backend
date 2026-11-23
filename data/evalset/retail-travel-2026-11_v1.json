@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 2, "kind": "policy", "query": "근거리 출장은 어디까지고 일비는 얼마예요?", "expect": ["c:retail-travel-2026-11-a4-1", "c:retail-travel-2026-11-a12-1"], "note": "기본 | 제4조 ②, 제12조 ③ | 왕복 60km 미만이거나 4시간 미만이면 근거리 출장이고 일비는 10,000원, 하루에 여러 번 가도 한 번만 지급"},
+  {"workspace_id": 2, "kind": "policy", "query": "국내 출장 가면 식비는 하루에 얼마 나와요?", "expect": ["c:retail-travel-2026-11-a13-1"], "note": "기본 | 제13조 ①② | 1일 30,000원 정액(1식 10,000원), 식사가 제공된 끼니는 뺌"},
+  {"workspace_id": 2, "kind": "policy", "query": "서울로 출장 가면 숙박비는 얼마까지 돼요?", "expect": ["c:retail-travel-2026-11-a14-1"], "note": "기본 | 제14조 ① | 실비로 지급하되 1박 상한은 서울 100,000원, 광역시 80,000원, 그 밖의 지역 70,000원"},
+  {"workspace_id": 2, "kind": "policy", "query": "자가용으로 출장 가면 교통비는 어떻게 계산해요?", "expect": ["c:retail-travel-2026-11-a11-1"], "note": "기본 | 제11조 ①② | 부서장 사전 승인을 받아 이용하고 1km 당 250원에 통행료·주차비 실비를 더함"},
+  {"workspace_id": 2, "kind": "policy", "query": "해외 출장은 누구 승인을 언제까지 받아야 해요?", "expect": ["c:retail-travel-2026-11-a15-1"], "note": "기본 | 제15조 ① | 담당 임원이 승인하며 출발 7일 전까지 인사 시스템으로 신청"},
+  {"workspace_id": 2, "kind": "policy", "query": "출장 다녀와서 여비 정산은 며칠 안에 해야 하나요?", "expect": ["c:retail-travel-2026-11-a20-1"], "note": "기본 | 제20조 ① | 복귀 후 5영업일 이내, 해외 출장은 10영업일 이내에 인사 시스템으로 정산"},
+  {"workspace_id": 2, "kind": "policy", "query": "한 곳에 오래 출장 가 있으면 일비가 줄어드나요?", "expect": ["c:retail-travel-2026-11-a26-1"], "note": "기본 | 제26조 ①③ | 같은 곳에 연속 15일을 넘는 날부터 일비를 10퍼센트 줄여 지급하고 식비와 숙박비는 줄이지 않음"},
+  {"workspace_id": 2, "kind": "policy", "query": "출장비 미리 받으려면 언제까지 신청해야 됨?", "expect": ["c:retail-travel-2026-11-a19-1"], "note": "의역(구어) | 제19조 ①② | 선지급은 출발 3일 전까지 인사 시스템으로 신청하고 재무팀이 출발 전날까지 본인 계좌로 지급"},
+  {"workspace_id": 2, "kind": "policy", "query": "협력사가 비행기표 끊어준다는데 받아도 돼?", "expect": ["c:retail-travel-2026-11-a27-1"], "note": "의역(구어) | 제27조 ①② | 안 됨. 거래 상대방이 출장비를 대신 내게 하지 않고 교통편·숙소·식사는 사양한 뒤 회사 여비로 처리"},
+  {"workspace_id": 2, "kind": "policy", "query": "친구 집에서 자도 숙박비 나오나?", "expect": ["c:retail-travel-2026-11-a14-1"], "note": "의역(구어) | 제14조 ③ | 친척이나 지인의 집에서 묵으면 영수증 없이 1박 20,000원 정액"},
+  {"workspace_id": 2, "kind": "policy", "query": "매장 순회 출장 계획은 언재까지 올려야되나요", "expect": ["c:retail-travel-2026-11-a7-1"], "note": "의역(오타) | 제7조 ① | 다음 달 순회 계획을 전월 25일까지 인사 시스템에 등록해 부서장 승인을 받고, 승인된 순회는 건마다 신청하지 않음"},
+  {"workspace_id": 2, "kind": "policy", "query": "임원이 광역시에서 묵으면 숙박비 상한이 얼마야?", "expect": ["c:retail-travel-2026-11-s33-1"], "note": "표 | 별표 1 숙박비(광역시) 행 | 임원은 1박 120,000원 상한, 직원은 1박 80,000원 상한"},
+  {"workspace_id": 2, "kind": "policy", "query": "동남아시아로 출장 가면 하루 식비는 얼마야?", "expect": ["c:retail-travel-2026-11-s34-1"], "note": "표 | 별표 2 다 지역 행 | 동남아시아는 다 지역이며 식비 60,000원, 일비 40,000원, 숙박비 상한 150,000원"},
+  {"workspace_id": 2, "kind": "policy", "query": "일요일에 출장 가서 일하면 휴일수당 나와요?", "expect": ["c:retail-travel-2026-11-a23-1"], "note": "교차 | 제23조 ①② (+ 급여 규정 제14조 ②) | 부서장이 미리 승인한 휴일 출장에서 업무를 한 시간은 급여 규정의 휴일근로로 처리하고 수당은 급여 규정의 가산 기준에 따라 지급", "expect_also": ["c:retail-payroll-2026-11-a14-1"]},
+  {"workspace_id": 2, "kind": "policy", "query": "선지급금을 안 돌려주면 월급에서 빼 가나요?", "expect": ["c:retail-travel-2026-11-a21-1"], "note": "교차 | 제21조 ③④ (+ 급여 규정 제21조 ③) | 정산 기한이 지난 뒤 30일이 되도록 정산하지 않으면 전액 반환을 서면으로 청구하되, 임금에서 공제하지 않고 임금과 따로 청구", "expect_also": ["c:retail-payroll-2026-11-a21-1"]}
+]
