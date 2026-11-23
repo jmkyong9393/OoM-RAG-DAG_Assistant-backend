@@ -1,0 +1,14 @@
+# 레포 루트를 빌드 맥락으로 쓰는 이미지(ai)용. BuildKit 은 COPY 가 쓰는 파일만 보내지만(실측 626kB),
+# 나중에 COPY 가 넓어져도 비밀값 · 큰 폴더가 맥락에 들어가지 않게 막아 둔다
+.git
+**/.venv
+**/__pycache__
+**/node_modules
+**/.pytest_cache
+api/build
+api/.gradle
+deploy/.env*
+!deploy/.env.example
+**/*.pem
+data/files
+data/uploads

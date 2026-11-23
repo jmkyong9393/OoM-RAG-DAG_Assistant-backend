@@ -1,5 +1,6 @@
 package com.oom.assist.chain;
 
+import com.oom.assist.common.util.AiHttp;
 import com.oom.assist.common.config.AppProps;
 import com.oom.assist.common.util.Times;
 import java.net.URI;
@@ -247,7 +248,7 @@ public class ChainSummaryService {
   private Map<?, ?> callAi(Map<String, Object> body) throws Exception {
     HttpRequest req = HttpRequest.newBuilder(URI.create(props.ai().baseUrl() + "/ai/chain-summary")).timeout(AI_TIMEOUT)
         .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))).build();
-    HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString());
+    HttpResponse<String> res = AiHttp.send(http, req, HttpResponse.BodyHandlers.ofString());
     if (res.statusCode() / 100 != 2) throw new IllegalStateException("ai service responded " + res.statusCode());
     return json.readValue(res.body(), Map.class);
   }

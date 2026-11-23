@@ -38,6 +38,12 @@ async def lifespan(_: FastAPI):
             app.state.worker_thread = worker.start_embedded()
             print("[ai] refine worker embedded (thread)", flush=True)
     yield
+    # 내려갈 때: 내장 워커가 집은 정제 건을 끝내고 멈추게 한다(중간에 끊기면 그 사례가 'processing' 으로 남는다)
+    thread = getattr(app.state, "worker_thread", None)
+    if thread is not None:
+        from app import worker
+        done = await asyncio.to_thread(worker.stop_embedded, thread, 25)
+        print(f"[ai] refine worker {'stopped' if done else 'still running at shutdown'}", flush=True)
 
 
 app = FastAPI(title="OoM Assist AI", version="0.2.0", lifespan=lifespan)

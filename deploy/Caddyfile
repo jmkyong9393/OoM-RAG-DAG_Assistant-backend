@@ -2,11 +2,34 @@
 {$SITE_ADDRESS:localhost} {
 	encode zstd gzip
 
+	# 보안 응답 헤더 — 다른 사이트가 이 화면을 틀에 넣지 못하게, 응답 형식을 추측하지 않게, 다른 사이트로 주소 전체를 넘기지 않게.
+	# HSTS 는 넣지 않는다: 인증서 발급이 막혀 평문(--http)으로 임시 운영할 때 브라우저가 접속을 거부한다(45 §6)
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
 	# Spring (context-path /api/v1). SSE 는 버퍼링 없이 흘려보낸다.
+	# 롤링 배포: 서비스 이름을 1초마다 다시 풀어 새로 뜬 컨테이너 · 내려간 컨테이너를 따라가고(dynamic a),
+	# 연결이 안 되는 쪽(뜨는 중 · 내려가는 중)은 다른 쪽으로 다시 시도한다(lb_try). 한 쪽뿐일 때는 다시 뜰 때까지 기다린다(최대 60초)
 	handle /api/v1/* {
-		reverse_proxy api:8080 {
+		# 요청 본문 상한 — 규정 업로드(Spring 30MB · 요청 31MB)보다 조금 크게. 넘는 요청은 앞단에서 413
+		request_body {
+			max_size 35MB
+		}
+		reverse_proxy {
+			dynamic a api 8080 {
+				refresh 1s
+			}
+			lb_policy round_robin
+			lb_try_duration 60s
+			lb_try_interval 250ms
+			fail_duration 5s
 			flush_interval -1
 			transport http {
+				dial_timeout 2s
 				read_timeout 300s
 			}
 		}
@@ -14,7 +37,18 @@
 
 	# 그 외 전부 Next.js
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy {
+			dynamic a web 3000 {
+				refresh 1s
+			}
+			lb_policy round_robin
+			lb_try_duration 60s
+			lb_try_interval 250ms
+			fail_duration 5s
+			transport http {
+				dial_timeout 2s
+			}
+		}
 	}
 
 	log {

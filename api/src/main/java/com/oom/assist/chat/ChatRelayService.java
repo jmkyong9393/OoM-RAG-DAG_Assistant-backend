@@ -1,5 +1,6 @@
 package com.oom.assist.chat;
 
+import com.oom.assist.common.util.AiHttp;
 import com.oom.assist.common.config.AppProps;
 import com.oom.assist.common.context.TenantContext;
 import java.io.IOException;
@@ -68,7 +69,7 @@ public class ChatRelayService {
           .timeout(Duration.ofMillis(EMITTER_TIMEOUT_MS))
           .header("Content-Type", "application/json").header("Accept", "text/event-stream")
           .POST(HttpRequest.BodyPublishers.ofString(body)).build();
-      HttpResponse<Stream<String>> res = http.send(req, HttpResponse.BodyHandlers.ofLines());
+      HttpResponse<Stream<String>> res = AiHttp.send(http, req, HttpResponse.BodyHandlers.ofLines());
       if (res.statusCode() / 100 != 2) {
         String detail;
         try (Stream<String> lines = res.body()) { detail = lines.limit(3).reduce("", (a, b) -> a + b); }
