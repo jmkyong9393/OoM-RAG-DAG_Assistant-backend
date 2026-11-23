@@ -188,6 +188,7 @@ def check_questions(slug: str, qpath: Path, idx: dict[str, str], body_text: str,
         if re.search(r"제\s*\d+\s*조|별표\s*\d", r["query"]): E.append(f"{tag}: 질의에 조문·별표 번호가 들어 있음")
         if not (8 <= len(r["query"]) <= 45): W.append(f"{tag}: 질의 길이 {len(r['query'])}자 (15~40 권장)")
         own = re.sub(r"\(\+.*?\)\s*$", "", r["answer"]).strip()
+        own = re.sub(r"\(=.*?\)\s*$", "", own).strip()   # (= 다른 문서 제N조) — 어느 쪽이든 정답. 다른 문서라 여기서는 보지 않는다
         refs = []
         for m in re.finditer(r"(부칙\s*)?제(\d+)조(?:의(\d+))?\s*([" + CIRC + r"]*)|(Q)\s*(\d+)|별표\s*(\d+)\s*([^,]*?)(?:\s*행)?(?=,|$)", own):
             if m.group(2):

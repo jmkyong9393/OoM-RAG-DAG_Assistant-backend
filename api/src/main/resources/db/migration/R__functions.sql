@@ -21,7 +21,7 @@ RETURNS tsquery LANGUAGE sql IMMUTABLE AS $$
                WHERE t <> '' AND numnode(plainto_tsquery('simple', t)) > 0)::tsquery END
 $$;
 
--- 규정 하이브리드 검색: 어휘(IDF 가중, 제목 0.1) 상위 20 + 벡터 상위 20 → RRF(k=60) → 상위 p_k. active 문서, 자기+조상 워크스페이스.
+-- 규정 하이브리드 검색: 어휘(IDF 가중, 제목 0.1)와 벡터에서 각각 상위 GREATEST(40, p_k) → RRF(k=60) → 상위 p_k. active 문서, 자기+조상 워크스페이스.
 CREATE OR REPLACE FUNCTION hybrid_search_chunks(p_ws bigint, p_tokens text, p_vec vector(1536), p_k int DEFAULT 5)
 RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
   WITH cand AS (
@@ -46,13 +46,13 @@ RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
       SELECT s.id, row_number() OVER (ORDER BY s.s DESC, s.len, s.id) AS r
       FROM (SELECT c.id, c.len, SUM(tf.idf * CASE WHEN ts_filter(c.tsv, '{a}') @@ tf.tq THEN 1.0 ELSE 0.1 END) AS s
             FROM cand c JOIN tf ON c.tsv @@ tf.tq GROUP BY c.id, c.len) s
-    ) t WHERE r <= 20
+    ) t WHERE r <= GREATEST(40, p_k)
   ),
   vec AS (
     SELECT id, r FROM (
       SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec) AS r
       FROM cand WHERE p_vec IS NOT NULL AND embedding IS NOT NULL
-    ) t WHERE r <= 20
+    ) t WHERE r <= GREATEST(40, p_k)
   )
   -- RRF 는 한쪽에서만 1위인 조문을 양쪽에서 중간 순위인 조문들 뒤로 민다. 벡터 상위 2건과 어휘 1위는 앞에 둔다
   SELECT id, SUM(1.0 / (60 + r))::double precision AS score

@@ -9,7 +9,7 @@
   {"workspace_id": 10, "kind": "policy", "query": "바깥 AI 챗봇에 고객 명단 붙여넣고 요약시켜도 돼?", "expect": ["c:retail-ethics-2026-11-a28-1"], "note": "의역 | 제28조 ① | 보안이 확보되지 않은 외부 생성형 AI 도구에 고객 정보·회사 기밀 입력 금지"},
   {"workspace_id": 10, "kind": "policy", "query": "이름 숨기고 비리 알리면 결과는 못 받아봐요?", "expect": ["c:retail-ethics-2026-11-a25-1"], "note": "의역 | 제25조 ② | 익명 제보는 후속 확인·결과 안내가 제한되어 실명 제보 권장"},
   {"workspace_id": 10, "kind": "policy", "query": "매장에 나와 있는 납품업체 사원한테 매출 할당 줘도 돼?", "expect": ["c:retail-ethics-2026-11-a13-1"], "note": "의역 | 제13조 ③ | 파견된 협력사 직원에게 판매 목표 달성 강요 금지"},
-  {"workspace_id": 10, "kind": "policy", "query": "고등학생 알바 뽑아도 되요? 따로 거칠 절차 있나", "expect": ["c:retail-ethics-2026-11-a19-1"], "note": "의역(오타) | 제19조 ④⑤ | 미성년자는 법적 보호자 동의, 18세 미만 고용은 준법경영 담당자와 사전 상의"},
+  {"workspace_id": 10, "kind": "policy", "query": "고등학생 알바 뽑아도 되요? 따로 거칠 절차 있나", "expect": ["c:retail-ethics-2026-11-a19-1", "c:retail-work-rules-2026-11-a3-1"], "note": "의역(오타) | 제19조 ④⑤ (= 취업규칙 제3조 ③) | 미성년자는 법적 보호자 동의, 18세 미만 고용은 준법경영 담당자와 사전 상의"},
   {"workspace_id": 10, "kind": "policy", "query": "공무원한테 식사 대접하려면 먼저 어디랑 얘기해야 해?", "expect": ["c:retail-ethics-2026-11-s9-1"], "expect_alt": ["c:retail-ethics-2026-11-a6-1"], "note": "표 | 별표 1 공무원에 대한 제공 행 | 준법 담당 부서와 사전 상의, 일정 금액 초과 제공은 금지"},
   {"workspace_id": 10, "kind": "policy", "query": "협력사 계약 서류랑 반품 기록은 몇 년 보관해요?", "expect": ["c:retail-ethics-2026-11-s19-1"], "note": "표 | 별표 2 서류 보관 행 | 계약 종료 후 5년"},
   {"workspace_id": 10, "kind": "policy", "query": "공동판촉이랑 회사 주관 행사는 우리 비용 부담이 달라?", "expect": ["c:retail-ethics-2026-11-a12-1"], "note": "비교 | 제12조 ①③ | 공동판촉행사는 회사 50% 이상, 회사 주관 행사는 100% 부담"},

@@ -37,6 +37,14 @@ def test_cross_doc_ref_is_split_off():
     assert qe.split_refs("별표 3 환급 행") == ("별표 3 환급 행", "")
 
 
+def test_either_doc_ref_is_split_off_before_the_cross_ref():
+    """(= …) 는 다른 문서의 조문도 같은 답을 준다는 표기 — (+ …) 를 뗀 뒤에 뗀다."""
+    own, other = qe.split_refs("제19조 ④⑤ (= 취업규칙 제3조 ③) (+ 급여 규정 제18조 ①)")
+    assert other == "급여 규정 제18조 ①"
+    assert qe.split_either(own) == ("제19조 ④⑤", "취업규칙 제3조 ③")
+    assert qe.split_either("제19조 ④⑤") == ("제19조 ④⑤", "")
+
+
 def test_cross_doc_ref_maps_to_the_other_documents_chunks_within_scope():
     docs = [{"title": "급여 규정", "slug": "pay", "ws": 2, "chunks": [{"id": "pay-a18-1", "article_label": "제18조", "text": "① 유급."}]},
             {"title": "개인정보 보호 내부관리계획", "slug": "plan", "ws": 10,

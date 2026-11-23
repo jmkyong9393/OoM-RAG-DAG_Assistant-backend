@@ -7,7 +7,7 @@ expect_also 는 두 문서에 걸친 질의의 둘째 문서 정답 — 둘 다 
 
 실행: set -a; . deploy/.env; set +a; cd ai && uv run python ../eval/hit_at_k.py [--k 5] [--json 결과경로] [--record] [--rerank]
       --record: 결과를 eval_runs 에 남긴다(부서별 + 전체 1행, 대시보드의 '검색 품질'). k=5 · 전체 평가셋일 때만. DATABASE_URL(관리자 접속) 필요
-      --rerank: 규정 질의에 재순위 열을 더한다(하이브리드 상위 20 → 가벼운 모델이 다시 고름, 질의마다 LLM 1회). 사례 질의는 하이브리드와 같다
+      --rerank: 규정 질의에 재순위 열을 더한다(하이브리드 상위 40 → 가벼운 모델이 다시 고름, 질의마다 LLM 1회). 사례 질의는 하이브리드와 같다
 """
 from __future__ import annotations
 
