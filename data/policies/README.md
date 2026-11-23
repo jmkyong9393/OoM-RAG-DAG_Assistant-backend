@@ -29,7 +29,7 @@ PDF 하이라이트가 필요하면 `bboxes` 에 사각형 목록을 넣고 `fil
 data/policies/src/<slug>/            ← 집필자(프론트팀 §A-1). slug 는 폴더명 = meta.json slug = 청크 id 접두어
 ├── <slug>.md                        원문 정본
 ├── meta.json                        slug·workspace_id·title·version·doc_type·source_type·file_path·effective_from·supersedes·tags·terms·author·summary
-├── <slug>.questions.md              평가 질의 15건 → data/evalset/<slug>_v1.json (D-4 ④)
+├── <slug>.questions.md              평가 질의 15건 이상 → data/evalset/<slug>_v1.json (D-4 ④)
 └── <slug>.pdf                       PDF 문서만. 쪽 번호는 자동 추출
 ```
 

@@ -174,7 +174,7 @@ def parse_questions(md: str) -> list[dict]:
 
 def check_questions(slug: str, qpath: Path, idx: dict[str, str], body_text: str, block: list[str], E: list, W: list) -> None:
     rows = parse_questions(qpath.read_text(encoding="utf-8"))
-    if len(rows) != 15: E.append(f"질의: {len(rows)}건 (15건)")
+    if len(rows) < 15: E.append(f"질의: {len(rows)}건 (15건 이상)")
     types_ = Counter(next((t for t in Q_TYPES if r["type"].startswith(t)), "?") for r in rows)
     if types_.get("?"): E.append(f"질의: 유형은 {Q_TYPES} 로 시작 — {[r['no'] for r in rows if not r['type'].startswith(Q_TYPES)]}")
     has_table = any(k.startswith("별표") for k in idx)
