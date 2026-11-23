@@ -10,8 +10,10 @@
   {"workspace_id": 2, "kind": "policy", "query": "인사위원회 나오라는 통보는 며칠 전에 와야 함?", "expect": ["c:retail-work-rules-2026-11-a25-1"], "note": "의역(구어) | 제25조 ① | 개최 7일 전까지 일시·장소·징계 사유를 적은 출석 통지서를 서면으로 보냄"},
   {"workspace_id": 2, "kind": "policy", "query": "징계 받았는데 억울하면 어디다 다시 따져?", "expect": ["c:retail-work-rules-2026-11-a26-1"], "note": "의역(구어) | 제26조 ①③ | 통지를 받은 날부터 10일 이내에 서면으로 재심 청구, 별도로 3개월 이내에 노동위원회 구제 신청 가능"},
   {"workspace_id": 2, "kind": "policy", "query": "매장 유니폼 가라입는 시간도 근무시간으로 쳐주나여", "expect": ["c:retail-work-rules-2026-11-a8-1"], "note": "의역(오타) | 제8조 ③ | 회사가 정한 장소에서 근무복으로 갈아입는 시간은 근로시간으로 봄"},
-  {"workspace_id": 2, "kind": "policy", "query": "감봉 징계는 월급에서 얼마까지 깎을 수 있어?", "expect": ["c:retail-work-rules-2026-11-s35-1"], "note": "표 | 별표 1 감봉 행 | 1회 금액은 평균임금 1일분의 2분의 1 이하, 총액은 1임금지급기 임금 총액의 10분의 1 이하"},
-  {"workspace_id": 2, "kind": "policy", "query": "고객이 폭언하면 어느 규정을 따라 대응해?", "expect": ["c:retail-work-rules-2026-11-s37-1"], "note": "표 | 별표 3 고객의 폭언·폭행 대응 행 | 고객응대 근로자 보호 지침을 따름"},
+  {"workspace_id": 2, "kind": "policy", "query": "감봉 징계는 월급에서 얼마까지 깎을 수 있어?", "expect": ["c:retail-work-rules-2026-11-s36-1"], "note": "표 | 별표 1 감봉 행 | 1회 금액은 평균임금 1일분의 2분의 1 이하, 총액은 1임금지급기 임금 총액의 10분의 1 이하"},
+  {"workspace_id": 2, "kind": "policy", "query": "고객이 폭언하면 어느 규정을 따라 대응해?", "expect": ["c:retail-work-rules-2026-11-s38-1"], "note": "표 | 별표 3 고객의 폭언·폭행 대응 행 | 고객응대 근로자 보호 지침을 따름"},
   {"workspace_id": 2, "kind": "policy", "query": "수습 중이면 월급이나 최저임금이 깎여?", "expect": ["c:retail-work-rules-2026-11-a4-1"], "note": "교차 | 제4조 ① (+ 급여 규정 제7조 ③) | 깎이지 않음. 수습 3개월 동안 임금을 100퍼센트 지급하고, 급여 규정도 수습 기간에 최저임금을 감액하지 않음", "expect_also": ["c:retail-payroll-2026-11-a7-1"]},
-  {"workspace_id": 2, "kind": "policy", "query": "주 14시간 일하는 알바도 주휴일이 있어?", "expect": ["c:retail-work-rules-2026-11-a5-1"], "note": "교차 | 제5조 ③ (+ 급여 규정 제15조 ③) | 없음. 4주 동안을 평균하여 1주 소정근로시간이 15시간 미만이면 주휴일과 연차 유급휴가를 적용하지 않음", "expect_also": ["c:retail-payroll-2026-11-a15-1"]}
+  {"workspace_id": 2, "kind": "policy", "query": "주 14시간 일하는 알바도 주휴일이 있어?", "expect": ["c:retail-work-rules-2026-11-a5-1"], "note": "교차 | 제5조 ③ (+ 급여 규정 제15조 ③) | 없음. 4주 동안을 평균하여 1주 소정근로시간이 15시간 미만이면 주휴일과 연차 유급휴가를 적용하지 않음", "expect_also": ["c:retail-payroll-2026-11-a15-1"]},
+  {"workspace_id": 2, "kind": "policy", "query": "장애인 인식개선 교육은 언제, 누가 받아요?", "expect": ["c:retail-work-rules-2026-11-a26-2-1"], "note": "기본 | 제26조의2 ② | 매년 1회, 1시간 이상. 대표이사와 모든 근로자가 받음"},
+  {"workspace_id": 2, "kind": "policy", "query": "의무교육 못 들으면 어떻게 됨?", "expect": ["c:retail-work-rules-2026-11-a26-2-1"], "note": "의역(구어) | 제26조의2 ⑥ | 다음 달 보충교육을 받고, 그것도 받지 않으면 회사가 부서장에게 알림. 휴직 중이면 복직한 날부터 30일 이내"}
 ]
