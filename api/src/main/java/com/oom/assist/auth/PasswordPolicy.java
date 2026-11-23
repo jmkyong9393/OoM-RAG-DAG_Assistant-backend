@@ -10,11 +10,13 @@ import java.util.Locale;
  *  - 사번(ID)과 같거나 사번을 포함하지 않음
  *  - 같은 문자 3연속, 순차 문자 3연속(abc, 321, 1234 …) 금지
  *  - 유효기간 180일(반기 1회 변경)
+ *  - 최근에 쓴 비밀번호 3개(지금 것 포함)는 다시 쓸 수 없음 — PasswordHistory
  */
 public final class PasswordPolicy {
   public static final int MAX_AGE_DAYS = 180;
   public static final String RULE_TEXT = "영문 대/소문자·숫자·특수문자 중 2종 이상을 조합해 10자 이상, 또는 3종 이상을 조합해 8자 이상 (최대 128자). "
-      + "사번을 포함하거나 같은 문자·연속된 문자(aaa, abc, 123)를 3자 이상 이어 쓸 수 없습니다.";
+      + "사번을 포함하거나 같은 문자·연속된 문자(aaa, abc, 123)를 3자 이상 이어 쓸 수 없습니다. "
+      + "최근에 쓴 비밀번호 3개는 다시 쓸 수 없습니다.";
 
   private PasswordPolicy() {}
 

@@ -21,7 +21,8 @@ class SchemaMigrationTest extends AbstractDbTest {
         "user_consents",                                   // V13 처리방침 판 단위 동의
         "policy_uploads",                                  // V14 규정 업로드 · 변환 · 검수
         "chain_summaries",                                 // V15 장애 건 AI 요약 · 지문
-        "incident_reports");                               // V16 장애 보고서(R1)
+        "incident_reports",                                // V16 장애 보고서(R1)
+        "user_password_history");                          // V20 비밀번호 재사용 제한
   }
 
   @Test
@@ -77,6 +78,10 @@ class SchemaMigrationTest extends AbstractDbTest {
     assertThat(tablePriv("oom_ai", "incident_reports", "INSERT")).isFalse();
     assertThat(tablePriv("oom_api", "incident_reports", "DELETE")).isTrue();    // 새 보고서가 done 이 되면 이전 행을 지운다
     assertThat(tablePriv("oom_ai", "incident_reports", "DELETE")).isTrue();
+    // V20: 비밀번호 이력은 Spring 만 본다
+    assertThat(tablePriv("oom_api", "user_password_history", "INSERT")).isTrue();
+    assertThat(tablePriv("oom_api", "user_password_history", "DELETE")).isTrue();
+    assertThat(tablePriv("oom_ai", "user_password_history", "SELECT")).isFalse();
     // V17: 메인 부서 칸은 Spring 이 고친다(users 의 테이블 단위 UPDATE)
     assertThat(priv("oom_api", "users", "primary_workspace_id", "UPDATE")).isTrue();
     // R__ 로 나중에 만든 뷰·함수에도 기본 권한이 적용된다

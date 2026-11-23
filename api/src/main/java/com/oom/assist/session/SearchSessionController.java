@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 검색 내역(답변 재열람). 프론트 계약 SearchSession (BE-HANDOFF-001 §3-4).
+ * 검색 내역(답변 재열람). 프론트 계약 SearchSession (BE-HANDOFF-001 §3-4). 내가 한 질문만 돌려준다 — 같은 부서라도 남의 질문과 답은 보이지 않는다.
  * citations 는 저장된 verified/unverified_ids('c:'/'n:' 접두어)를 policy_refs·chain_ref 의 ref(P1/N1)로 되돌려 만든다.
  */
 @RestController
@@ -39,13 +39,13 @@ public class SearchSessionController {
 
   @GetMapping("/sessions")
   public List<SearchSession> list(@RequestParam(defaultValue = "30") int limit, TenantContext ctx) {
-    return jdbc.sql("SELECT * FROM v_search_sessions WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT ?")
-        .params(ctx.workspaceId(), Math.max(1, Math.min(limit, 200))).query().listOfRows().stream().map(r -> map(r, ctx.userId())).toList();
+    return jdbc.sql("SELECT * FROM v_search_sessions WHERE workspace_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?")
+        .params(ctx.workspaceId(), ctx.userId(), Math.max(1, Math.min(limit, 200))).query().listOfRows().stream().map(r -> map(r, ctx.userId())).toList();
   }
 
   @GetMapping("/sessions/{id}")
   public SearchSession get(@PathVariable long id, TenantContext ctx) {
-    return jdbc.sql("SELECT * FROM v_search_sessions WHERE workspace_id = ? AND id = ?").params(ctx.workspaceId(), id)
+    return jdbc.sql("SELECT * FROM v_search_sessions WHERE workspace_id = ? AND user_id = ? AND id = ?").params(ctx.workspaceId(), ctx.userId(), id)
         .query().listOfRows().stream().findFirst().map(r -> map(r, ctx.userId())).orElseThrow(() -> ApiException.notFound("session"));
   }
 

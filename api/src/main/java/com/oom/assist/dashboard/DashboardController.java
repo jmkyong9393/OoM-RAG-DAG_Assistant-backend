@@ -99,8 +99,8 @@ public class DashboardController {
     noEvidence.put("rate", doneTotal == 0 ? null : Math.round(((Number) ne.get("none")).doubleValue() / doneTotal * 1000) / 10.0);
     noEvidence.put("recent", jdbc.sql("""
         SELECT id AS session_id, query, intent, created_at FROM search_sessions
-        WHERE workspace_id = ? AND status = 'done' AND cardinality(verified_ids) = 0 ORDER BY created_at DESC LIMIT 5
-        """).param(ws).query().listOfRows());
+        WHERE workspace_id = ? AND status = 'done' AND cardinality(verified_ids) = 0 AND (? OR user_id = ?) ORDER BY created_at DESC LIMIT 5
+        """).params(ws, ctx.isAdmin(), ctx.userId()).query().listOfRows());   // 질문 문장은 관리자에게만 전부(이름 없이), 그 밖에는 본인 것만
     out.put("no_evidence", noEvidence);
 
     out.put("resolve_time", jdbc.sql("""

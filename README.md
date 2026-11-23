@@ -4,7 +4,7 @@
 
 - 프론트엔드: [OoM-RAG-DAG_Assistant](https://github.com/Jonghyeon-Bae/OoM-RAG-DAG_Assistant) (Next.js)
 - 구성: Spring Boot(API) + Python FastAPI(AI) + PostgreSQL(pgvector), 단일 호스트 배포
-- 상태(2026-11-20): REST API 63개 · DB 마이그레이션 V1 ~ V19 · 자동 테스트 Spring 241 · Python 328
+- 상태(2026-11-23): REST API 63개 · DB 마이그레이션 V1 ~ V20 · 자동 테스트 Spring 245 · Python 328
 
 ## 핵심 기능
 

@@ -39,12 +39,14 @@ public class UserAdminController {
   private final JdbcClient jdbc;
   private final PasswordEncoder encoder;
   private final LoginAttempts attempts;
+  private final PasswordHistory history;
   private final SecureRandom random = new SecureRandom();
 
-  public UserAdminController(JdbcClient jdbc, PasswordEncoder encoder, LoginAttempts attempts) {
+  public UserAdminController(JdbcClient jdbc, PasswordEncoder encoder, LoginAttempts attempts, PasswordHistory history) {
     this.jdbc = jdbc;
     this.encoder = encoder;
     this.attempts = attempts;
+    this.history = history;
   }
 
   public record InviteRequest(@NotBlank @Pattern(regexp = "[A-Za-z0-9-]{3,32}") String employeeNo, @NotBlank String name,
@@ -175,6 +177,8 @@ public class UserAdminController {
     if (!"active".equals(u.get("status"))) throw ApiException.conflict("ALREADY_INACTIVE", "reactivate the account first");
     requireManagesAccount(ctx.userId(), id);
     String temp = tempPassword((String) u.get("employee_no"));
+    // 재발급 전의 비밀번호도 이력에 남긴다 — 임시 비밀번호를 거쳐 옛 비밀번호로 돌아가지 못하게
+    history.retire(id, jdbc.sql("SELECT password_hash FROM users WHERE id = ?").param(id).query(String.class).optional().orElse(null));
     jdbc.sql("""
           UPDATE users SET password_hash = ?, must_change_password = true, password_changed_at = now(), locked_until = NULL, failed_attempts = 0
           WHERE id = ?""").params(encoder.encode(temp), id).update();
@@ -247,6 +251,7 @@ public class UserAdminController {
     endSessions(id);
     jdbc.sql("DELETE FROM workspace_members WHERE user_id = ?").param(id).update();
     jdbc.sql("DELETE FROM user_consents WHERE user_id = ?").param(id).update();
+    jdbc.sql("DELETE FROM user_password_history WHERE user_id = ?").param(id).update();
     jdbc.sql("""
           UPDATE users SET status = 'deleted', deleted_at = now(), name = '삭제된 계정', email = NULL, title = NULL, grade = NULL, duty = NULL,
                  external_id = NULL, auth_provider = NULL, password_hash = NULL, must_change_password = false, failed_attempts = 0, locked_until = NULL,
