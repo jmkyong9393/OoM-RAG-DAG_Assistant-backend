@@ -57,7 +57,9 @@ sed -e "s|^API_IMAGE=.*|API_IMAGE=oom-api:$ATAG|" -e "s|^AI_IMAGE=.*|AI_IMAGE=oo
 step "기동 — bootstrap.sh ${*:-(seed data eval)}"
 $SSH "cd oom/deploy && bash bootstrap.sh $*"
 
-step "매일 백업 예약 (새벽 3시 30분, 최근 7개 보관 — deploy/backup.sh)"
+step "서버 시간대 한국 시간으로 (이미 만든 서버에도 — 다시 돌려도 같다)"
+$SSH 'sudo ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo Asia/Seoul | sudo tee /etc/timezone >/dev/null && sudo systemctl restart cron && date "+  %Y-%m-%d %H:%M %Z"'
+step "매일 백업 예약 (한국 시간 새벽 3시 30분, 최근 7개 보관 — deploy/backup.sh)"
 $SSH 'echo "30 3 * * * $USER mkdir -p \$HOME/oom-backups && cd \$HOME/oom/deploy && bash backup.sh daily >> \$HOME/oom-backups/backup.log 2>&1" | sudo tee /etc/cron.d/oom-backup >/dev/null && sudo chmod 644 /etc/cron.d/oom-backup && echo "  /etc/cron.d/oom-backup"'
 
 step "옛 이미지 정리 — 서버 (종류마다 지금 + 직전 하나)"

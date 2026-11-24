@@ -14,7 +14,10 @@ if [ "${SKIP_SWAP:-0}" != 1 ] && ! swapon --show | grep -q /swapfile; then
 fi
 
 apt-get update
-apt-get install -y ca-certificates curl git
+apt-get install -y ca-certificates curl git tzdata
+# 서버 시계를 한국 시간으로 — 백업 예약(cron) · 서버 로그가 한국 시각을 따른다. 컨테이너 안 시계와 DB 저장 값은 바뀌지 않는다
+ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo Asia/Seoul > /etc/timezone
+systemctl restart cron 2>/dev/null || true   # cron 은 기동할 때 시간대를 읽는다
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
