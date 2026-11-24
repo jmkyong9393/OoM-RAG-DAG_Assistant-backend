@@ -3,6 +3,8 @@
 규정은 회사에 종속된다: meta.json 의 tenant·workspace_id 가 시드(data/seed)의 회사·부서와 맞아야 하고,
 같은 부서 안에서 제목이 겹치면 개정(supersedes)이어야 한다(index_policy.py R8 이 앞 문서를 폐기하므로).
 질의표는 본문만으로 답이 나와야 한다: 정답 조문·항·별표 행이 실제로 있고, 정답 요지의 숫자가 그 조문에 있어야 한다.
+본문이 가리키는 조문 · 항 · 같은 회사의 다른 규정이 실제로 있어야 하고(모르는 문서 이름은 경고), 부서 호칭은 회사 표준을 따른다.
+원문 PDF 가 있는 문서는 변환본(data/policies/<slug>.chunks.json)의 조각마다 쪽 번호가 있어야 한다.
 
 실행: uv run scripts/validate_policy_pack.py [slug ...] [--blocklist 파일] [--require-questions] [--quiet]
       (slug 생략 시 src/ 전체. --blocklist: 한 줄에 하나씩 적은 금지 고유명사 — 본문·질의·요지에 있으면 오류. 목록 파일은 레포에 두지 않는다)
@@ -35,6 +37,16 @@ NUM_UNIT = re.compile(r"\d[\d,.]*\s*(?:영업일|개월|시간|퍼센트|만\s?�
 # 한 회사의 규정으로 읽히지 않게 만드는 흔적(경고): 해외 시각·통화·행사, 영문 역할 약어
 FOREIGN = {"해외 시각": r"\b(?:UTC|PST|GMT|EST)\b", "외화": r"달러|USD|\$\s?\d|(?<![가-힣])유로(?![가-힣])", "해외 고유": r"추수감사절|블랙프라이데이|GDPR",
            "영문 역할 약어": r"\b(?:EOC|IMOC|DBRE|IC|SRE|CISO|CPO)\b"}
+# 회사별 표준 호칭(오류): 같은 기능을 회사마다 한 이름으로 부른다
+NAMING = {"retail": {r"피플팀": "인사팀", r"인사\s?(?:담당\s?)?부서": "인사팀"},
+          "it": {r"인사팀": "피플팀", r"인사\s?(?:담당\s?)?부서": "피플팀"}}
+# 교차참조: "제N조"의 출처를 앞말로 가린다 — 법령(외부)은 보지 않고, 이 문서 · 같은 회사의 다른 규정이면 조문 · 항이 있어야 한다
+XREF = re.compile(r"(부칙\s*)?제(\d+)조(?:의(\d+))?((?:\s*[" + CIRC + r"])*)")
+XREF_EXT = re.compile(r"(?:법|법률|령|규칙|고시|협약|가이드라인)」?$|」$|같은\s*(?:법|법률|령|영|시행령|규칙|고시)$")
+XREF_JOIN = re.compile(r"^[\s,·ㆍ및와과또는부터에서~\-" + CIRC + r"제항호목의]*$")   # "제3조 및 제5조 ②" 처럼 앞 출처를 잇는 말
+DOC_SUFFIX = r"(?:규정|지침|운영지침|운영규정|관리규정|규칙|계획|규범|행동규범|규약|매뉴얼|편람|방침|FAQ)"
+DOC_NAME = re.compile(r"((?:[가-힣A-Za-z·]+\s)?[가-힣A-Za-z·]*" + DOC_SUFFIX + r")(?=에\s*따|[을를]\s*따|에서\s*정|[이가]\s*정|에\s*정|[으]?로\s*정)")
+DOC_GENERIC = re.compile(r"^(?:(?:이|본|각|관계|관련|해당|다른|같은|위|회사|사내|내부|그|하위|종전|부서의|계열사의|외부|별도)\s?)?" + DOC_SUFFIX + r"$")
 
 
 def squash(s: str) -> str:
@@ -162,6 +174,85 @@ def check_collisions(metas: dict[str, dict], seeds: dict, errors: dict[str, list
                         errors[s].append(f"충돌: 시드 '{sd['slug']}' 와 같은 부서·같은 제목 — 개정이면 supersedes 사슬로 이어져야 한다")
 
 
+def library(seeds: dict, dirs: list[Path]) -> dict:
+    """회사별로 참조할 수 있는 문서: 제목 → slug, slug → 조문 색인. src 전체(점검 대상과 상관없이) · 점검 폴더 · 시드."""
+    titles: dict[str, dict[str, str]] = defaultdict(dict); idx: dict[str, dict] = {}
+    for d in [*SRC.glob("*/"), *dirs]:
+        if not (d / "meta.json").exists(): continue
+        m = json.loads((d / "meta.json").read_text(encoding="utf-8"))
+        titles[m.get("tenant")][m.get("title")] = m["slug"]
+        if (d / f"{m['slug']}.md").exists(): idx[m["slug"]] = article_index(d / f"{m['slug']}.md")[1]
+    for sd in seeds["docs"]:   # 시드 문서는 원문 조문 색인 없이 이름만 안다
+        t = seeds["tenants"].get(seeds["ws"].get(sd.get("workspace_id"), {}).get("tenant_id"))
+        if t: titles[t].setdefault(sd["title"], sd["slug"])
+    return {"titles": titles, "idx": idx}
+
+
+def ref_source(lib: dict, tenant: str, own: str, before: str) -> str:
+    """'제N조' 앞말로 출처를 가린다: slug · 'EXT'(법령) · 'SAME'(같은 규정) · 'UNKNOWN:이름'."""
+    b = before.rstrip()
+    for title, slug in sorted(lib["titles"].get(tenant, {}).items(), key=lambda x: -len(x[0] or "")):
+        if title and (b.endswith(title) or b.endswith(f"「{title}」")):
+            return slug
+    if re.search(r"(?:이|본)\s*" + DOC_SUFFIX + r"$", b): return own
+    if XREF_EXT.search(b): return "EXT"
+    if re.search(r"같은\s*" + DOC_SUFFIX + r"$", b): return "SAME"
+    last = re.search(r"([가-힣A-Za-z·」]+)$", b)
+    if last and re.search(DOC_SUFFIX + r"$", last.group(1)): return "UNKNOWN:" + last.group(1)
+    return own
+
+
+def check_cross_refs(slug: str, tenant: str, text: str, lib: dict, E: list, W: list) -> None:
+    """다른 조문 · 다른 규정을 가리키는 말이 실제로 있는 조문 · 항 · 문서인가. 회사별 표준 호칭."""
+    known = lib["titles"].get(tenant, {})
+    article = ""   # 지금 조문의 앞부분 — '같은 규정'은 그 안에서 마지막으로 이름이 나온 문서다
+    for ln, line in enumerate(text.splitlines(), 1):
+        head = re.match(r"^(부칙\s*)?제\d+조(?:의\d+)?\([^)]*\)", line)
+        if head or line.startswith("#"): article = ""
+        body = line[head.end():] if head else line
+        prev, prev_end = None, 0
+        for m in XREF.finditer(body):
+            gap = body[prev_end:m.start()]
+            src = prev if prev is not None and XREF_JOIN.match(gap) else ref_source(lib, tenant, slug, body[:m.start()])
+            if src == "SAME":
+                seen = article + " " + body[:m.start()]
+                pos = {s: seen.rfind(t) for t, s in known.items() if t and t in seen}
+                src = max(pos, key=pos.get) if pos else "UNKNOWN:" + re.search(r"같은\s*\S+$", body[:m.start()].rstrip()).group(0)
+            prev, prev_end = src, m.end()
+            if src == "EXT": continue
+            # 표 칸 안의 '제N조'는 그 칸이 조문 번호만일 때만 이 문서로 본다 — 근거 법령 칸은 법 이름 없이 조문만 적기도 한다
+            if line.startswith("|") and src == slug and not re.search(r"\|\s*" + re.escape(m.group(0).strip()) + r"\s*(?:\||$)", line): continue
+            key = ("부칙" if m.group(1) else "") + f"제{m.group(2)}조" + (f"의{m.group(3)}" if m.group(3) else "")
+            if src.startswith("UNKNOWN"):
+                W.append(f"참조 {ln}행: '{src[8:]} {key}' — 어느 문서인지 모름(같은 회사 규정 제목과 다름)"); continue
+            art = lib["idx"].get(src)
+            if art is None: continue   # 원문이 없는 시드 문서
+            where = "이 문서" if src == slug else f"'{src}'"
+            if key not in art:
+                E.append(f"참조 {ln}행: {key} 가 {where}에 없음"); continue
+            for h in re.findall(f"[{CIRC}]", m.group(4) or ""):
+                if h not in art[key]: E.append(f"참조 {ln}행: {key} {h} 가 {where}에 없음")
+        article += " " + body
+        for m in DOC_NAME.finditer(line):
+            name = m.group(1).strip()
+            if DOC_GENERIC.match(name) or re.search(r"법\s|시행규칙$", name) or re.search(r"별표\s*\d+\s*의\s*$", line[:m.start()]): continue
+            if any(t and line[:m.end()].endswith(t) for t in known): continue   # 제목 전체가 앞에 있다
+            W.append(f"참조 {ln}행: '{name}' — 같은 회사에 이런 제목의 규정이 없음(외부 기준이면 그대로 둔다)")
+    for pat, std in NAMING.get(tenant, {}).items():
+        for ln, line in enumerate(text.splitlines(), 1):
+            for m in re.finditer(pat, line):
+                E.append(f"호칭 {ln}행: '{m.group(0)}' → 이 회사는 '{std}'")
+
+
+def check_pdf_pages(slug: str, d: Path, E: list) -> None:
+    """원문 PDF 가 있으면 변환본의 조각마다 쪽 번호가 있어야 한다(본문만 고치고 PDF 재생성 · 쪽 번호 채우기를 빠뜨린 경우)."""
+    pdf, cj = d / f"{slug}.pdf", ROOT / "data" / "policies" / f"{slug}.chunks.json"
+    if not pdf.exists() or not cj.exists(): return
+    chunks = json.loads(cj.read_text(encoding="utf-8")).get("chunks", [])
+    empty = [c["id"] for c in chunks if c.get("page") is None]
+    if empty: E.append(f"PDF: 원문 PDF 가 있는데 쪽 번호가 빈 조각 {len(empty)}/{len(chunks)}개 {empty[:2]} — md_to_pdf.py 와 pdf_locate.py --write 를 다시")
+
+
 def parse_questions(md: str) -> list[dict]:
     rows = []
     for line in md.splitlines():
@@ -235,6 +326,7 @@ def main() -> int:
     scan = a.src.resolve() if a.src else SRC
     dirs = sorted(p for p in scan.iterdir() if p.is_dir() and (p / "meta.json").exists() and (not a.slugs or p.name in a.slugs))
     errors: dict[str, list] = defaultdict(list); warns: dict[str, list] = defaultdict(list); metas: dict[str, dict] = {}; stats = {}
+    lib = library(seeds, dirs)
     for d in dirs:
         slug = d.name; E, W = errors[slug], warns[slug]
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8")); metas[slug] = meta
@@ -260,6 +352,8 @@ def main() -> int:
         hit = [b for b in block if b in body["text"]]
         if hit: E.append(f"본문: 금지 고유명사 {hit[:5]}")
         _, idx = article_index(md)
+        check_cross_refs(slug, meta.get("tenant"), body["text"], lib, E, W)
+        check_pdf_pages(slug, d, E)
         q = d / f"{slug}.questions.md"
         if q.exists():
             check_questions(slug, q, idx, body["text"], block, E, W)

@@ -109,6 +109,48 @@ def test_questions_must_be_answerable_from_cited_article(tmp_path):
     assert "#8: 제1조 에 ③항이 없음" in joined
 
 
+def _xref(text, tenant="retail"):
+    lib = {"titles": {"retail": {"시험 규정": "retail-t-2026-11", "취업규칙": "retail-wr"}},
+           "idx": {"retail-t-2026-11": {"제1조": "제1조 ① ②", "제2조": "제2조 ①"}, "retail-wr": {"제28조": "제28조 ① ②"}}}
+    E, W = [], []
+    vpp.check_cross_refs("retail-t-2026-11", tenant, text, lib, E, W)
+    return E, W
+
+
+def test_cross_refs_resolve_own_other_and_law_articles():
+    E, W = _xref("제3조(참조)\n"
+                 "① 신청은 제1조 ②에 따르고, 징계는 취업규칙 제28조 ② 및 제30조에 따른다.\n"   # 제30조는 취업규칙에 없다(앞 출처를 잇는다)
+                 "② 근로기준법 제60조 및 제61조는 따로 보지 않는다. 같은 규정 제29조도 본다.\n"   # 같은 규정 = 이 조문에서 마지막으로 나온 취업규칙
+                 "③ 이 규정 제2조 ③ 을 따른다.\n"
+                 "| 주휴 | 1주 개근 시 유급휴일(제55조) | 제2조 |\n")                              # 표의 근거 칸은 법령 조문으로 본다
+    joined = "\n".join(E)
+    assert "제30조 가 'retail-wr'에 없음" in joined and "제29조 가 'retail-wr'에 없음" in joined
+    assert "제2조 ③ 가 이 문서에 없음" in joined
+    assert "제1조" not in joined and "제28조" not in joined and "제60조" not in joined and "제61조" not in joined and "제55조" not in joined
+
+
+def test_cross_refs_warn_unknown_documents_and_check_naming():
+    E, W = _xref("① 관리자는 인사 규정에 따라 징계한다. 해당 규정에 따른다. 시험 규정에 따른다.\n② 승인은 인사 부서장이 한다.\n③ 별표 1의 지급 기준에 따른다.")
+    assert [w for w in W if "'인사 규정'" in w] and not [w for w in W if "해당 규정" in w or "시험 규정" in w or "지급 기준" in w]
+    assert any("'인사 부서' → 이 회사는 '인사팀'" in e for e in E)
+    E2, _ = _xref("① 피플팀이 확인한다.", tenant="it")
+    assert E2 == []
+    E3, _ = _xref("① 피플팀이 확인한다.")
+    assert any("'피플팀' → 이 회사는 '인사팀'" in e for e in E3)
+
+
+def test_pdf_source_needs_page_numbers(tmp_path, monkeypatch):
+    d = tmp_path / "src" / "retail-p-2026-11"; d.mkdir(parents=True)
+    (d / "retail-p-2026-11.pdf").write_bytes(b"%PDF-1.4")
+    pol = tmp_path / "data" / "policies"; pol.mkdir(parents=True)
+    monkeypatch.setattr(vpp, "ROOT", tmp_path)
+    for chunks, bad in (([{"id": "a1-1", "page": 1}, {"id": "a2-1", "page": None}], True), ([{"id": "a1-1", "page": 1}], False)):
+        (pol / "retail-p-2026-11.chunks.json").write_text(json.dumps({"chunks": chunks}), encoding="utf-8")
+        E = []
+        vpp.check_pdf_pages("retail-p-2026-11", d, E)
+        assert bool(E) is bad and (not bad or "1/2" in E[0])
+
+
 def test_repo_policy_pack_passes(capsys, monkeypatch):
     """레포의 data/policies/src 전체가 오류 0 이어야 한다(질의표 포함)."""
     monkeypatch.setattr(sys, "argv", ["validate_policy_pack.py", "--quiet"])
