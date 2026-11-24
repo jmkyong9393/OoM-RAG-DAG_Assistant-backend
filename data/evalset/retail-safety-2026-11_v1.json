@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 2, "kind": "policy", "query": "물류센터 안에서 지게차는 얼마나 빨리 달릴 수 있어?", "expect": ["c:retail-safety-2026-11-a12-1"], "note": "기본 | 제12조 ② | 시속 10km 이하, 보행자 통로와 지게차 통로를 바닥 표시로 나눔"},
+  {"workspace_id": 2, "kind": "policy", "query": "몇 kg부터 중량물로 봐?", "expect": ["c:retail-safety-2026-11-a3-1"], "note": "기본 | 제3조 | 한 사람이 드는 무게가 20kg 이상인 물건이 중량물"},
+  {"workspace_id": 2, "kind": "policy", "query": "냉동창고에서는 얼마나 일하고 쉬어야 해?", "expect": ["c:retail-safety-2026-11-a14-1"], "note": "기본 | 제14조 ① | 연속 1시간 일하면 따뜻한 곳에서 10분 이상 쉼"},
+  {"workspace_id": 2, "kind": "policy", "query": "폭염 때 쉬는 시간은 어떻게 줘?", "expect": ["c:retail-safety-2026-11-a15-1"], "note": "기본 | 제15조 ① | 체감온도 33도 이상이면 1시간마다 10분, 35도 이상이면 15분"},
+  {"workspace_id": 2, "kind": "policy", "query": "위험성평가는 얼마나 자주 해?", "expect": ["c:retail-safety-2026-11-a18-1"], "note": "기본 | 제18조 ①② | 해마다 한 번 정기 평가, 설비·작업 방법 변경과 사고 뒤에는 수시 평가. 그 작업 근로자 참여"},
+  {"workspace_id": 2, "kind": "policy", "query": "산업재해조사표는 언제까지 내야 해?", "expect": ["c:retail-safety-2026-11-a22-1"], "note": "기본 | 제22조 ② | 사망 또는 3일 이상 쉬어야 하는 부상·질병이 생긴 날부터 1개월 안"},
+  {"workspace_id": 2, "kind": "policy", "query": "매장 안전보건관리책임자는 누구야?", "expect": ["c:retail-safety-2026-11-a5-1"], "note": "기본 | 제5조 ② | 매장은 점장, 물류센터는 물류센터장, 본사와 고객센터는 경영지원 담당 임원"},
+  {"workspace_id": 2, "kind": "policy", "query": "지게차 운전자는 따로 받는 교육이 있어?", "expect": ["c:retail-safety-2026-11-a10-1"], "note": "기본 | 제10조 ① | 법정 교육과 별도로 해마다 2시간의 실습 교육"},
+  {"workspace_id": 2, "kind": "policy", "query": "다칠 뻔했는데 이것도 신고해야 됨?", "expect": ["c:retail-safety-2026-11-a24-1"], "note": "의역(구어) | 제24조 ①② | 아차사고는 안전 제안함이나 인사 시스템으로 이름 없이 알릴 수 있고, 7일 안에 개선 조치를 정해 게시"},
+  {"workspace_id": 2, "kind": "policy", "query": "작업 멈췄다고 보고받으면 관리감독자는 뭐 해야됨?", "expect": ["c:retail-safety-2026-11-a16-1"], "note": "의역(구어) | 제16조 ② | 보고를 받으면 바로 필요한 안전조치를 함"},
+  {"workspace_id": 2, "kind": "policy", "query": "방한 장갑 찢어지면 새로 받을수 잇나요", "expect": ["c:retail-safety-2026-11-a17-1"], "note": "의역(오타) | 제17조 ② | 닳거나 망가진 보호구는 신청하면 바로 바꿔 줌"},
+  {"workspace_id": 2, "kind": "policy", "query": "계산대에 오래 서있으면 발판 같은거 주나요", "expect": ["c:retail-safety-2026-11-a20-1"], "note": "의역(오타) | 제20조 ② | 계산 담당자에게 서서 일할 때 쓸 발판과 피로 방지 매트를 줌"},
+  {"workspace_id": 2, "kind": "policy", "query": "중대재해가 나면 언제까지 노동부에 보고해?", "expect": ["c:retail-safety-2026-11-s31-1"], "note": "표 | 별표 2 중대재해 보고 행 | 지체 없이, 대표이사가 고용노동부에 보고"},
+  {"workspace_id": 2, "kind": "policy", "query": "옥외 하역은 폭염 때 몇 시에 작업을 줄여?", "expect": ["c:retail-safety-2026-11-s30-1"], "note": "표 | 별표 1 옥외 하역 행 | 체감온도 35도 이상이면 14 ~ 17시 작업 조정"},
+  {"workspace_id": 2, "kind": "policy", "query": "매장 직원 건강진단은 몇 년마다 받아?", "expect": ["c:retail-safety-2026-11-a19-1"], "note": "교차 | 제19조 ① (+ 취업규칙 제31조 ②) | 일반건강진단 주기는 취업규칙에 따른다. 취업규칙상 매장·물류센터 근로자는 해마다 한 번 이상", "expect_also": ["c:retail-work-rules-2026-11-a31-1"]}
+]

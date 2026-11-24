@@ -490,9 +490,13 @@
   {
    "log": "it-dev_v1",
    "ref": "d7-nat",
-   "relation": "gap",
-   "topic": "허용 IP 상한(10개)을 넘는 서버 구성의 처리 기준",
-   "note": "제29조 ④는 최대 10개만 정한다. 상한을 넘는 구성의 대안(대역 등록·출구 주소 통합)은 없다"
+   "relation": "follows",
+   "note": "제29조 ④ — 10개를 넘으면 출구 주소 통합(NAT) 또는 승인한 주소 대역으로 등록",
+   "policy": "it-dev-incident-2026-11",
+   "article": "제29조",
+   "values": [
+    "10개"
+   ]
   },
   {
    "log": "it-dev_v1",
@@ -589,9 +593,13 @@
   {
    "log": "it-dev_v1",
    "ref": "o1-oncall",
-   "relation": "gap",
-   "topic": "온콜 교대 주기와 인수인계 항목",
-   "note": "제7조는 장애 지휘권 인계만 정한다. 평시 온콜 교대의 주기·인수인계 항목은 없다"
+   "relation": "follows",
+   "note": "제14조의2 — 온콜은 1주 단위 순번으로 매주 월요일 10시에 교대하고, 진행 중인 경보 · 꺼 둔 알림 · 그 주 예정 변경을 넘긴다",
+   "policy": "it-work-system-2026-11",
+   "article": "제14조의2",
+   "values": [
+    "월요일 10시"
+   ]
   },
   {
    "log": "it-dev_v1",
@@ -746,9 +754,10 @@
   {
    "log": "it-cs_v1",
    "ref": "s2-again",
-   "relation": "gap",
-   "topic": "같은 계정에서 반복되는 미성년자 결제 취소 요청의 처리 기준",
-   "note": "제19조는 속임수와 허락된 재산 범위만 제한 사유로 든다. 반복 횟수 기준은 없다"
+   "relation": "follows",
+   "note": "제19조 ④ — 같은 계정 두 번 이후는 결제 보호 설정 안내 · 서류 확인 뒤에만 취소",
+   "policy": "it-refund-2026-11",
+   "article": "제19조"
   },
   {
    "log": "it-cs_v1",
@@ -784,16 +793,21 @@
   {
    "log": "it-cs_v1",
    "ref": "s3-bypass",
-   "relation": "gap",
-   "topic": "상담원이 회원의 2단계 인증을 대신 해제할 때의 본인 확인 기준",
-   "note": "FAQ는 회원이 쓸 수 있는 수단만 안내한다. 상담원 수동 해제의 허용 여부와 확인 기준은 없다"
+   "relation": "follows",
+   "note": "FAQ Q8 — 상담원은 2단계 인증을 대신 해제하지 않는다. 이 사례는 그 기준을 어겨 생긴 문제",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q8"
   },
   {
    "log": "it-cs_v1",
    "ref": "s3-bypass-fix",
-   "relation": "gap",
-   "topic": "상담원이 회원의 2단계 인증을 대신 해제할 때의 본인 확인 기준",
-   "note": "보안 담당 2인 승인은 현장이 정한 절차다"
+   "relation": "follows",
+   "note": "현장이 정한 보안 담당 2인 승인이 FAQ Q8의 기준이 됐다",
+   "policy": "it-security-faq-2026-11",
+   "article": "Q8",
+   "values": [
+    "2인"
+   ]
   },
   {
    "log": "it-cs_v1",
@@ -819,9 +833,10 @@
   {
    "log": "it-cs_v1",
    "ref": "s3-extend",
-   "relation": "gap",
-   "topic": "계정 복구 대기 중 쓰지 못한 유료 이용 기간의 처리 기준",
-   "note": "FAQ Q6은 회사가 임시 정지한 기간만 연장한다. 분실·복구 대기 기간은 정하지 않는다"
+   "relation": "follows",
+   "note": "제10조 ③ — 복구를 신청한 날부터 복구된 날까지의 날수만큼 이용 기간을 늘린다(FAQ Q4도 같다)",
+   "policy": "it-refund-2026-11",
+   "article": "제10조"
   },
   {
    "log": "it-cs_v1",
@@ -903,9 +918,13 @@
   {
    "log": "it-cs_v1",
    "ref": "s5-queue-fix",
-   "relation": "gap",
-   "topic": "결제취소 가능기간이 임박한 환불 건의 우선 처리 기준",
-   "note": "제12조는 결제수단별 취소 가능 기간만 정한다. 기간이 임박한 건을 먼저 처리하라는 기준은 없다"
+   "relation": "follows",
+   "note": "제11조 ⑥ — 말일 3영업일 전부터 휴대전화 결제 환불을 먼저 처리",
+   "policy": "it-refund-2026-11",
+   "article": "제11조",
+   "values": [
+    "3영업일"
+   ]
   },
   {
    "log": "it-cs_v1",
@@ -932,16 +951,18 @@
   {
    "log": "it-cs_v1",
    "ref": "s5-comp",
-   "relation": "gap",
-   "topic": "환불 처리 기한을 넘겼을 때의 지연 보상 기준",
-   "note": "제11조는 기한만 정한다. 기한을 넘긴 경우의 보상은 정하지 않는다"
+   "relation": "exception",
+   "note": "제11조 ⑤는 연 15퍼센트 지연배상금을 정한다. 이 사례는 기준이 생기기 전 건마다 캐시를 다르게 지급한 처리다",
+   "policy": "it-refund-2026-11",
+   "article": "제11조"
   },
   {
    "log": "it-cs_v1",
    "ref": "s6-root",
-   "relation": "gap",
-   "topic": "카드사 이의제기(차지백) 접수 때의 대응 절차와 소명 기한",
-   "note": "환불 규정은 회원이 회사에 신청한 환불만 다룬다. 카드사를 통한 이의제기 대응은 없다"
+   "relation": "follows",
+   "note": "제17조의2 — 카드사 이의제기 접수 당일 담당자 지정과 소명 절차. 이 사례는 절차가 없어 나흘이 지난 건",
+   "policy": "it-refund-2026-11",
+   "article": "제17조의2"
   },
   {
    "log": "it-cs_v1",
@@ -996,9 +1017,13 @@
   {
    "log": "it-cs_v1",
    "ref": "s6-flow",
-   "relation": "gap",
-   "topic": "카드사 이의제기(차지백) 접수 때의 대응 절차와 소명 기한",
-   "note": "현장이 만든 절차다. 카드사 기한 3영업일 전 제출도 팀이 정한 값"
+   "relation": "follows",
+   "note": "제17조의2 — 접수 당일 담당자를 정하고, 기록을 모아 카드사 소명 기한 3영업일 전까지 제출하며, 결과가 나올 때까지 같은 결제의 회사 환불은 보류한다",
+   "policy": "it-refund-2026-11",
+   "article": "제17조의2",
+   "values": [
+    "3영업일"
+   ]
   },
   {
    "log": "it-cs_v1",
@@ -1068,9 +1093,13 @@
   {
    "log": "it-hr_v1",
    "ref": "r1-scope",
-   "relation": "gap",
-   "topic": "레퍼런스 체크 대상자의 수와 현 직장 포함 여부",
-   "note": "제13조는 동의와 시기만 정하고 세부 절차는 진행할 때 따로 알린다고만 한다. 대상자 수·범위 기준은 없다"
+   "relation": "follows",
+   "note": "제13조 ④ — 지원자가 지정한 2명 이상 3명 이하, 현 직장은 따로 동의한 경우만",
+   "policy": "it-recruit-2026-11",
+   "article": "제13조",
+   "values": [
+    "2명"
+   ]
   },
   {
    "log": "it-hr_v1",
@@ -1163,9 +1192,10 @@
   {
    "log": "it-hr_v1",
    "ref": "r3-root",
-   "relation": "gap",
-   "topic": "입사 제안(처우 제안)의 유효기간과 제안 뒤 변경·철회 기준",
-   "note": "제14조는 처우와 입사일을 메일로 협의하고 증빙자료를 받는다는 것만 정한다. 제안을 보낸 뒤의 변경·철회와 유효기간은 없다"
+   "relation": "follows",
+   "note": "제14조 ④ — 보낸 제안을 회사가 불리하게 바꾸지 않는다. 이 사례는 그 기준이 없어 생긴 문제",
+   "policy": "it-recruit-2026-11",
+   "article": "제14조"
   },
   {
    "log": "it-hr_v1",
@@ -1181,16 +1211,24 @@
   {
    "log": "it-hr_v1",
    "ref": "r3-proof-fix",
-   "relation": "gap",
-   "topic": "입사 제안(처우 제안)의 유효기간과 제안 뒤 변경·철회 기준",
-   "note": "회신 기한 5영업일, 변경 시 인사팀장 승인, 처음 금액 유지는 모두 현장 판단이다"
+   "relation": "follows",
+   "note": "회신 기한 5영업일 · 증빙 확인 뒤 발송 · 변경 승인이 제14조 ④가 됐다(승인자는 피플팀장)",
+   "policy": "it-recruit-2026-11",
+   "article": "제14조",
+   "values": [
+    "5영업일"
+   ]
   },
   {
    "log": "it-hr_v1",
    "ref": "r3-date",
-   "relation": "gap",
-   "topic": "처우 합의 뒤 입사일 연기 요청의 허용 기간",
-   "note": "제14조는 입사일을 메일로 협의한다고만 한다. 연기 한도는 없고 6주는 조직장 판단이다"
+   "relation": "follows",
+   "note": "조직장 판단이던 6주가 제14조 ⑤의 기준이 됐다",
+   "policy": "it-recruit-2026-11",
+   "article": "제14조",
+   "values": [
+    "6주"
+   ]
   },
   {
    "log": "it-hr_v1",
@@ -1473,9 +1511,10 @@
   {
    "log": "it-hr_v1",
    "ref": "o1-retire",
-   "relation": "gap",
-   "topic": "퇴사한 임직원 인사기록의 보유기간과 파기 기준",
-   "note": "채용 규정과 개인정보 처리 규정은 지원자·이용자 정보만 다룬다. 임직원 인사기록의 보유기간은 없다"
+   "relation": "follows",
+   "note": "취업규칙 제21조의2 — 법정 서류 3년, 그 밖의 인사기록 퇴직 뒤 3년 보관 뒤 파기, 경력증명서용 10년",
+   "policy": "it-work-rules-2026-11",
+   "article": "제21조의2"
   }
  ]
 }

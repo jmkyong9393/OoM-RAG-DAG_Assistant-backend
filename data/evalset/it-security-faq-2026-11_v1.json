@@ -13,5 +13,6 @@
   {"workspace_id": 23, "kind": "policy", "query": "우리 회사인 척하는 가짜 문자인지 고객이 어떻게 구분하면 돼?", "expect": ["c:it-security-faq-2026-11-q15-1"], "note": "의역 | Q15 | 회사는 이메일·전화·메시지로 비밀번호나 인증 코드를 묻지 않음"},
   {"workspace_id": 23, "kind": "policy", "query": "폰 통째로 없어진 고객, 통신사에 신고만 해두면 되요?", "expect": ["c:it-security-faq-2026-11-q16-1"], "note": "의역(오타) | Q16 | 분실신고만 하면 요금이 계속 나올 수 있어 분실정지도 함께 신청"},
   {"workspace_id": 23, "kind": "policy", "query": "일반 회원이랑 개발자 콘솔 소유자 계정 비밀번호 길이 기준이 달라?", "expect": ["c:it-security-faq-2026-11-q3-1"], "note": "비교 | Q3 | 일반 권장은 12자 이상, 소유자 계정은 8자 이상 128자 이하에 3가지 이상 섞기"},
-  {"workspace_id": 23, "kind": "policy", "query": "보안 알림을 회원 한 명한테 보낼 때랑 전체한테 알릴 때 방식이 달라?", "expect": ["c:it-security-faq-2026-11-q20-1"], "note": "비교 | Q20 | 개별은 전자우편·전자메모·서비스 내 쪽지·문자, 전체는 7일 이상 게시나 팝업으로 갈음"}
+  {"workspace_id": 23, "kind": "policy", "query": "보안 알림을 회원 한 명한테 보낼 때랑 전체한테 알릴 때 방식이 달라?", "expect": ["c:it-security-faq-2026-11-q20-1"], "note": "비교 | Q20 | 개별은 전자우편·전자메모·서비스 내 쪽지·문자, 전체는 7일 이상 게시나 팝업으로 갈음"},
+  {"workspace_id": 23, "kind": "policy", "query": "상담원이 2단계 인증 대신 풀어줘도 돼?", "expect": ["c:it-security-faq-2026-11-q8-1"], "note": "기본 | Q8 | 상담원은 대신 해제하지 않고 계정 복구 화면 절차로만 복구하며, 예외는 보안 담당 2인 승인을 받은 경우뿐"}
 ]

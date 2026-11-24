@@ -29,7 +29,7 @@
  {"workspace_id": 10, "kind": "policy", "query": "월요일 아침에 계정 막혔는데 기다리지 않고 바로 풀 방법 없어요?", "expect": ["c:retail-infosec-2026-11-a11-1"], "note": "의역 | 제11조 ① | 보안 포털에서 사번과 휴대폰 인증으로 스스로 즉시 해제"},
  {"workspace_id": 10, "kind": "policy", "query": "개인정보 보호 교육은 1년에 몇 시간 받아야 해?", "expect": ["c:retail-privacy-plan-2026-11-a8-1"], "note": "기본 | 제8조 ①② | 연 1회 이상, 취급자 2시간, 개인정보 보호책임자·부서 보안담당자 4시간. 분기 보안교육과는 별도"},
  {"workspace_id": 20, "kind": "policy", "query": "AI 윤리 자가점검은 몇 문항이고 소위원회는 얼마나 자주 열려?", "expect": ["c:it-ethics-2026-11-s20-1"], "expect_alt": ["c:it-ethics-2026-11-a19-1"], "note": "표 | 별표 1 점검 행 | 63개 문항 자가점검과 4단계 핵심 체크리스트, 소위원회 월 1회"},
- {"workspace_id": 20, "kind": "policy", "query": "거래처 장례식에 보내는 조화는 얼마짜리까지 돼요?", "expect": ["c:it-ethics-2026-11-s31-1"], "expect_alt": ["c:it-ethics-2026-11-a6-1"], "note": "표 | 별표 2 화환·조화 행 | 10만 원 이하, 장례식·결혼식에 한해 회사 명의 가능"},
+ {"workspace_id": 20, "kind": "policy", "query": "거래처 장례식에 보내는 조화는 얼마짜리까지 돼요?", "expect": ["c:it-ethics-2026-11-s32-1"], "expect_alt": ["c:it-ethics-2026-11-a6-1"], "note": "표 | 별표 2 화환·조화 행 | 10만 원 이하, 장례식·결혼식에 한해 회사 명의 가능"},
  {"workspace_id": 20, "kind": "policy", "query": "외부 클라우드 쓰기 전에 어떤 절차를 거쳐야 해요?", "expect": ["c:it-ethics-2026-11-a13-1"], "note": "기본 | 제13조 ② | 쓰기 전에 보안 검토와 승인을 받아야 함"},
  {"workspace_id": 21, "kind": "policy", "query": "HA 쓰는 DB 고객 월 가용률이 97% 나오면 크레딧 몇 %야?", "expect": ["c:it-dev-incident-2026-11-s17-1"], "expect_alt": ["c:it-dev-incident-2026-11-a14-1"], "note": "표 | 별표 2 크레딧 비율 행 | 95% 이상 99.0% 미만 구간이라 25%"},
  {"workspace_id": 21, "kind": "troubleshoot", "query": "경보 안 보면 몇 분 뒤에 윗선으로 넘어가?", "expect": ["n:329", "n:331", "n:333", "n:336"], "note": "reverse · d1-page-fix"},
@@ -40,6 +40,6 @@
  {"workspace_id": 22, "kind": "troubleshoot", "query": "레퍼런스 체크 몇 명한테 해? 현 직장도 포함이야?", "expect": ["n:419", "n:422", "n:423", "n:424"], "note": "other · r1-scope"},
  {"workspace_id": 23, "kind": "policy", "query": "조사 때문에 임시 정지된 고객은 유료 이용기간 보상 받아요?", "expect": ["c:it-security-faq-2026-11-q6-1"], "note": "기본 | Q6 | 임시 정지 기간만큼 유료 서비스 이용기간을 늘려 주되 위법행위자로 밝혀지면 제외"},
  {"workspace_id": 23, "kind": "policy", "query": "복구 연락처 요청 보내고 상대가 안 받으면 며칠 뒤에 만료돼?", "expect": ["c:it-security-faq-2026-11-q5-1"], "note": "기본 | Q5 | 복구 연락처 요청은 7일이 지나면 만료"},
- {"workspace_id": 23, "kind": "policy", "query": "게임 아이템 환불은 언제부터 며칠 안에 해줘야 돼?", "expect": ["c:it-refund-2026-11-s23-1", "c:it-refund-2026-11-a11-1"], "note": "표 | 별표 1 환불 처리 기한 행 (+ 제11조 ②) | 콘텐츠 반환 확인일부터 3영업일"},
+ {"workspace_id": 23, "kind": "policy", "query": "게임 아이템 환불은 언제부터 며칠 안에 해줘야 돼?", "expect": ["c:it-refund-2026-11-s24-1", "c:it-refund-2026-11-a11-1"], "note": "표 | 별표 1 환불 처리 기한 행 (+ 제11조 ②) | 콘텐츠 반환 확인일부터 3영업일"},
  {"workspace_id": 23, "kind": "troubleshoot", "query": "차지백 들어옴 뭐부터 해야됨", "expect": ["n:322", "n:324", "n:326"], "note": "symptom · s6-root"}
 ]

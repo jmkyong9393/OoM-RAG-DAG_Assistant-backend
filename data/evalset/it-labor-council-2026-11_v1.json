@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 22, "kind": "policy", "query": "노사협의회 위원은 몇 명이야?", "expect": ["c:it-labor-council-2026-11-a4-1"], "note": "기본 | 제4조 ①② | 근로자위원과 사용자위원 각 4명. 근로자위원은 전체 임직원의 투표로 뽑음"},
+  {"workspace_id": 22, "kind": "policy", "query": "근로자위원 투표는 며칠 동안 해?", "expect": ["c:it-labor-council-2026-11-a5-1"], "note": "기본 | 제5조 ③ | 그룹웨어 전자 투표로 5영업일"},
+  {"workspace_id": 22, "kind": "policy", "query": "노사협의회 위원 임기는 몇 년이야?", "expect": ["c:it-labor-council-2026-11-a6-1"], "note": "기본 | 제6조 ① | 3년, 연임 가능"},
+  {"workspace_id": 22, "kind": "policy", "query": "노사협의회 정기회의는 언제 열려?", "expect": ["c:it-labor-council-2026-11-a9-1"], "note": "기본 | 제9조 ① | 1월, 4월, 7월, 10월의 셋째 주"},
+  {"workspace_id": 22, "kind": "policy", "query": "노사협의회 회의록은 몇 년 보존해?", "expect": ["c:it-labor-council-2026-11-a13-1"], "note": "기본 | 제13조 ② | 작성한 날부터 3년"},
+  {"workspace_id": 22, "kind": "policy", "query": "고충을 내면 며칠 안에 답이 와?", "expect": ["c:it-labor-council-2026-11-a19-1"], "note": "기본 | 제19조 ② | 고충을 들은 날부터 5영업일 안에, 늦어도 10일 안에 처리 결과를 알림"},
+  {"workspace_id": 22, "kind": "policy", "query": "근로자위원 회의 시간은 근무시간에 들어가?", "expect": ["c:it-labor-council-2026-11-a8-1"], "note": "기본 | 제8조 ② | 출석 시간과 회의마다 3시간의 준비 시간은 근로시간이고 선택적 근로시간제의 총 근로시간에 넣음"},
+  {"workspace_id": 22, "kind": "policy", "query": "노사협의회는 무엇을 의결해야 해?", "expect": ["c:it-labor-council-2026-11-a15-1"], "note": "기본 | 제15조 | 교육훈련·능력개발 기본계획, 복지시설, 사내근로복지기금, 처리 못한 고충, 노사공동위원회 설치"},
+  {"workspace_id": 22, "kind": "policy", "query": "재택 중인데 협의회 회의 화상으로 들어가도 됨?", "expect": ["c:it-labor-council-2026-11-a9-1"], "note": "의역(구어) | 제9조 ③ | 화상 참석이 가능하고 출석으로 봄"},
+  {"workspace_id": 22, "kind": "policy", "query": "회의에서 뭐 정했는지 어디서 확인함?", "expect": ["c:it-labor-council-2026-11-a13-1"], "note": "의역(구어) | 제13조 ③ | 회의가 끝난 날부터 5영업일 안에 그룹웨어 게시판에 알림"},
+  {"workspace_id": 22, "kind": "policy", "query": "근로자위원 하면 평가에 불이익 있나여", "expect": ["c:it-labor-council-2026-11-a8-1"], "note": "의역(오타) | 제8조 ③ | 위원으로 일한 것을 이유로 평가나 보상에서 불이익을 주지 않음"},
+  {"workspace_id": 22, "kind": "policy", "query": "협의회에서 정한거 회사가 안지키면 어떻게해요", "expect": ["c:it-labor-council-2026-11-a17-1"], "note": "의역(오타) | 제17조 ②③ | 노사 합의로 노동위원회나 제3자의 중재를 받을 수 있고, 중재 결정은 의결로 보고 따라야 함"},
+  {"workspace_id": 22, "kind": "policy", "query": "노사협의회 자료는 회의 며칠 전까지 받아?", "expect": ["c:it-labor-council-2026-11-s25-1"], "note": "표 | 별표 2 자료 제공 행 | 회의 5영업일 전까지"},
+  {"workspace_id": 22, "kind": "policy", "query": "생성형 AI 도입도 노사협의회에서 다뤄?", "expect": ["c:it-labor-council-2026-11-s24-1"], "note": "표 | 별표 1 교육 · 기술 행 | 새 개발 도구와 생성형 AI 도입에 따른 재교육을 협의"},
+  {"workspace_id": 22, "kind": "policy", "query": "괴롭힘 신고도 고충처리위원한테 하면 돼?", "expect": ["c:it-labor-council-2026-11-a19-1"], "note": "교차 | 제19조 ④ (+ 취업규칙 제29조 ①) | 괴롭힘과 성희롱 신고는 취업규칙의 절차(피플팀·외부 노무법인 위탁 창구)에 따름", "expect_also": ["c:it-work-rules-2026-11-a29-1"]}
+]

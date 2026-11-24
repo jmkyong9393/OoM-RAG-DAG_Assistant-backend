@@ -1,0 +1,17 @@
+[
+  {"workspace_id": 21, "kind": "policy", "query": "직무발명은 언제까지 신고해야 해?", "expect": ["c:it-invention-2026-11-a5-1"], "note": "기본 | 제5조 ① | 지체 없이, 늦어도 완성한 날부터 14일 안에 그룹웨어의 발명 신고서로 알림"},
+  {"workspace_id": 21, "kind": "policy", "query": "특허 출원하면 보상금 얼마 받아?", "expect": ["c:it-invention-2026-11-a11-1"], "note": "기본 | 제11조 ① | 국내 출원 1건 500,000원, 국외는 나라마다 300,000원 추가"},
+  {"workspace_id": 21, "kind": "policy", "query": "특허 등록되면 얼마 나와?", "expect": ["c:it-invention-2026-11-a11-1"], "note": "기본 | 제11조 ② | 국내 등록 1,000,000원, 국외는 나라마다 500,000원(3개 나라까지)"},
+  {"workspace_id": 21, "kind": "policy", "query": "회사가 내 발명을 써서 돈을 벌면 보상이 있어?", "expect": ["c:it-invention-2026-11-a12-1"], "note": "기본 | 제12조 ①②③ | 이익의 2퍼센트를 5년 동안, 발명 1건에 한 해 50,000,000원까지"},
+  {"workspace_id": 21, "kind": "policy", "query": "회사가 내 발명을 안 가져가면 어떻게 돼?", "expect": ["c:it-invention-2026-11-a8-1"], "note": "기본 | 제8조 ② | 신고를 받은 날부터 4개월 안에 서면으로 알리고, 권리는 발명자에게 남음"},
+  {"workspace_id": 21, "kind": "policy", "query": "보상금이 적다고 생각되면 어디에 이의를 내?", "expect": ["c:it-invention-2026-11-a17-1"], "note": "기본 | 제17조 ①② | 서면 통지를 받은 날부터 30일 안에 심의위원회 심의를 요구, 회사는 60일 안에 심의"},
+  {"workspace_id": 21, "kind": "policy", "query": "같이 발명하면 보상은 어떻게 나눠?", "expect": ["c:it-invention-2026-11-a15-1"], "note": "기본 | 제15조 ①② | 신고서에 적은 기여율에 따라 나누고, 정하지 못하면 심의위원회가 정함"},
+  {"workspace_id": 21, "kind": "policy", "query": "퇴사하면 재직 중에 한 발명 보상은 못 받아?", "expect": ["c:it-invention-2026-11-a2-1"], "note": "기본 | 제2조 ② | 퇴직한 사람도 재직 중 완성한 직무발명의 보상을 받음"},
+  {"workspace_id": 21, "kind": "policy", "query": "특허 안 내고 영업비밀로 두면 보상 없는 거임?", "expect": ["c:it-invention-2026-11-a14-1"], "note": "의역(구어) | 제14조 ①②③ | 영업비밀로 두어도 출원보상과 국내 등록보상을 합한 금액을 2개월 안에 보상하고, 회사가 실시·처분하면 실시보상·처분보상도 함"},
+  {"workspace_id": 21, "kind": "policy", "query": "개발자 행사에서 내 발명 얘기해도 됨?", "expect": ["c:it-invention-2026-11-a6-1"], "note": "의역(구어) | 제6조 ①③ | 회사가 출원할 때까지 비밀로 하고, 외부 발표는 출원 뒤에 함"},
+  {"workspace_id": 21, "kind": "policy", "query": "업무랑 상관업는 앱 아이디어도 회사꺼에요?", "expect": ["c:it-invention-2026-11-a8-1"], "note": "의역(오타) | 제8조 ④ | 직무발명이 아닌 자유발명은 회사가 권리를 넘겨 달라고 요구하지 않음"},
+  {"workspace_id": 21, "kind": "policy", "query": "특허 라이선스 팔면 발명자한테 얼마 주나요", "expect": ["c:it-invention-2026-11-a13-1"], "note": "의역(오타) | 제13조 ① | 받은 금액에서 비용을 뺀 금액의 20퍼센트를 처분보상으로 줌"},
+  {"workspace_id": 21, "kind": "policy", "query": "실시보상은 언제 지급돼?", "expect": ["c:it-invention-2026-11-s21-1"], "note": "표 | 별표 1 실시보상 행 | 해마다 1월"},
+  {"workspace_id": 21, "kind": "policy", "query": "직무발명 규정 바뀌면 며칠 전에 알려줘야 해?", "expect": ["c:it-invention-2026-11-s22-1"], "note": "표 | 별표 2 규정 변경 통지 행 | 적용하려는 날의 15일 전까지"},
+  {"workspace_id": 21, "kind": "policy", "query": "발명한 거 회사에 꼭 알려야 하는 거야?", "expect": ["c:it-invention-2026-11-a5-1"], "note": "교차 | 제5조 ① (+ 취업규칙 제6조 ③) | 직무와 관련한 발명은 완성하면 지체 없이 회사에 알리고, 직무발명은 지체 없이, 늦어도 14일 안에 발명 신고서로 신고", "expect_also": ["c:it-work-rules-2026-11-a6-1"]}
+]

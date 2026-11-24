@@ -13,5 +13,6 @@
   {"workspace_id": 10, "kind": "policy", "query": "회의록은 정보 등급이 몇 급이야?", "expect": ["c:retail-infosec-2026-11-s26-1"], "note": "표 | 별표 1 3급 행 | 3급, 임직원 열람 가능하고 사외 공개 금지"},
   {"workspace_id": 10, "kind": "policy", "query": "노트북 잃어버리면 몇 시간 안에 신고해야 해?", "expect": ["c:retail-infosec-2026-11-s27-1"], "note": "표 | 별표 2 단말·저장매체 분실 행 | 4시간 안에 신고하고 원격 잠금 요청"},
   {"workspace_id": 10, "kind": "policy", "query": "사내 와이파이랑 방문자용 와이파이는 비밀번호 바꾸는 주기가 달라?", "expect": ["c:retail-infosec-2026-11-a14-1"], "note": "비교 | 제14조 ①② | 사내 무선망은 분기 1회, 방문자용은 월 1회"},
-  {"workspace_id": 10, "kind": "policy", "query": "부서 지침이랑 이 규정 내용이 다르면 뭘 따라? 더 엄격하면?", "expect": ["c:retail-infosec-2026-11-a22-1"], "note": "비교 | 제22조 ②③ | 다르면 이 규정을 따르고, 하위 지침이 더 엄격하면 하위 지침을 따름"}
+  {"workspace_id": 10, "kind": "policy", "query": "부서 지침이랑 이 규정 내용이 다르면 뭘 따라? 더 엄격하면?", "expect": ["c:retail-infosec-2026-11-a22-1"], "note": "비교 | 제22조 ②③ | 다르면 이 규정을 따르고, 하위 지침이 더 엄격하면 하위 지침을 따름"},
+  {"workspace_id": 10, "kind": "policy", "query": "당직자는 야간에 서버실 들어갈 수 있어?", "expect": ["c:retail-infosec-2026-11-a15-1"], "note": "기본 | 제15조 ⑤ | 당직일 18:00부터 다음 날 09:00까지 야간 출입 구역 권한을 자동으로 받고, 서버실 같은 통제 구역은 정보보안책임자가 미리 승인한 당직자만"}
 ]
