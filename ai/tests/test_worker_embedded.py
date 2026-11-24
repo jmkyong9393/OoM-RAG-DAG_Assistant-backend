@@ -41,3 +41,24 @@ async def test_lifespan_without_flag_does_not_start_worker(monkeypatch):
     monkeypatch.setattr("app.retrieval.db.connect", _no_db)
     async with app_main.lifespan(app_main.app):
         assert not called.is_set()
+
+
+def test_embedded_worker_stops_on_signal(monkeypatch):
+    """내려갈 때 종료 신호를 보내면 쉬는 중이어도 곧 멈춘다(정제 건을 집은 채 끊기지 않게)."""
+    import time
+    from app import worker
+
+    calls = []
+
+    async def fake_run_once():
+        calls.append(1)
+        return {}
+
+    monkeypatch.setattr(worker, "run_once", fake_run_once)
+    monkeypatch.setattr(worker, "worker_poll_sec", lambda: 30)
+    t = worker.start_embedded()
+    time.sleep(0.3)
+    t0 = time.monotonic()
+    assert worker.stop_embedded(t, 5) is True
+    assert time.monotonic() - t0 < 2, "30초 쉬는 중이어도 신호에 바로 깨야 한다"
+    assert calls, "한 주기는 돌았다"

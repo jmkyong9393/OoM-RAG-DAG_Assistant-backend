@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import sys
 import time
 
@@ -20,6 +21,8 @@ from app.llm import client as llm
 from app.retrieval import db, embed
 from app.retrieval.tokenize import Tokenizer
 
+
+_stop = threading.Event()   # 내장 워커 종료 신호(ai 서비스가 내려갈 때)
 
 def dictionary_terms(tok: Tokenizer, keywords: list[str], error_code: str | None) -> list[str]:
     """사용자 사전에 넣을 단어: 분석기가 한 토큰으로 지키지 못하는 한 단어(복합어·신조어)와 에러 코드.
@@ -107,7 +110,7 @@ async def run_once(reindex: bool = False) -> dict:
         while (n := await backfill_node_tokens(conn, cache)) > 0:
             stats["nodes"] += n
         tried: list[int] = []
-        while True:
+        while not _stop.is_set():   # 종료 신호가 오면 새 건을 집지 않는다 — 집은 건은 끝까지 처리해 'processing' 으로 남기지 않는다
             row = db.claim_pending_log(conn, tried)
             if row is None:
                 break
@@ -119,20 +122,28 @@ async def run_once(reindex: bool = False) -> dict:
 
 async def loop() -> None:
     print(f"[worker] mode={ai_mode()} poll={worker_poll_sec()}s", flush=True)
-    while True:
+    while not _stop.is_set():
         try:
             s = await run_once()
             if any(s.values()):
                 print(f"[worker] {time.strftime('%H:%M:%S')} {s}", flush=True)
         except Exception as e:  # noqa: BLE001 — DB 끊김 등은 다음 주기에 재시도
             print(f"[worker] error: {e}", flush=True)
-        await asyncio.sleep(worker_poll_sec())
+        await asyncio.to_thread(_stop.wait, worker_poll_sec())   # 쉬는 동안에도 종료 신호에 바로 깬다
+    print("[worker] stopped", flush=True)
+
+
+def stop_embedded(thread: "threading.Thread", timeout: float) -> bool:
+    """종료 신호를 보내고 지금 처리 중인 건이 끝나길 기다린다. 시간 안에 끝났으면 True."""
+    _stop.set()
+    thread.join(timeout)
+    return not thread.is_alive()
 
 
 def start_embedded() -> "threading.Thread":
     """AI 서비스 프로세스 안에서 loop() 를 데몬 스레드 + 전용 이벤트 루프로 돈다.
     API 의 이벤트 루프와 분리해 정제의 동기 DB·kiwi 작업이 채팅 스트림을 막지 않게 한다. 프로세스가 끝나면 함께 끝난다."""
-    import threading
+    _stop.clear()
 
     def _run():
         asyncio.run(loop())

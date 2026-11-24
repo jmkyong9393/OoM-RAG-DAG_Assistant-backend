@@ -4,6 +4,8 @@ spring:
   threads:
     virtual:
       enabled: true                      # SSE 릴레이를 블로킹 루프로 쓰기 위해
+  lifecycle:
+    timeout-per-shutdown-phase: 30s      # 내려갈 때 진행 중인 요청(채팅 스트림 포함)을 이만큼 기다린다. 컨테이너 종료 대기(35초)보다 짧게
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/oom}
     username: ${DB_USER:oom}             # 운영: oom_api
@@ -34,6 +36,7 @@ spring:
 
 server:
   port: ${PORT:8080}
+  shutdown: graceful                     # 종료 신호에 새 요청은 받지 않고 진행 중인 것은 끝낸 뒤 내려간다
   servlet:
     context-path: /api/v1
   compression:

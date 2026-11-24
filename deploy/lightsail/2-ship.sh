@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 개발 PC 에서 이미지를 빌드해 서버로 보내고 띄운다(레지스트리 없이 docker save → ssh → docker load). 다시 돌리면 갱신 배포다 — 모든 단계 멱등.
-# 사용: bash deploy/lightsail/2-ship.sh <서버 IP> [bootstrap.sh 인자…]     예) … 1.2.3.4            첫 배포(시드 · 규정 · 사례 · 평가 결과 적재)
+# 사용: bash deploy/lightsail/2-ship.sh <서버 IP> [bootstrap.sh 인자…]   (서버가 이미 떠 있으면 무중단 롤링 교체 — bootstrap.sh)     예) … 1.2.3.4            첫 배포(시드 · 규정 · 사례 · 평가 결과 적재)
 #                                                                             … 1.2.3.4 seed eval  데이터 재색인 없이
 # 준비: Docker 실행 중, deploy/.env.prod(make-env.sh), 백엔드 작업 트리가 깨끗하고 푸시돼 있을 것(서버는 같은 커밋을 GitHub 에서 받는다)
 # 환경: KEY(기본 ~/.ssh/oom-assist.pem) · FRONT_DIR(프론트 레포, 기본 ../OoM-RAG-DAG_Assistant) · FRONT_REF(기본 origin/main) · SSH_USER(기본 ubuntu)
@@ -52,10 +52,15 @@ $SSH "set -e; [ -d oom/.git ] || git clone -q '$REPO_URL' oom; cd oom && git fet
 
 step "운영 설정 올리기 (deploy/.env, 이미지 태그 반영)"
 sed -e "s|^API_IMAGE=.*|API_IMAGE=oom-api:$ATAG|" -e "s|^AI_IMAGE=.*|AI_IMAGE=oom-ai:$ITAG|" -e "s|^WEB_IMAGE=.*|WEB_IMAGE=oom-web:$FSHA|" deploy/.env.prod \
-  | $SSH 'umask 077; cat > oom/deploy/.env'
+  | $SSH 'umask 077; [ -f oom/deploy/.env ] && cp oom/deploy/.env oom/deploy/.env.prev; cat > oom/deploy/.env'   # .env.prev: 직전 배포로 되돌릴 때(rollback.sh)
 
 step "기동 — bootstrap.sh ${*:-(seed data eval)}"
 $SSH "cd oom/deploy && bash bootstrap.sh $*"
+
+step "서버 시간대 한국 시간으로 (이미 만든 서버에도 — 다시 돌려도 같다)"
+$SSH 'sudo ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo Asia/Seoul | sudo tee /etc/timezone >/dev/null && sudo systemctl restart cron && date "+  %Y-%m-%d %H:%M %Z"'
+step "매일 백업 예약 (한국 시간 새벽 3시 30분, 최근 7개 보관 — deploy/backup.sh)"
+$SSH 'echo "30 3 * * * $USER mkdir -p \$HOME/oom-backups && cd \$HOME/oom/deploy && bash backup.sh daily >> \$HOME/oom-backups/backup.log 2>&1" | sudo tee /etc/cron.d/oom-backup >/dev/null && sudo chmod 644 /etc/cron.d/oom-backup && echo "  /etc/cron.d/oom-backup"'
 
 step "옛 이미지 정리 — 서버 (종류마다 지금 + 직전 하나)"
 $SSH "cd oom && bash deploy/trim-images.sh api=$ATAG ai=$ITAG web=$FSHA; df -h / | tail -1"

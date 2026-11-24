@@ -3,9 +3,10 @@ FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
 COPY gradlew build.gradle.kts settings.gradle.kts ./
 COPY gradle gradle
-RUN chmod +x gradlew && ./gradlew --no-daemon --version >/dev/null
+# Gradle 내려받기 · 의존성을 빌드 캐시에 둔다 — 소스만 바뀐 재빌드가 의존성을 다시 받지 않는다(BuildKit)
+RUN --mount=type=cache,target=/root/.gradle chmod +x gradlew && ./gradlew --no-daemon --version >/dev/null
 COPY src src
-RUN ./gradlew --no-daemon bootJar -x test
+RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon bootJar -x test
 
 FROM eclipse-temurin:21-jre
 # healthcheck 용 curl
@@ -14,6 +15,7 @@ WORKDIR /app
 COPY --from=build /src/build/libs/*.jar app.jar
 # 4 GB 박스 기준. 2 GB 로 내리면 -Xmx384m
 # 힙 512MB — 컨테이너 한도 1GB 안에 힙 밖(메타스페이스 · 코드 캐시 · 스레드)이 들어가게. 한도 1GB 에서는 JVM 이 어차피 SerialGC 를 고른다
-ENV JAVA_TOOL_OPTIONS="-Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom"
+# 이름 풀이 캐시 1초 — ai 컨테이너가 바뀌면(롤링 배포) 새 주소를 곧 따라간다(기본 30초)
+ENV JAVA_TOOL_OPTIONS="-Xmx512m -XX:+UseSerialGC -Dsun.net.inetaddr.ttl=1 -Djava.security.egd=file:/dev/./urandom"
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
