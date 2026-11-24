@@ -40,6 +40,6 @@
  {"workspace_id": 22, "kind": "troubleshoot", "query": "레퍼런스 체크 몇 명한테 해? 현 직장도 포함이야?", "expect": ["n:419", "n:422", "n:423", "n:424"], "note": "other · r1-scope"},
  {"workspace_id": 23, "kind": "policy", "query": "조사 때문에 임시 정지된 고객은 유료 이용기간 보상 받아요?", "expect": ["c:it-security-faq-2026-11-q6-1"], "note": "기본 | Q6 | 임시 정지 기간만큼 유료 서비스 이용기간을 늘려 주되 위법행위자로 밝혀지면 제외"},
  {"workspace_id": 23, "kind": "policy", "query": "복구 연락처 요청 보내고 상대가 안 받으면 며칠 뒤에 만료돼?", "expect": ["c:it-security-faq-2026-11-q5-1"], "note": "기본 | Q5 | 복구 연락처 요청은 7일이 지나면 만료"},
- {"workspace_id": 23, "kind": "policy", "query": "게임 아이템 환불은 언제부터 며칠 안에 해줘야 돼?", "expect": ["c:it-refund-2026-11-s23-1", "c:it-refund-2026-11-a11-1"], "note": "표 | 별표 1 환불 처리 기한 행 (+ 제11조 ②) | 콘텐츠 반환 확인일부터 3영업일"},
+ {"workspace_id": 23, "kind": "policy", "query": "게임 아이템 환불은 언제부터 며칠 안에 해줘야 돼?", "expect": ["c:it-refund-2026-11-s24-1", "c:it-refund-2026-11-a11-1"], "note": "표 | 별표 1 환불 처리 기한 행 (+ 제11조 ②) | 콘텐츠 반환 확인일부터 3영업일"},
  {"workspace_id": 23, "kind": "troubleshoot", "query": "차지백 들어옴 뭐부터 해야됨", "expect": ["n:322", "n:324", "n:326"], "note": "symptom · s6-root"}
 ]
