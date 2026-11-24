@@ -74,6 +74,9 @@ def test_rules_never_contradict_evalset_kind(capsys):
     # 증상을 호소하면서 기준을 묻는 말 — 규정만 보지 않는다
     ("매칭이 몇 분씩 안 잡혀요", None, "both"),
     ("환불 신청한 지 일주일 넘었는데 안 들어온대요", None, "both"),
+    # '장애인' · '장애 인식'은 시스템 장애가 아니다 — '인'을 빼고 물어도 장애 질문으로 보내지 않는다
+    ("장애 인식개선 교육은 언제, 누가 받아요?", None, None),
+    ("장애 인식 안 되는 카드 리더기 어떻게 했어?", None, "troubleshoot"),   # 경험 질문 어미로 사례 질의
 ])
 def test_rule_examples(query, code, expected):
     r = rule_classify(query, code)
