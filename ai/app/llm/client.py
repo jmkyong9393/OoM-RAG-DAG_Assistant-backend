@@ -45,7 +45,7 @@ def rule_classify(query: str, error_code: str | None) -> IntentResult | None:
     """힌트만으로 결정되면 IntentResult, 애매하면 None. 에러 코드는 troubleshoot 의 강한 신호."""
     q = query.lower()
     has_policy = any(h in q for h in POLICY_HINTS)
-    q_t = q.replace("장애인", "")   # '장애인 인식개선 교육'·'장애인 지원자' 의 장애는 시스템 장애가 아니다
+    q_t = re.sub(r"장애인|장애\s*인식", "", q)   # '장애인'·'장애 인식'의 장애는 시스템 장애가 아니다
     has_trouble = (bool(error_code) or any(h in q_t for h in TROUBLE_HINTS) or bool(HTTP_STATUS_RE.search(q)) or bool(EXPERIENCE_RE.search(q))
                    or bool(CODE_NAME_RE.search(query)))
     symptom = bool(SYMPTOM_RE.search(q))
