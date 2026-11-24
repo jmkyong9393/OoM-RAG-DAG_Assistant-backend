@@ -1,4 +1,14 @@
 # 단일 호스트 진입점. SITE_ADDRESS 가 도메인이면 HTTPS 자동(Let's Encrypt), 비어 있으면 localhost(자체 서명).
+# 로그 시각을 컨테이너 시간대(TZ=Asia/Seoul)로 — Caddy 는 기본이 UTC 다. 시간대 데이터는 compose 의 oom-caddy 이미지가 넣는다
+{
+	log {
+		format console {
+			time_local
+			time_format wall_milli
+		}
+	}
+}
+
 {$SITE_ADDRESS:localhost} {
 	encode zstd gzip
 
@@ -53,6 +63,9 @@
 
 	log {
 		output stdout
-		format console
+		format console {
+			time_local
+			time_format wall_milli
+		}
 	}
 }
