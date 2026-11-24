@@ -468,7 +468,9 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
         ctx.append({"ref": ref, "id": n["id"], "type": n["type"], "status": n["status"], "title": n["title"],
                     "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
                     "entry": n["id"] == entry, "near": n["id"] in near, "resolves_root": n["id"] in resolving, "via": via.get(n["id"], []),
-                    "cause": cause, "parents": sorted(parents.get(n["id"], []), key=lambda r: int(r[1:]))})
+                    "cause": cause, "parents": sorted(parents.get(n["id"], []), key=lambda r: int(r[1:])),
+                    # 질문이 짚은 문제 기록은 원문도 — AI 요약이 원인(수치)을 빼고 결정만 남기면 그 결정을 원인으로 읽었다
+                    "body": n.get("body") if n["id"] == entry and n["type"] == "fail" else None})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],
                                   path_label=n.get("path_label"),
                                   last_confirmed_at=n["last_confirmed_at"].isoformat() if n.get("last_confirmed_at") else None,

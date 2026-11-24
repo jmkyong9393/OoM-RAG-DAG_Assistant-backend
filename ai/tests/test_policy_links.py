@@ -359,3 +359,25 @@ def test_procedure_memo_steps_are_counted():
             "policy": [p], "entry": True, "near": True}
     assert any("단계는 3개다" in m and "보류한다" in m for m in llm._must_include([memo]))
     assert llm._note_steps({"note": "한 문장뿐인 메모"}) == []
+
+
+def test_policy_question_keeps_only_exceptions_on_the_entry_line_below_root():
+    """규정 질문(case_required=False)에서는 진입 기록 줄기의 예외만 — 루트(장애 건 전체)와 다른 가지의 예외는 강제하지 않는다."""
+    def node(i, depth, entry=False, near=False):
+        return {"ref": f"N{i}", "id": i, "type": "fail", "status": "active", "title": "t", "resolution_summary": None, "depth": depth,
+                "policy": [{"relation": "exception", "ref": "P1", "label": "x"}], "entry": entry, "near": near}
+    must = llm._must_include([node(1, 0, near=True), node(2, 1, near=True), node(4, 1), {**node(5, 2, entry=True), "type": "success"}],
+                             case_required=False, searched={"P1"})
+    hit = [m for m in must if "달리 처리한 사례" in m]
+    assert any(m.startswith("[N2]") for m in hit) and any(m.startswith("[N5]") for m in hit)
+    assert not any(m.startswith("[N1]") or m.startswith("[N4]") for m in hit)
+    case = llm._must_include([node(1, 0, near=True), node(4, 1)], case_required=True, searched={"P1"})
+    assert any(m.startswith("[N1]") for m in case) and any(m.startswith("[N4]") for m in case), "사례 질문은 그대로"
+
+
+def test_entry_problem_record_body_is_shown_in_context():
+    n = {"ref": "N9", "type": "fail", "status": "active", "title": "풀 확대 후 DB max_connections 초과", "resolution_summary": "합산 규칙을 정하기로 결정.",
+         "depth": 0, "body": "인스턴스 3대 × 풀 20 = 60이 DB max_connections 50을 넘어 일부 인스턴스가 연결 거부. 조사 중."}
+    ctx = llm._render_context([], [n])
+    assert "— 인스턴스 3대 × 풀 20 = 60" in ctx and "결정" not in ctx, "원문이 있으면 요약 대신 원문"
+    assert "— 합산 규칙을 정하기로 결정." in llm._render_context([], [{**n, "body": None}])

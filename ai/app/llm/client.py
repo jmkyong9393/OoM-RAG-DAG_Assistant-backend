@@ -124,7 +124,7 @@ async def judge_case(profile: LlmProfile, query: str, case: dict, usage: Usage) 
 # ── 생성 (스트리밍) ──────────────────────────────────────────────────────────
 
 GENERATE_SYSTEM = """당신은 기업 업무지식 어시스턴트다. 아래 컨텍스트만 근거로 한국어로 간결하게 답한다.
-규칙: (1) 인용은 제공된 마커([P1], [N2] 등)만 쓴다. 마커는 하나씩 따로 붙인다 — [P1][P2] (한 괄호에 [P1, P2] 로 묶지 않는다). (2) 사실을 담은 모든 문장과 표의 모든 행 끝에 근거 마커를 붙인다. 마커는 그 내용이 실제로 적힌 줄의 것만 쓴다(해결 방법은 그 해결이 적힌 줄의 마커). 컨텍스트에 없는 내용은 "근거 없음"이라고 말하고 일반 상식으로 채우지 않는다. 조문에 조건(…인 경우 · …이내에 · …에 한하여)이나 구간이 붙어 있으면 그 조건과 함께 옮긴다 — 조건을 떼고 결론만 쓰지 않는다. 구간이 둘 이상이면 질문에 해당하는 구간을 고르고, 고를 수 없으면 구간을 모두 적는다. 조문의 끝말(한다 · 할 수 있다 · 하여야 한다 · 제한된다)을 바꾸지 않는다.
+규칙: (1) 인용은 제공된 마커([P1], [N2] 등)만 쓴다. 마커는 하나씩 따로 붙인다 — [P1][P2] (한 괄호에 [P1, P2] 로 묶지 않는다). (2) 사실을 담은 모든 문장과 표의 모든 행 끝에 근거 마커를 붙인다. 마커는 그 내용이 실제로 적힌 줄의 것만 쓴다(해결 방법은 그 해결이 적힌 줄의 마커). 컨텍스트에 없는 내용은 "근거 없음"이라고 말하고 일반 상식으로 채우지 않는다. 조문에 조건(…인 경우 · …이내에 · …에 한하여)이나 구간이 붙어 있으면 그 조건과 함께 옮긴다 — 조건을 떼고 결론만 쓰지 않는다. 구간이 둘 이상이면 질문에 해당하는 구간을 고르고, 고를 수 없으면 구간을 모두 적는다. 조문의 끝말(한다 · 할 수 있다 · 하여야 한다 · 제한된다)을 바꾸지 않는다. 조문이 구분해 쓰는 대상 낱말(결제취소와 환불, 반품과 교환 등)도 질문의 말로 바꿔 쓰지 않는다 — 취소가 안 되는 것을 '환불이 안 된다'고 쓰지 않는다.
 (3) [폐기됨] 표시 노드는 권장하지 않는다. (4) 규정 근거와 해결 사례를 구분해 쓴다. 단, 해당 컨텍스트가 없는 절("규정"·"해결 사례")은 만들지 않는다. (5) 규정 문서가 둘 이상이면 차이점을 비교한다. 원칙과 예외·단서(다만, 긴급, 승인을 받으면 등)가 함께 있으면 결론 첫 문장에 둘을 함께 쓴다 — "원칙적으로 …이나, …이면 …할 수 있다". 예외가 있는데 "할 수 없다"고만 쓰지 않는다. 근거에 원칙을 정한 문장이 없으면 "원칙적으로"라고 쓰지 않는다.
 (6) 분량: 결론 1~2문장 → 근거 인용 → 필요하면 예외·조건 한 줄. 전체 5문장 이내(규정과 사례를 함께 쓸 때는 6문장), 목록은 항목당 한 줄. 수치·기간은 생략하지 않는다.
 (7) 사례 줄 끝의 "(규정 관계: …)"는 그 조치와 규정의 관계를 알려 주는 자료다. 괄호를 그대로 옮겨 적지 않는다. 사례로 답할 때는 사례 문장마다 [N…] 마커를 붙이고, 이어서 규정 관계를 한 문장으로 쓴다 — 따른 조치면 "이 조치는 ○○ 제○조 기준에 따른 것이다 [P…]", 예외면 "당시에는 규정과 달리 …했다 [N…][P…]", 기준이 없으면 "이 부분은 규정에 기준이 없다 [N…]". "…에 따른 것이다"는 그 사례 줄에 그 조문이 규정 관계로 붙어 있을 때만 쓰고, 여러 조치를 한 문장으로 묶어 "각각 …에 따른 것"이라고 쓰지 않는다. 사례는 기록에 적힌 말로만 옮긴다 — 질문에 나온 낱말 · 수치 · 오류 코드가 기록에 없으면 사례에 있었던 일처럼 쓰지 않고, "비슷한 사례로 …가 있다"로 잇는다. 기록에 적히지 않은 목적("…하기 위한 것이다")이나 권고("…하는 것이 좋다")를 덧붙이지 않는다. 원인과 해결은 같은 줄기의 기록일 때만 "…해서 …했다"로 잇고, 다른 줄기의 기록은 따로 쓴다.
@@ -279,7 +279,14 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
            "(사례에서도 기준이 없어 남은 문제였으면 그렇다는 것)를 그 사례 줄의 마커와 함께 먼저 쓴다."]
     for n in live:
         for p in n.get("policy") or []:
-            if p["relation"] == "exception" and p.get("ref") and (n.get("entry") or n.get("near") or p["ref"] in (searched or ())):
+            # 규정 질문은 진입 기록의 줄기만(루트 제외) — 장애 건 전체나 다른 가지의 예외는 질문과 먼 내용을 끌어왔다
+            if p["relation"] != "exception" or not p.get("ref"):
+                continue
+            if case_required:
+                on_line = n.get("entry") or n.get("near") or p["ref"] in (searched or ())
+            else:
+                on_line = n.get("entry") or (n.get("near") and n.get("depth", 0) > 0)
+            if on_line:
                 out.append(f"[{n['ref']}] 은 당시 규정([{p['ref']}])과 달리 처리한 사례다. 당시에 어떻게 했는지와 지금의 기준을 함께 쓰고 [{n['ref']}][{p['ref']}] 를 붙인다."
                            + (f" ({_note_text(p)})" if p.get("note") else ""))
     # 규정이 개정된 사례(진입 사례와 같은 줄기만): 지금 기준과 다를 수 있다는 것을 빠뜨리면 옛 기준을 현재 기준처럼 답한다. 사례가 여럿이어도 한 줄로
@@ -501,6 +508,15 @@ def _policy_note(p: dict) -> str:
     return f" (규정 관계: {p['ref']} {p.get('label') or ''} — {kind}{tail}{rev})"
 
 
+def _clip(text: str, limit: int = 240) -> str:
+    """원문을 문장 끝에서 자른다."""
+    t = " ".join((text or "").split())
+    if len(t) <= limit:
+        return t
+    cut = max(t.rfind(". ", 0, limit), t.rfind("다.", 0, limit) + 1)
+    return t[:cut + 1] if cut > 40 else t[:limit] + "…"
+
+
 def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
     lines = []
     if policy_ctx:
@@ -515,7 +531,9 @@ def _render_context(policy_ctx: list[dict], chain_ctx: list[dict]) -> str:
             indent = "  " * max(0, n["depth"])
             kind = n["type"] + (", 원인" if n.get("cause") else "")
             up = f" (상위: {' '.join(f'[{r}]' for r in n['parents'])})" if n.get("parents") and n["depth"] >= 2 else ""
-            lines.append(f"{indent}[{n['ref']}] ({kind}) {dep}{n['title']}{up}" + (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
+            # 원문이 있으면(질문이 짚은 문제 기록) AI 요약 대신 원문 — 요약이 원인 수치를 빼고 '결정'만 남기면 요약을 따랐다
+            gist = f" — {_clip(n['body'])}" if n.get("body") else (f" — {n['resolution_summary']}" if n.get("resolution_summary") else "")
+            lines.append(f"{indent}[{n['ref']}] ({kind}) {dep}{n['title']}{up}" + gist
                          + (" (이 장애를 해결한 기록)" if n.get("resolves_root") and n["status"] == "active" else "")
                          + "".join(f" (상위에 이은 이유: {r})" for r in n.get("via") or [])
                          + "".join(_policy_note(p) for p in n.get("policy") or []))
