@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -25,7 +26,13 @@ sys.path.insert(0, str(ROOT / "ai"))
 
 from app.graph import pipeline  # noqa: E402
 
-CHECKS = ("cited", "cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none")
+CHECKS = ("cited", "cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none", "no_leak")
+# 모든 답변에 공통: 지시문 · 내부 표기가 답에 새어 나오면 실패 — 마커 자리표시([N…]), 사례 기록 ID, 지시문 문구
+LEAK_RE = re.compile(r"\[[NP]…\]|\b[a-z]\d+(?:-[a-z0-9]+)+\b|장애를 실제로 해결한 기록은|이 장애를 해결한 기록은|답변에 꼭 담을|규정 관계:")
+
+
+def leaks(answer: str) -> list[str]:
+    return LEAK_RE.findall(answer)
 
 
 def parse(buf: bytes) -> list[tuple[str, object]]:
@@ -78,6 +85,7 @@ async def run_one(item: dict, cache: dict) -> dict:
         res["contains_any"] = any(s in answer for s in item["contains_any"])
     if "contains_none" in item:
         res["contains_none"] = not any(s in answer for s in item["contains_none"])
+    res["no_leak"] = not leaks(answer)
     return {"query": item["query"], "workspace_id": item["workspace_id"], "intent": (d.get("intent") or {}).get("intent"), "checks": res,
             "passed": all(res.values()), "cited": sorted(cited), "answer": answer}
 

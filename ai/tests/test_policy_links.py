@@ -226,7 +226,7 @@ def test_must_include_puts_recorded_resolutions_first():
                 "entry": entry, "near": True, "resolves_root": resolves}
     must = llm._must_include([node(1, "fail", entry=True), node(2, "success", title="해결: 사후분석 작성"),
                               node(3, "success", resolves=True), node(4, "success", resolves=True)])
-    assert "실제로 해결한 기록은 [N3] [N4]" in must[0] and "[N2] 은 해결이 아닌 후속·보조 조치" in must[0]
+    assert "'장애를 해결한 기록' 표시가 붙은 [N3] [N4] 줄" in must[0] and "실제로 해결한 기록은" not in must[0] and "[N2] 은 해결이 아닌 후속·보조 조치" in must[0]
     # 줄별 규정 관계도 해결 기록 줄만 — 후속 조치의 규정을 늘어놓지 않는다
     def withp(n, ref):
         return {**n, "policy": [{"relation": "follows", "ref": ref, "label": "x"}]}
@@ -236,7 +236,7 @@ def test_must_include_puts_recorded_resolutions_first():
     assert "[N3] 셀프 해제 → [P2]" in line and "[N2]" not in line and "[P3]" not in line
     # 해결 기록이 없으면 지금처럼 해결 줄 전체에서 고르게 한다
     plain = llm._must_include([node(1, "fail", entry=True), node(2, "success"), node(3, "success")])
-    assert "해결 줄([N2] [N3])" in plain[0] and "실제로 해결한" not in plain[0]
+    assert "해결 줄([N2] [N3])" in plain[0] and "장애를 해결한 기록" not in plain[0]
 
 
 def test_render_context_marks_resolution_and_edge_reason():
@@ -295,3 +295,45 @@ def test_case_handled_before_a_standard_existed_is_not_retold_as_a_missing_stand
     must = llm._must_include(nodes)
     assert any("[N1] 은 개정 전 사례다" in m and "과거에 기준이 없었다고 쓰지 말고" in m and "## 규정 의 조문으로만" in m for m in must)
     assert not any("정한 규정이 없었다" in m for m in must)
+
+
+def test_must_include_follow_up_problem_is_not_solved_by_the_fix_above():
+    """진입 기록이 해결 조치 뒤에 생긴 문제이고 그 아래 해결이 없으면, 위쪽 해결을 이 문제의 해결로 지목하지 않는다(원인 · 해결이 뒤바뀌던 답)."""
+    def node(i, typ, parents=(), entry=False, resolves=False):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": "t", "resolution_summary": None, "depth": len(parents),
+                "policy": None, "entry": entry, "near": True, "resolves_root": resolves, "parents": list(parents)}
+    must = llm._must_include([node(1, "fail"), node(3, "fail", ["N1"]), node(7, "success", ["N3"], resolves=True),
+                              node(9, "fail", ["N7"], entry=True)])
+    assert "[N9] 은 [N7] 조치 뒤에 새로 생긴 문제" in must[0] and "해결 방법은" not in must[0]
+    # 그 아래 해결이 있으면 보통대로
+    fixed = llm._must_include([node(7, "success", resolves=True), node(9, "fail", ["N7"], entry=True), node(10, "success", ["N9"])])
+    assert "새로 생긴 문제" not in fixed[0]
+
+
+def test_must_include_entry_relation_only_when_answering_from_cases():
+    """규정 질문(case_required=False)에는 진입 사례가 따른 규정을 강제하지 않는다 — 질문과 먼 사례를 끌어오고 문제 · 메모 제목이 조치 이름이 됐다."""
+    def node(i, typ, entry=False, title="t"):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": title, "resolution_summary": None, "depth": 0,
+                "policy": [{"relation": "follows", "ref": "P1", "label": "x"}], "entry": entry, "near": True}
+    assert not any("따른 것" in m for m in llm._must_include([node(1, "success", entry=True)], case_required=False))
+    memo = llm._must_include([node(4, "ref", entry=True, title="카드사 대응 순서(팀 메모)")])
+    assert any("절차 기록" in m and "[N4][P1]" in m for m in memo) and not any("팀 메모" in m for m in memo)
+    problem = llm._must_include([node(5, "fail", entry=True, title="석 달 사이 세 번째 취소 요청")])
+    assert any("[N5] 기록의 처리는 규정 [P1]" in m for m in problem) and not any("세 번째" in m for m in problem)
+
+
+def test_note_text_drops_internal_record_ids():
+    assert llm._note_text({"note": "70% 로 낮춘 것이 현재 기준(c5-meta-fix)"}) == "70% 로 낮춘 것이 현재 기준"
+    assert llm._note_text({"note": "제17조의2 ③ — 회사 환불 보류(2026-11 판)"}) == "제17조의2 ③ — 회사 환불 보류(2026-11 판)"
+
+
+def test_focus_notes_point_at_a_late_clause_or_proviso():
+    p = {"ref": "P1", "text": "① 회사는 신청일부터 3영업일 이내에 환불한다. ② 게임 콘텐츠는 반환 확인일부터 3영업일 이내에 환불한다. "
+                              "⑥ 휴대전화 결제는 말일 하루 전까지만 취소되므로, 말일 3영업일 전부터 휴대전화 결제 환불 건을 먼저 처리한다."}
+    notes = llm._focus_notes("결제취소 기간 얼마 안 남은 환불 건은 먼저 처리해야 돼?", [p])
+    assert len(notes) == 1 and "'⑥ 휴대전화 결제는" in notes[0]
+    faq = {"ref": "P2", "text": "다른 수단으로 로그인할 수 있습니다. 상담원은 전화나 상담으로 2단계 인증을 대신 해제하지 않습니다. "
+                                "수단이 없으면 복구 화면의 절차로만 복구하며, 예외는 보안 담당 2인 승인을 받은 경우뿐입니다."}
+    notes = llm._focus_notes("상담원이 2단계 인증 대신 풀어줘도 돼?", [{"ref": "P1", "text": "관리자에게 문의합니다. 코드를 받습니다."}, faq])
+    assert len(notes) == 1 and notes[0].startswith("[P2]") and "'예외는 보안 담당 2인" in notes[0]
+    assert llm._focus_notes("환불 며칠 안에 해줘야 해?", [p]) == [], "질문에 닿는 곳이 첫 항이면 짚지 않는다"
