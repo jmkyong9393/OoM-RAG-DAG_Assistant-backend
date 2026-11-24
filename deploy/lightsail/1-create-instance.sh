@@ -5,6 +5,7 @@
 # 환경: AWS_REGION(기본 ap-northeast-2) · INSTANCE_NAME(기본 oom-assist) · RAM_GB(기본 4)
 set -euo pipefail
 export PYTHONUTF8=1 PYTHONIOENCODING=utf-8   # Windows 콘솔(cp949)에서 한글 출력 오류 방지
+export AWS_CLI_FILE_ENCODING=UTF-8            # Windows 의 AWS CLI 가 user-data.sh(한글 주석)를 cp949 로 읽다 실패하던 것
 cd "$(dirname "$0")"
 REGION=${AWS_REGION:-ap-northeast-2}; NAME=${INSTANCE_NAME:-oom-assist}; RAM=${RAM_GB:-4}
 KEY_NAME="$NAME-key"; KEY_FILE="$HOME/.ssh/$NAME.pem"; IP_NAME="$NAME-ip"
