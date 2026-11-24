@@ -380,8 +380,10 @@ def _case_candidates(ws: int, q_tokens: str, q_vec: list[float] | None, error_co
         # 검색된 조문을 근거로 적어 둔 사례를 뒤에 더한다
         if linked_to and judged and not (hits and _settled(hits, floor)):
             have = {h["node_id"] for h in hits}
-            hits += _with_briefs(conn, ws, [{"node_id": i, "score": 0.0, "exact": False, "lex_terms": 0, "distance": None, "linked": True}
-                                            for i in db.cases_linked_to(conn, ws, linked_to) if i not in have])
+            ids = [i for i in db.cases_linked_to(conn, ws, linked_to) if i not in have]
+            near = db.node_distances(conn, ws, ids, q_vec)   # 줄기 고르기에는 쓰지 않고(distance 는 비움) 그 줄기 안 진입을 바꿀 때만 본다
+            hits += _with_briefs(conn, ws, [{"node_id": i, "score": 0.0, "exact": False, "lex_terms": 0, "distance": None, "linked": True,
+                                             "vdist": near.get(i)} for i in ids])
     return hits
 
 
@@ -411,7 +413,11 @@ async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | N
     linked = {_chain_of(h) for h in passed if h.get("linked")}
     pool = [h for h in passed if not h.get("linked") and _chain_of(h) in linked] or passed
     nearest = min(pool, key=lambda h: h["distance"] if h["distance"] is not None else float("inf"))   # 거리가 없는 후보(조문에 연결돼 올라온 사례)는 맨 뒤. 같으면 순위대로(min 은 앞의 것)
-    return next(h for h in passed if _chain_of(h) == _chain_of(nearest))["node_id"]
+    chosen = next(h for h in passed if _chain_of(h) == _chain_of(nearest))
+    # 같은 줄기에서 조문에 연결된 해결 기록이 지금 진입보다 질문에 더 가까우면 그것이 진입 — 질문이 찾은 조문을 따른 조치다
+    closer = [h for h in passed if h.get("linked") and h.get("type") == "success" and _chain_of(h) == _chain_of(chosen)
+              and h.get("vdist") is not None and chosen["distance"] is not None and h["vdist"] < chosen["distance"]]
+    return min(closer, key=lambda h: h["vdist"])["node_id"] if closer else chosen["node_id"]
 
 
 async def _graph_search(ws: int, q_tokens: str, q_vec: list[float] | None, error_code: str | None,

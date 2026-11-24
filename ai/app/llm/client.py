@@ -170,9 +170,9 @@ def _bigrams(s: str) -> set[str]:
 
 
 # 허용 여부를 묻는 질문 · 한 항 안에 막는 것과 허용하는 것이 함께 있는 조문
-_ASKS_PERMISSION = re.compile(r"[가-힣]도\s?(?:돼|되|됩)|되나요|가능|할 수 있|수 있어")
-_FORBIDS = re.compile(r"막|금지|하지 않|않는다|불가|제한|할 수 없")
-_ALLOWS = re.compile(r"허용|할 수 있|가능하다|예외")
+_ASKS_PERMISSION = re.compile(r"[가-힣]도\s?(?:돼|되|됩)|되나요|가능|할 수 있|수 있어|어떻게 (?:돼|되)")
+_FORBIDS = re.compile(r"막|금지|하지 않|않는다|불가|제한|할 수 없|안 되|되지 않")
+_ALLOWS = re.compile(r"허용|할 수 있|가능하다|예외|환불한다|지급한다")
 
 
 def _both_ways_notes(query: str, policies: list[dict]) -> list[str]:
@@ -189,8 +189,19 @@ def _both_ways_notes(query: str, policies: list[dict]) -> list[str]:
     u = units[max(range(len(units)), key=lambda i: score[i])]
     if not (_FORBIDS.search(u) and _ALLOWS.search(u)):
         return []
-    return [f"[{p['ref']}] 의 '{u[:24].rstrip()}…' 은 막는 것과 허용하는 것을 함께 정했다. 첫 문장을 '불가능하다' · '가능하다'로 단정하지 말고 "
-            "'…은 막히지만 …은 …하면 허용된다'처럼 둘을 한 문장에 함께 쓴다."]
+    m = _FORBIDS.search(u)
+    item = [x.start() for x in re.finditer(r"(?:^|\s)\d\.\s", u[:m.start()])]   # 목록 항목 안이면 그 항목 번호부터 짚는다
+    spot = u[item[-1]:].strip() if item else u
+    return [f"[{p['ref']}] 의 '{spot[:24].rstrip()}…' 은 막는 것과 허용하는 것을 함께 정했다. 첫 문장을 '불가능하다' · '가능하다'로 단정하지 말고 "
+            "'…은 막히지만 …은 …하면 허용된다'처럼 둘을 한 문장에 함께 쓴다." + _asked_side(query, spot)]
+
+
+def _asked_side(query: str, clause: str) -> str:
+    """조문이 'X는 안 되고 … Y한다'로 나눴는데 질문이 Y 를 물으면, Y 는 되는 쪽이라고 짚는다(질문의 말에 끌려 Y 를 안 되는 쪽으로 쓰던 것)."""
+    m = re.search(r"([가-힣]{2,})(?:은|는) 안 되고[^.]*?([가-힣]{2,})(?:한다|된다)", clause)
+    if not m or m.group(1) == m.group(2) or m.group(2) not in query:
+        return ""
+    return f" 질문의 '{m.group(2)}'은 이 조문에서 되는 쪽이고, 안 되는 것은 '{m.group(1)}'이다 — '{m.group(2)}'은 되는 쪽으로만 쓴다."
 
 
 def _from_proviso(unit: str) -> str:
@@ -316,8 +327,13 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
             # 지시문 (10)과 겹쳐 '기준이 없다'를 앞뒤로 두 번 쓰지 않게 자리와 횟수를 정한다
             out.append(f"[{entry['ref']}] 이 다루는 부분({p.get('topic') or '이 조치'})은 회사 규정에 기준이 없다. 사례에서 한 일을 먼저 쓰고, "
                        f"'이 부분은 규정에 기준이 없다'는 문장은 그 뒤에 한 번만 넣어 [{entry['ref']}] 를 붙인다.")
-    # 진입 기록이 따른 규정 — 사례로 답하는 질문에서만. 규정 질문에 넣으면 질문과 먼 사례를 끌어오고, 문제 · 메모 기록의 제목이 조치 이름이 된다
-    if follows and case_required and entry["type"] == "success":
+    # 진입 기록이 따른 규정 — 사례 질문에서는 늘, 규정 질문에서는 진입이 해결 기록이고 질문이 찾은 상위 조문을 따른 것일 때만
+    # (조건 없이 넣으면 다른 조문의 사례를 끌어오고, 문제 · 메모 기록의 제목이 조치 이름이 됐다)
+    asked = [p for p in follows if p["ref"] in (searched or ())]
+    if asked and not case_required and entry["type"] == "success":
+        out.append(f"[{entry['ref']}] 의 조치({_action(entry)})는 질문이 찾은 조문 [{asked[0]['ref']}] 을 따른 처리다. 규정으로 먼저 답한 뒤 "
+                   f"이 사례를 한 문장으로 덧붙이고 [{entry['ref']}] 를 붙인다.")
+    elif follows and case_required and entry["type"] == "success":
         for p in follows:
             out.append(f"[{entry['ref']}] 의 조치({_action(entry)})는 규정 [{p['ref']}] 을 따른 것이라고 한 문장으로 밝힌다. 규정의 기준 자체를 이 조치로 설명하지 않는다.")
     elif follows and case_required and entry["type"] == "fail" and not fixes:

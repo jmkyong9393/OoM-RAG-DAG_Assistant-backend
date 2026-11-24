@@ -315,7 +315,10 @@ def test_must_include_entry_relation_only_when_answering_from_cases():
     def node(i, typ, entry=False, title="t"):
         return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": title, "resolution_summary": None, "depth": 0,
                 "policy": [{"relation": "follows", "ref": "P1", "label": "x"}], "entry": entry, "near": True}
-    assert not any("따른 것" in m for m in llm._must_include([node(1, "success", entry=True)], case_required=False))
+    assert not any("따른" in m for m in llm._must_include([node(1, "success", entry=True)], case_required=False)), "질문이 찾은 조문이 아니면"
+    asked = llm._must_include([node(1, "success", entry=True)], case_required=False, searched={"P1"})
+    assert any("질문이 찾은 조문 [P1]" in m and "한 문장으로 덧붙이고 [N1]" in m for m in asked), "질문이 찾은 조문을 따른 해결 기록이면 덧붙인다"
+    assert not any("질문이 찾은 조문" in m for m in llm._must_include([node(2, "fail", entry=True)], case_required=False, searched={"P1"}))
     memo = llm._must_include([node(4, "ref", entry=True, title="카드사 대응 순서(팀 메모)")])
     assert any("절차 기록" in m and "[N4][P1]" in m for m in memo) and not any("팀 메모" in m for m in memo)
     problem = llm._must_include([node(5, "fail", entry=True, title="석 달 사이 세 번째 취소 요청")])
@@ -349,7 +352,7 @@ def test_both_ways_note_only_when_permission_asked_and_clause_forbids_and_allows
     assert llm._both_ways_notes("금요일 저녁 배포 절차 알려줘", [p]) == [], "허용 여부를 묻지 않으면 넣지 않는다"
     assert llm._both_ways_notes("수습 기간 중에 연차 쓸 수 있어?", [{"ref": "P1", "text": "① 수습 기간에도 발생한 연차를 쓸 수 있다. ② 수습은 3개월이다."}]) == []
     m = llm.answer_input("금요일 저녁에 급한 수정 배포해도 돼?", [{**p, "source": "search", "doc_title": "d", "article_label": "제23조"}], [])
-    assert m.count("질문에 직접 닿는") + m.count("막는 것과 허용") == 1, "짚는 지시는 하나만"
+    assert m.count("질문에 직접 닿는") + m.count("허용하는 것을 함께 정했다") == 1, "짚는 지시는 하나만"
 
 
 def test_procedure_memo_steps_are_counted():
@@ -381,3 +384,13 @@ def test_entry_problem_record_body_is_shown_in_context():
     ctx = llm._render_context([], [n])
     assert "— 인스턴스 3대 × 풀 20 = 60" in ctx and "결정" not in ctx, "원문이 있으면 요약 대신 원문"
     assert "— 합산 규칙을 정하기로 결정." in llm._render_context([], [{**n, "body": None}])
+
+
+
+def test_both_ways_note_for_outcome_question_points_at_the_list_item():
+    p = {"ref": "P1", "text": "① 결제수단별 결제취소 가능기간은 다음과 같다. 1. 신용카드: 결제일부터 60일 이내. 카드사가 취소를 받지 않으면 계좌로 환불한다 "
+                              "2. 휴대전화: 결제한 달 말일의 하루 전까지. 이 기간이 지나면 결제취소는 안 되고 회원 명의 계좌로 환불한다 3. 계좌이체: 환불"}
+    note = llm._both_ways_notes("폰결제 환불 월말 지나면 어떻게 돼", [p])
+    assert len(note) == 1 and "막는 것과 허용하는 것" in note[0] and "'2. 휴대전화" in note[0]
+    assert "질문의 '환불'은 이 조문에서 되는 쪽이고, 안 되는 것은 '결제취소'" in note[0]
+    assert "되는 쪽이고" not in llm._both_ways_notes("폰결제 취소 월말 지나면 어떻게 돼", [p])[0], "질문이 되는 쪽 낱말을 묻지 않으면 붙이지 않는다"

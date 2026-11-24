@@ -217,3 +217,19 @@ async def test_chain_linked_to_searched_article_wins_over_a_slightly_nearer_one(
     linked = {"node_id": 320, "root_id": 316, "exact": False, "distance": None, "lex_terms": 0, "linked": True}
     assert await pipeline._choose_entry(None, "q", [near, mine, linked], FLOOR, None) == 318
     assert await pipeline._choose_entry(None, "q", [near, mine, {**linked, "root_id": 9}], FLOOR, None) == 295
+
+
+
+async def test_linked_fix_record_becomes_the_entry_only_when_closer(monkeypatch):
+    """같은 줄기에서 조문에 연결된 해결 기록이 지금 진입보다 질문에 더 가까울 때만 진입을 바꾼다(환불 며칠 0.403 < 0.469).
+    더 멀면(풀 크기 — 연결된 해결 0.62 > 진입 문제 기록 0.50) 그대로, 문제 기록이면 그대로."""
+    async def judge(prof, query, case, usage):
+        return True
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge)
+    near = {"node_id": 295, "root_id": 289, "exact": False, "distance": 0.413, "lex_terms": 1}
+    mine = {"node_id": 318, "root_id": 316, "exact": False, "distance": 0.44, "lex_terms": 1, "type": "success"}
+    fix = {"node_id": 320, "root_id": 316, "exact": False, "distance": None, "lex_terms": 0, "linked": True, "type": "success", "vdist": 0.403}
+    assert await pipeline._choose_entry(None, "q", [near, mine, fix], FLOOR, None) == 320
+    assert await pipeline._choose_entry(None, "q", [near, mine, {**fix, "vdist": 0.62}], FLOOR, None) == 318
+    assert await pipeline._choose_entry(None, "q", [near, mine, {**fix, "type": "fail"}], FLOOR, None) == 318
+    assert await pipeline._choose_entry(None, "q", [near, mine, {**fix, "vdist": None}], FLOOR, None) == 318
