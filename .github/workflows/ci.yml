@@ -1,4 +1,4 @@
-# PR·main 검증. 배포는 deploy.yml(아직 비활성).
+# PR·main 검증. main 이 통과하면 images 워크플로가 운영 이미지를 빌드하고, 서버가 당겨 와 교체한다(deploy/autodeploy.sh).
 name: ci
 
 on:

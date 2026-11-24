@@ -1,0 +1,63 @@
+# 운영 이미지 빌드 → GHCR. 서버는 들어오는 연결 없이 이 이미지를 당겨 와 스스로 교체한다(deploy/autodeploy.sh).
+# - 백엔드: main 의 ci 가 통과하면 그 커밋으로 api · ai 를 빌드한다
+# - 프론트: 15분마다 프론트 레포 main 을 보고, 그 커밋의 web 이미지가 없을 때만 빌드한다(프론트 레포는 건드리지 않는다)
+# 태그는 deploy/image-tags.sh — 이미 있는 태그는 다시 빌드하지 않는다. 비밀값이 필요 없다(GHCR 은 기본 GITHUB_TOKEN).
+name: images
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: images
+  cancel-in-progress: false
+
+env:
+  REG: ghcr.io/${{ github.repository_owner }}
+  FRONT_REPO: Jonghyeon-Bae/OoM-RAG-DAG_Assistant
+
+jobs:
+  build:
+    # ci 뒤에는 main 에 push 된 커밋이 통과했을 때만(PR 의 ci 는 무시)
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || 'main' }}
+          fetch-depth: 0
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 태그
+        id: tag
+        run: |
+          eval "$(bash deploy/image-tags.sh HEAD)"
+          FSHA=$(git ls-remote "https://github.com/$FRONT_REPO.git" refs/heads/main | cut -c1-7)
+          echo "api=$API_TAG" >> "$GITHUB_OUTPUT"; echo "ai=$AI_TAG" >> "$GITHUB_OUTPUT"; echo "web=$FSHA" >> "$GITHUB_OUTPUT"
+          echo "api $API_TAG · ai $AI_TAG · web $FSHA"
+      - name: 빌드 · 올리기 (없는 태그만)
+        env:
+          API: ${{ steps.tag.outputs.api }}
+          AI: ${{ steps.tag.outputs.ai }}
+          WEB: ${{ steps.tag.outputs.web }}
+        run: |
+          have() { docker manifest inspect "$REG/$1" >/dev/null 2>&1; }
+          ship() { local img=$1; shift; if have "$img"; then echo "$img — 이미 있음"; else docker build -q --label oom.project=assist -t "$REG/$img" "$@" && docker push -q "$REG/$img"; fi; }
+          ship "oom-api:$API" api
+          ship "oom-ai:$AI" -f ai/Dockerfile .
+          if ! have "oom-web:$WEB"; then
+            git clone -q "https://github.com/$FRONT_REPO.git" front && git -C front checkout -q "$WEB"
+            ship "oom-web:$WEB" front
+          else echo "oom-web:$WEB — 이미 있음"; fi

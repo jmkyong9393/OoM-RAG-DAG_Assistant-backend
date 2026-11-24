@@ -20,11 +20,9 @@ git fetch -q origin
 [ -n "$(git branch -r --contains HEAD)" ] || { echo "커밋 $SHA 가 원격에 없습니다 — 먼저 푸시하세요"; exit 1; }
 REPO_URL=$(git remote get-url origin)
 
-# 이미지 태그 = 그 이미지에 들어가는 경로를 마지막으로 바꾼 커밋. 규정 문서 · 데이터 · 배포 설정만 고치면 태그가 그대로라 빌드도 전송도 건너뛴다.
+# 이미지 태그 = 그 이미지에 들어가는 경로를 마지막으로 바꾼 커밋(deploy/image-tags.sh — 자동 배포와 같은 규칙).
 # 서버 레포는 늘 $SHA — 데이터 적재 · 마운트 파일은 레포에서, 앱 코드 · 마이그레이션은 이미지에서 온다(경로가 같으면 내용도 같다)
-ATAG=$(git log -1 --format=%h HEAD -- api)
-AI_SRC=$(awk '/^COPY / && !/--from/ {for (i = 2; i < NF; i++) print $i}' ai/Dockerfile)   # ai 이미지가 복사하는 경로를 Dockerfile 에서 읽는다
-ITAG=$(git log -1 --format=%h HEAD -- ai/Dockerfile $AI_SRC)
+eval "$(bash deploy/image-tags.sh HEAD)"; ATAG=$API_TAG; ITAG=$AI_TAG
 build() { docker image inspect "$1" >/dev/null 2>&1 && echo "  $1 — 이미 있음, 건너뜀" || docker build -q --label oom.project=assist -t "$@"; }   # 표식: trim-images.sh 가 이 프로젝트 것만 지운다
 step "이미지 빌드 — api ($ATAG) · ai ($ITAG), 레포 $SHA"
 build "oom-api:$ATAG" api
@@ -47,6 +45,10 @@ done
 # gzip -1: 기본 압축과 크기 차이는 작고 압축이 훨씬 빠르다
 [ -z "$SEND" ] || docker save $SEND | gzip -1 | $SSH 'gunzip | docker load'
 
+step "자동 배포 잠시 멈춤 (이 배포가 끝나면 다시 켠다)"
+$SSH 'mkdir -p ~/oom-deploy && touch ~/oom-deploy/pause'
+trap 'rm -rf "$TMP"; $SSH "rm -f ~/oom-deploy/pause" 2>/dev/null || true' EXIT
+
 step "서버의 레포를 같은 커밋으로 ($SHA)"
 $SSH "set -e; [ -d oom/.git ] || git clone -q '$REPO_URL' oom; cd oom && git fetch -q origin && git checkout -q --detach $SHA && git log --oneline -1"
 
@@ -61,6 +63,10 @@ step "서버 시간대 한국 시간으로 (이미 만든 서버에도 — 다�
 $SSH 'sudo ln -sf /usr/share/zoneinfo/Asia/Seoul /etc/localtime && echo Asia/Seoul | sudo tee /etc/timezone >/dev/null && sudo systemctl restart cron && date "+  %Y-%m-%d %H:%M %Z"'
 step "매일 백업 예약 (한국 시간 새벽 3시 30분, 최근 7개 보관 — deploy/backup.sh)"
 $SSH 'echo "30 3 * * * $USER mkdir -p \$HOME/oom-backups && cd \$HOME/oom/deploy && bash backup.sh daily >> \$HOME/oom-backups/backup.log 2>&1" | sudo tee /etc/cron.d/oom-backup >/dev/null && sudo chmod 644 /etc/cron.d/oom-backup && echo "  /etc/cron.d/oom-backup"'
+
+step "자동 배포 예약 (2분마다 새 버전 확인 — deploy/autodeploy.sh, 기록 ~/oom-deploy/auto.log)"
+$SSH "echo '$SHA $ATAG $ITAG $FSHA' > ~/oom-deploy/deployed"   # 지금 배포한 조합 — 자동 배포가 같은 조합을 다시 배포하지 않게
+$SSH 'echo "*/2 * * * * $USER cd \$HOME/oom && bash deploy/autodeploy.sh" | sudo tee /etc/cron.d/oom-autodeploy >/dev/null && sudo chmod 644 /etc/cron.d/oom-autodeploy && echo "  /etc/cron.d/oom-autodeploy"'
 
 step "옛 이미지 정리 — 서버 (종류마다 지금 + 직전 하나)"
 $SSH "cd oom && bash deploy/trim-images.sh api=$ATAG ai=$ITAG web=$FSHA; df -h / | tail -1"
