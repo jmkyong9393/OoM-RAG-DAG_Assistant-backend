@@ -46,7 +46,13 @@ def test_rerank_uses_model_choice(monkeypatch):
     monkeypatch.setattr(rerank.llm, "_chat_json", fake)
     out = asyncio.run(rerank.rerank(Prof(), "환불 언제", _rows(4), rerank.llm.Usage()))
     assert [r["id"] for r in out] == ["c3", "c1", "c2", "c4"], "검색 1·2위는 이미 상위 5 안에 있다"
-    assert "[질문]\n환불 언제" in seen["user"] and "[3] 규정 제3조: 본문" in seen["user"]
+    assert "[질문]\n환불 언제" in seen["user"] and "[3] (회사 규정) 규정 제3조: 본문" in seen["user"]
+
+
+def test_listing_marks_company_rules_and_external_standards():
+    assert rerank._label({"doc_type": "고시"}) == "(외부 기준)"
+    assert rerank._label({"doc_type": "규정"}) == "(회사 규정)" and rerank._label({}) == "(회사 규정)"
+    assert "(회사 규정)" in rerank.SYSTEM and "(외부 기준)" in rerank.SYSTEM
 
 
 def test_keep_top_puts_search_top_two_back_into_the_top_five():

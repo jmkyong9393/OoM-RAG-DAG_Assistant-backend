@@ -19,7 +19,13 @@ KEEP = 2           # 검색 상위 몇 건을 최종 K 안에 남길 것인가
 SYSTEM = ("You re-rank Korean company regulation excerpts for a Korean employee's question. "
           "Reply JSON only: {\"ids\": [numbers]} — up to 5 excerpt numbers that directly answer the question, best first. "
           "Pick the excerpt that states the rule, number, deadline or procedure the question asks about, even if the question uses casual "
-          "or indirect words. Do not pick excerpts that are only on a related topic. Use only numbers from the list.")
+          "or indirect words. Do not pick excerpts that are only on a related topic. Use only numbers from the list. "
+          "(회사 규정) marks the employee's own company rules, (외부 기준) marks external public standards: when a company rule states "
+          "what the question asks, rank it above external standards; pick external standards first only when no company rule covers it.")
+
+
+def _label(r: dict) -> str:
+    return "(외부 기준)" if r.get("doc_type") == "고시" else "(회사 규정)"
 
 
 def _excerpt(r: dict) -> str:
@@ -55,7 +61,7 @@ def keep_top(order: list[dict], rows: list[dict], k: int = K, keep: int = KEEP) 
 async def rerank(profile, query: str, rows: list[dict], usage: llm.Usage) -> list[dict]:
     if ai_mode() != "openai" or not profile.has_key or len(rows) < 2:
         return rows
-    listing = "\n".join(f"[{i}] {r.get('doc_title', '')} {r.get('article_label', '')}: {_excerpt(r)}" for i, r in enumerate(rows, 1))
+    listing = "\n".join(f"[{i}] {_label(r)} {r.get('doc_title', '')} {r.get('article_label', '')}: {_excerpt(r)}" for i, r in enumerate(rows, 1))
     try:
         data = await asyncio.wait_for(
             llm._chat_json(profile, profile.model_light, SYSTEM, f"[질문]\n{query}\n\n[조문]\n{listing}", usage), TIMEOUT)

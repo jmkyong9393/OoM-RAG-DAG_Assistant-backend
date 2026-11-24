@@ -153,7 +153,7 @@ def answer_input(query: str, policy_ctx: list[dict], chain_ctx: list[dict], case
     # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
     searched = [x for x in policy_ctx if x.get("source") == "search"]
     must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS), query=query)
-            + _wording_notes(searched[:3]) + _focus_notes(query, searched[:2]))
+            + _wording_notes(searched[:3]) + _focus_notes(query, searched[:2]) + _means_notes(query, searched[:2]))
     tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
     return f"[컨텍스트]\n{context}\n\n[오늘 날짜] {(today or date.today()).isoformat()}\n\n[질문]\n{query}{tail}"
 
@@ -199,6 +199,42 @@ def _focus_notes(query: str, policies: list[dict]) -> list[str]:
             spots = " · ".join(f"'{_from_proviso(units[i])[:24].rstrip()}…'" for i in sorted(picks)[:2])
             # 하나만 — 짚는 곳이 늘면 다른 지시를 빠뜨린다
             return [f"[{p['ref']}] 에서 질문에 직접 닿는 부분은 앞부분이 아니라 {spots} 이다. 질문에 대한 결론을 먼저 쓰고, 그 부분의 조건 · 기한 · 예외를 함께 밝힌다."]
+    return []
+
+
+# 결제수단 — 질문이 수단을 붙여 물어도 조문은 수단을 나누지 않고 주문 전체의 취소 · 환불을 정한 경우가 많다
+# '카드'는 법인카드 · 기프트카드 · 카드사를 빼고, '…페이'는 '페이지'를 뺀다
+_MEANS = {k: re.compile(v) for k, v in {
+    "휴대폰": r"휴대폰|핸드폰|휴대전화|폰\s?결제|소액결제", "신용카드": r"신용카드", "체크카드": r"체크카드",
+    "카드": r"(?<!법인)(?<!기프트)(?<!신용)(?<!체크)카드(?!사)", "간편결제": r"간편결제|[가-힣A-Za-z]{1,6}페이(?!지)",
+    "계좌이체": r"계좌이체", "무통장입금": r"무통장|가상계좌", "상품권": r"상품권"}.items()}
+_MEANS_ACTION_RE = re.compile(r"취소|환불|반품|교환")
+
+
+def _means_in(text: str) -> list[str]:
+    return [k for k, pat in _MEANS.items() if pat.search(text)]
+
+
+def _means_word(query: str, key: str) -> str:
+    """질문에 실제로 쓰인 말 — '○○페이'를 '간편결제'로 바꿔 부르지 않게."""
+    m = _MEANS[key].search(query)
+    return m.group(0) if m else key
+
+
+def _means_notes(query: str, policies: list[dict]) -> list[str]:
+    """질문이 결제수단을 붙여 취소 · 환불을 물었는데 위 조문이 그 수단을 따로 말하지 않으면, 그 조문의 기준이 수단과 관계없이 적용된다고 짚는다.
+    경량 답변 모델은 이때 '○○ 결제에 관한 기준이 없다'로 시작하고 기준을 뒤로 미루거나 빠뜨렸다."""
+    means = _means_in(query)
+    if not means or not _MEANS_ACTION_RE.search(query):
+        return []
+    texts = [(p, f"{p.get('article_label') or ''} {p.get('text') or ''}") for p in policies]
+    if any(_MEANS[m].search(t) for _, t in texts for m in means):
+        return []   # 위 조문 중 하나라도 그 수단을 따로 정했으면 그 조문이 답이다
+    for p, text in texts:
+        # 결제수단을 둘 이상 늘어놓은 조문은 수단별 기준이다 — '나누지 않은 기준'이 아니다. 한 항에서 한 수단만 말한 조문(무통장 자동 취소)은 일반 기준
+        if _MEANS_ACTION_RE.search(text) and len(_means_in(text)) < 2:
+            # 한 문장만 — '따로 정한 내용은 없다'까지 허락하면 근거 마커 없는 군더더기 문장이 붙었다
+            return [f"[{p['ref']}] 은 결제수단을 나누지 않은 기준이라 질문의 '{_means_word(query, means[0])}'에도 그대로 적용된다. 첫 문장을 그 기준으로 쓴다."]
     return []
 
 
