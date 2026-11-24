@@ -173,7 +173,13 @@ services:
 
   caddy:
     logging: *logging
-    image: caddy:2
+    # 공식 caddy 이미지에는 시간대 데이터가 없어 TZ 가 무시된다(로그가 UTC) — tzdata 만 더한다. 서버에서도 처음 한 번 몇 초면 빌드된다
+    image: oom-caddy:tz
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM caddy:2
+        RUN apk add --no-cache tzdata
     ports:
       - "80:80"
       - "443:443"
