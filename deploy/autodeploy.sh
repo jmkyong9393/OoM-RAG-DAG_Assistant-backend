@@ -26,12 +26,16 @@ main() {
   [ "$want" = "$have" ] && return 0
   [ "$want" = "$(cat "$S/failed" 2>/dev/null || true)" ] && return 0
 
-  # 백엔드 커밋이 바뀌었으면 그 커밋의 CI(push) 통과를 확인한다 — 공개 API, 인증 없음
+  # 백엔드 커밋이 바뀌었으면 그 커밋의 CI(main push) 결과를 확인한다 — 공개 API(무인증 시간당 60회), 새 커밋일 때만 부른다
   if [ "$SHA" != "${have%% *}" ]; then
-    local ok
-    ok=$(curl -fsS --max-time 20 "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$FULL&status=success&event=push&per_page=1" \
-         | grep -o '"total_count": *[0-9]*' | grep -o '[0-9]*$')
-    [ "${ok:-0}" -gt 0 ] || return 0              # CI 가 아직 도는 중이거나 실패 — 실패면 고친 커밋을 기다린다
+    local ci
+    ci=$(curl -fsS --max-time 20 "https://api.github.com/repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$FULL&event=push&per_page=1" \
+         | python3 -c 'import json,sys; r=(json.load(sys.stdin).get("workflow_runs") or [{}])[0]; print(r.get("status","none"), r.get("conclusion") or "-")' 2>/dev/null)
+    case "$ci" in
+      "completed success") ;;
+      completed*) echo "$want" > "$S/failed"; log "CI 가 통과하지 못한 커밋($SHA: $ci) — 배포하지 않고 고친 커밋을 기다린다"; return 0 ;;
+      *) return 0 ;;                                # 아직 도는 중 · 조회 실패 — 다음에 다시
+    esac
   fi
   # 이미지가 GHCR 에 올라왔는지(빌드는 CI 뒤에 시작해 몇 분 걸린다). 공개 이미지라 로그인 없이 받는다
   local img
