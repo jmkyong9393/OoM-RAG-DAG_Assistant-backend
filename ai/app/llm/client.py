@@ -153,7 +153,7 @@ def answer_input(query: str, policy_ctx: list[dict], chain_ctx: list[dict], case
     # 질문이 겨냥한 조문 = 검색 상위 2건. 그 아래 순위의 조문을 벗어난 예외까지 강제하면 질문과 먼 사례가 답에 섞인다
     searched = [x for x in policy_ctx if x.get("source") == "search"]
     must = (_must_include(chain_ctx, case_required, {p["ref"] for p in searched[:2]}, asks_cause=any(h in query for h in CAUSE_HINTS), query=query)
-            + _wording_notes(searched[:3]) + _focus_notes(query, searched[:2]))
+            + _wording_notes(searched[:3]) + (_both_ways_notes(query, searched[:1]) or _focus_notes(query, searched[:2])))
     tail = ("\n\n[답변에 꼭 담을 것]\n" + "\n".join(f"- {m}" for m in must)) if must else ""
     return f"[컨텍스트]\n{context}\n\n[오늘 날짜] {(today or date.today()).isoformat()}\n\n[질문]\n{query}{tail}"
 
@@ -169,6 +169,30 @@ def _bigrams(s: str) -> set[str]:
     return {w[i:i + 2] for w in re.findall(r"[가-힣A-Za-z0-9]{2,}", s) for i in range(len(w) - 1)} - _STOP_BIGRAMS
 
 
+# 허용 여부를 묻는 질문 · 한 항 안에 막는 것과 허용하는 것이 함께 있는 조문
+_ASKS_PERMISSION = re.compile(r"[가-힣]도\s?(?:돼|되|됩)|되나요|가능|할 수 있|수 있어")
+_FORBIDS = re.compile(r"막|금지|하지 않|않는다|불가|제한|할 수 없")
+_ALLOWS = re.compile(r"허용|할 수 있|가능하다|예외")
+
+
+def _both_ways_notes(query: str, policies: list[dict]) -> list[str]:
+    """허용 여부를 묻는데 질문에 닿는 항이 막는 것과 허용하는 것을 함께 정했으면, 첫 문장에 둘을 함께 쓰게 짚는다.
+    지시문 (5)만으로는 첫 문장을 '불가능하다'로 단정하고 예외를 뒤에 붙였다."""
+    if not policies or not _ASKS_PERMISSION.search(query):
+        return []
+    p = policies[0]
+    units = [u.strip() for u in _UNIT_RE.split(p.get("text") or "") if u and u.strip()]
+    q = _bigrams(query)
+    score = [len(q & _bigrams(u)) for u in units]
+    if not units or max(score) < 2:
+        return []
+    u = units[max(range(len(units)), key=lambda i: score[i])]
+    if not (_FORBIDS.search(u) and _ALLOWS.search(u)):
+        return []
+    return [f"[{p['ref']}] 의 '{u[:24].rstrip()}…' 은 막는 것과 허용하는 것을 함께 정했다. 첫 문장을 '불가능하다' · '가능하다'로 단정하지 말고 "
+            "'…은 막히지만 …은 …하면 허용된다'처럼 둘을 한 문장에 함께 쓴다."]
+
+
 def _from_proviso(unit: str) -> str:
     """단서(다만 · 예외는 · 단,)가 문장 중간에 있으면 그 자리부터 — 문장 머리를 짚으면 머리만 옮기고 뒤쪽 예외를 자른다."""
     m = re.search(r"다만|예외는|단,", unit)
@@ -179,19 +203,24 @@ def _focus_notes(query: str, policies: list[dict]) -> list[str]:
     """질문에 직접 닿는 내용이 조문 뒤쪽 항 · 문장에 있거나 그 뒤에 단서(다만 · 예외)가 붙어 있으면 그 위치를 짚는다.
     경량 답변 모델은 긴 조각의 앞부분만 옮기고 마지막 항 · 단서를 빠뜨리는 일이 잦았다. 내용을 옮겨 적지 않고 시작 말로 위치만 가리킨다."""
     q = _bigrams(query)
-    for p in policies:
+    first = 0
+    for n, p in enumerate(policies):
         units = [u.strip() for u in _UNIT_RE.split(p.get("text") or "") if u and u.strip()]
+        score = [len(q & _bigrams(u)) for u in units] or [0]
+        best = max(range(len(score)), key=lambda i: score[i])
+        if n == 0:
+            first = score[best]
+        elif score[best] < max(4, first + 3):   # 둘째 조문은 첫 조문보다 질문과 훨씬 많이 겹칠 때만 — 아니면 질문과 먼 항을 답에 끌어온다
+            break
         if len(units) < 2 or not q:
             continue
-        score = [len(q & _bigrams(u)) for u in units]
-        best = max(range(len(units)), key=lambda i: score[i])
         picks = [best] if best > 0 and score[best] >= 3 and score[best] > score[0] else []
         for i in range(1, len(units)):
             if _PROVISO_RE.search(units[i]) and (score[i - 1] >= 3 or score[i] >= 3) and i not in picks:
                 picks.append(i)
         if picks:
             spots = " · ".join(f"'{_from_proviso(units[i])[:24].rstrip()}…'" for i in sorted(picks)[:2])
-            # 하나만 — 짚는 곳이 늘면 다른 지시를 빠뜨린다. 첫 조문에 짚을 곳이 없을 때만 다음 조문을 본다
+            # 하나만 — 짚는 곳이 늘면 다른 지시를 빠뜨린다
             return [f"[{p['ref']}] 에서 질문에 직접 닿는 부분은 앞부분이 아니라 {spots} 이다. 그 부분의 조건 · 기한 · 예외를 빠뜨리지 말고 그 조문의 말로 쓴다."]
     return []
 
@@ -287,7 +316,9 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     elif follows and case_required and entry["type"] == "fail" and not fixes:
         out.append(f"[{entry['ref']}] 기록의 처리는 규정 [{follows[0]['ref']}] 을 따른 것이라고 한 문장으로 밝힌다. 기록의 제목을 조치 이름처럼 쓰지 않는다.")
     elif follows and case_required and entry["type"] == "ref":
-        out.append(f"[{entry['ref']}] 는 팀이 정리한 절차 기록이다. 그 줄의 규정 관계에 적힌 단계를 빠뜨리지 말고 순서대로 쓰고 [{entry['ref']}][{follows[0]['ref']}] 를 붙인다. "
+        steps = _note_steps(follows[0])
+        listed = f"단계는 {len(steps)}개다({' / '.join(steps)}) — 하나도 빠뜨리지 말고" if steps else "그 줄의 규정 관계에 적힌 단계를 빠뜨리지 말고"
+        out.append(f"[{entry['ref']}] 는 팀이 정리한 절차 기록이다. {listed} 순서대로 쓰고 [{entry['ref']}][{follows[0]['ref']}] 를 붙인다. "
                    "기록의 제목을 조치 이름처럼 쓰지 않는다.")
     if entry and entry["type"] != "success" and fixes and case_required:
         # 해결 줄마다 규정 관계를 짚어 준다 — "규정 관계가 있으면 밝혀라"로만 쓰면 다른 줄의 [P…] 를 기준 없는 조치에 붙인다
@@ -300,6 +331,14 @@ def _must_include(chain_ctx: list[dict], case_required: bool = True, searched: s
     if pairs:
         out.append(pairs)
     return out[:6]
+
+
+def _note_steps(p: dict) -> list[str]:
+    """절차 메모("제17조의2 — 담당자를 정하고, 기록을 모아 …제출하며, …보류한다")의 단계. 둘 ~ 여섯이 아니면 빈 목록.
+    "단계를 빠뜨리지 말라"고만 하면 몇 단계인지 몰라 마지막 단계를 자주 뺐다."""
+    body = _note_text(p).split(" — ", 1)[-1]
+    steps = [x.strip() for x in re.split(r",\s*", body) if x.strip()]
+    return steps if 2 <= len(steps) <= 6 else []
 
 
 def _follow_up_problem(entry: dict | None, live: list[dict]) -> list[str]:

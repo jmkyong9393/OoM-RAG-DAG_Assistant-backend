@@ -337,3 +337,25 @@ def test_focus_notes_point_at_a_late_clause_or_proviso():
     notes = llm._focus_notes("상담원이 2단계 인증 대신 풀어줘도 돼?", [{"ref": "P1", "text": "관리자에게 문의합니다. 코드를 받습니다."}, faq])
     assert len(notes) == 1 and notes[0].startswith("[P2]") and "'예외는 보안 담당 2인" in notes[0]
     assert llm._focus_notes("환불 며칠 안에 해줘야 해?", [p]) == [], "질문에 닿는 곳이 첫 항이면 짚지 않는다"
+    pay = {"ref": "P2", "text": "① 수당은 매월 지급한다. ② 식대는 매월 준다. ④ 연장·야간·휴일근로수당은 제14조에 따라 실제 근로시간으로 계산한다. ⑤ 다만 근무하지 않은 달의 고정 수당은 일할 계산에 따른다."}
+    assert llm._focus_notes("야근수당은 어떻게 계산해?", [{"ref": "P1", "text": "① 연장근로수당은 50퍼센트를 가산한다. ② 휴일근로는 가산한다."}, pay]) == [],         "둘째 조문이 첫 조문보다 조금 더 겹치는 정도면 짚지 않는다"
+
+
+def test_both_ways_note_only_when_permission_asked_and_clause_forbids_and_allows():
+    p = {"ref": "P1", "text": "① 매주 금요일 18:00~월요일 09:00는 Soft 동결로 두어 C2 이상 변경과 마이그레이션을 막고, C3·C4 변경과 마이그레이션 없는 배포는 협의해 허용한다. "
+                              "② 동결 중 장애 복구 배포는 사후 보고한다."}
+    note = llm._both_ways_notes("금요일 저녁에 급한 수정 배포해도 돼?", [p])
+    assert len(note) == 1 and "막는 것과 허용하는 것을 함께" in note[0]
+    assert llm._both_ways_notes("금요일 저녁 배포 절차 알려줘", [p]) == [], "허용 여부를 묻지 않으면 넣지 않는다"
+    assert llm._both_ways_notes("수습 기간 중에 연차 쓸 수 있어?", [{"ref": "P1", "text": "① 수습 기간에도 발생한 연차를 쓸 수 있다. ② 수습은 3개월이다."}]) == []
+    m = llm.answer_input("금요일 저녁에 급한 수정 배포해도 돼?", [{**p, "source": "search", "doc_title": "d", "article_label": "제23조"}], [])
+    assert m.count("질문에 직접 닿는") + m.count("막는 것과 허용") == 1, "짚는 지시는 하나만"
+
+
+def test_procedure_memo_steps_are_counted():
+    p = {"relation": "follows", "ref": "P1", "label": "x", "note": "제17조의2 — 접수 당일 담당자를 정하고, 기록을 모아 소명 기한 3영업일 전까지 제출하며, 결과가 나올 때까지 회사 환불은 보류한다"}
+    assert llm._note_steps(p) == ["접수 당일 담당자를 정하고", "기록을 모아 소명 기한 3영업일 전까지 제출하며", "결과가 나올 때까지 회사 환불은 보류한다"]
+    memo = {"ref": "N4", "id": 4, "type": "ref", "status": "active", "title": "대응 순서(팀 메모)", "resolution_summary": None, "depth": 0,
+            "policy": [p], "entry": True, "near": True}
+    assert any("단계는 3개다" in m and "보류한다" in m for m in llm._must_include([memo]))
+    assert llm._note_steps({"note": "한 문장뿐인 메모"}) == []

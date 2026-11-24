@@ -204,3 +204,16 @@ async def test_case_switch_off_makes_department_policy_only(fake_mode, backfille
         assert not any(b[0] == "stage" and b[1]["node"] == "graph_search" for b in blocks)
     finally:
         admin_conn.execute("UPDATE workspaces SET case_enabled = true WHERE id = 2")
+
+
+async def test_chain_linked_to_searched_article_wins_over_a_slightly_nearer_one(monkeypatch):
+    """질문이 찾은 조문에 연결된 사례(linked)의 줄기에 판정을 통과한 직접 후보가 있으면, 조금 더 가까운 다른 줄기보다 그 줄기.
+    연결 사례만 있고 그 줄기의 직접 후보가 없으면 지금처럼 가장 가까운 줄기."""
+    async def judge(prof, query, case, usage):
+        return True
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge)
+    near = {"node_id": 295, "root_id": 289, "exact": False, "distance": 0.413, "lex_terms": 1}   # 다른 줄기, 가장 가깝다
+    mine = {"node_id": 318, "root_id": 316, "exact": False, "distance": 0.44, "lex_terms": 1}
+    linked = {"node_id": 320, "root_id": 316, "exact": False, "distance": None, "lex_terms": 0, "linked": True}
+    assert await pipeline._choose_entry(None, "q", [near, mine, linked], FLOOR, None) == 318
+    assert await pipeline._choose_entry(None, "q", [near, mine, {**linked, "root_id": 9}], FLOOR, None) == 295

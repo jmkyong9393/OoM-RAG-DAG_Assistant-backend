@@ -407,7 +407,10 @@ async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | N
     passed = [h for h, v in zip(hits, verdicts) if v]
     if not passed:
         return None
-    nearest = min(passed, key=lambda h: h["distance"] if h["distance"] is not None else float("inf"))   # 거리가 없는 후보(조문에 연결돼 올라온 사례)는 맨 뒤. 같으면 순위대로(min 은 앞의 것)
+    # 질문이 찾은 조문에 연결된 사례(linked)의 줄기에 판정을 통과한 직접 후보도 있으면 그 줄기 — 판정이 후보를 거의 다 통과시켜 거리 차 0.01 로 갈리던 경우
+    linked = {_chain_of(h) for h in passed if h.get("linked")}
+    pool = [h for h in passed if not h.get("linked") and _chain_of(h) in linked] or passed
+    nearest = min(pool, key=lambda h: h["distance"] if h["distance"] is not None else float("inf"))   # 거리가 없는 후보(조문에 연결돼 올라온 사례)는 맨 뒤. 같으면 순위대로(min 은 앞의 것)
     return next(h for h in passed if _chain_of(h) == _chain_of(nearest))["node_id"]
 
 
