@@ -7,6 +7,7 @@ name: oom-prod
 
 # ai 와 bootstrap(데이터 적재)이 같이 쓰는 AI 서비스 환경
 x-ai-env: &ai-env
+  TZ: Asia/Seoul   # 로그 시각 · "오늘 날짜"(답변 지시문)를 한국 시간으로. 저장 값은 시간대가 붙은 시각이라 바뀌지 않는다
   AI_DB_URL: postgresql://oom_ai:${OOM_AI_PASSWORD}@postgres:5432/${POSTGRES_DB:-oom}
   AI_MODE: ${AI_MODE:-openai}
   LLM_PROFILE_DEFAULT_BASE_URL: ${LLM_PROFILE_DEFAULT_BASE_URL:-https://api.openai.com/v1}
@@ -29,7 +30,10 @@ services:
     logging: *logging
     image: pgvector/pgvector:pg16
     container_name: oom-prod-postgres
+    # 시간대: 새로 만드는 DB 는 TZ 를 따르지만 이미 만든 DB 는 설정 파일에 굳어 있다 — 기동 인자로 둘 다 맞춘다
+    command: ["postgres", "-c", "timezone=Asia/Seoul", "-c", "log_timezone=Asia/Seoul"]
     environment:
+      TZ: Asia/Seoul
       POSTGRES_DB: ${POSTGRES_DB:-oom}
       POSTGRES_USER: ${POSTGRES_USER:-oom}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
@@ -65,6 +69,7 @@ services:
     image: ${API_IMAGE:-oom-api:local}
     build: {context: ../api, labels: {oom.project: assist}}   # 표식: 정리 스크립트가 이 프로젝트 이미지만 지운다
     environment:
+      TZ: Asia/Seoul
       PORT: "8080"
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-oom}
       # 앱은 최소 권한 역할 oom_api (V2 roles · V5 security). 내장 Flyway 만 관리자 계정으로 돌고, 역할 비밀번호는 placeholder 로 받는다
@@ -148,6 +153,7 @@ services:
     logging: *logging
     image: ${WEB_IMAGE:?set WEB_IMAGE (프론트 레포 Dockerfile 로 빌드한 이미지)}
     environment:
+      TZ: Asia/Seoul
       HOSTNAME: 0.0.0.0
       PORT: "3000"
       API_ORIGIN: http://api:8080            # 서버 컴포넌트(lib/api/server.ts)가 Spring 을 직접 부르는 주소
@@ -172,6 +178,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
+      TZ: Asia/Seoul
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

@@ -3,7 +3,7 @@
 FROM python:3.12-slim
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
 # 규정 업로드 변환 도구: 스캔 PDF OCR(Tesseract + 한국어) · Word(pandoc). 데비안 공식 패키지
-RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor pandoc && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor pandoc tzdata && rm -rf /var/lib/apt/lists/*
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_NO_CACHE=1 PYTHONUNBUFFERED=1 PYTHONUTF8=1 \
     SCRIPTS_DIR=/app/scripts UPLOADS_DIR=/data/uploads
 WORKDIR /app
