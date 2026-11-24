@@ -13,10 +13,16 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 STRIP = ("expected_queries", "_refine", "_deprecate_reason")
 
 
+class _PlainHttpPolicy(http.cookiejar.DefaultCookiePolicy):
+    """운영 서버 안에서는 평문 http://api:8080 으로 부른다 — 로그인 쿠키에 Secure 가 붙어도 다시 실어 보낸다(안 그러면 다음 요청이 401)."""
+    def return_ok_secure(self, cookie, request):
+        return True
+
+
 class Api:
     def __init__(self, base: str):
         self.base = base.rstrip("/")
-        self.open = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())).open
+        self.open = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar(policy=_PlainHttpPolicy()))).open
 
     def call(self, method: str, path: str, body=None, ws: int | None = None):
         req = urllib.request.Request(self.base + path, method=method, data=json.dumps(body).encode() if body is not None else None)
