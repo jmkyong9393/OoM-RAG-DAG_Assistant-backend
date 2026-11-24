@@ -69,3 +69,9 @@
 		}
 	}
 }
+
+# 별칭 주소(예: www.도메인) → 기본 주소로 영구 이동. 로그인 쿠키 · 허용 출처를 기본 주소 하나로 둔다.
+# SITE_ALIASES 를 비우면 compose 가 쓰지 않는 평문 자리표시(http://alias.invalid)를 넣어 인증서 요청 없이 그대로 둔다
+{$SITE_ALIASES} {
+	redir {$SITE_ORIGIN}{uri} permanent
+}

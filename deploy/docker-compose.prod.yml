@@ -186,6 +186,8 @@ services:
     environment:
       TZ: Asia/Seoul
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      SITE_ALIASES: ${SITE_ALIASES:-http://alias.invalid}   # 기본 주소로 넘길 다른 주소(예: www.도메인). 비우면 쓰지 않는 자리표시(평문 · 인증서 요청 없음)
+      SITE_ORIGIN: ${SITE_ORIGIN:-http://localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - oom-prod-caddy-data:/data
