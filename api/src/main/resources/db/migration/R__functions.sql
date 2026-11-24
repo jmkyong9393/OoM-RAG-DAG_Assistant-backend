@@ -37,7 +37,8 @@ RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
     WHERE t <> '' AND numnode(plainto_tsquery('simple', t)) > 0
   ),
   tf AS (
-    SELECT t.t, t.tq, ln(((SELECT count(*) FROM cand) + 1)::float / (count(c.id) + 1)) AS idf
+    -- 고정소수(numeric) — 실수로 더하면 더하는 순서(실행 계획)에 따라 마지막 비트가 갈려 아래 동점 처리가 무시된다
+    SELECT t.t, t.tq, round(ln(((SELECT count(*) FROM cand) + 1)::numeric / (count(c.id) + 1)), 9) AS idf
     FROM terms t LEFT JOIN cand c ON c.tsv @@ t.tq GROUP BY t.t, t.tq
   ),
   -- 동점이면 짧은 청크(더 집중된 조문) 우선, 그다음 id — 순위가 실행마다 바뀌지 않게
@@ -50,7 +51,7 @@ RETURNS TABLE(chunk_id text, score double precision) LANGUAGE sql STABLE AS $$
   ),
   vec AS (
     SELECT id, r FROM (
-      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec) AS r
+      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec, id) AS r
       FROM cand WHERE p_vec IS NOT NULL AND embedding IS NOT NULL
     ) t WHERE r <= GREATEST(40, p_k)
   )
@@ -90,7 +91,7 @@ RETURNS TABLE(node_id bigint, score double precision) LANGUAGE sql STABLE AS $$
   ),
   vec AS (
     SELECT id, r FROM (
-      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec) AS r
+      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec, id) AS r
       FROM cand WHERE p_vec IS NOT NULL AND embedding IS NOT NULL
     ) t WHERE r <= 20
   ),
@@ -118,7 +119,8 @@ RETURNS TABLE(node_id bigint, score double precision, exact boolean, lex_terms i
   ),
   -- 질의 단어별 IDF: '오류·문제'처럼 대부분의 로그에 있는 단어가 '서킷브레이커'와 같은 무게가 되지 않게 한다
   tf AS (
-    SELECT t.t, t.tq, ln(((SELECT count(*) FROM cand) + 1)::float / (count(c.id) + 1)) AS idf
+    -- 고정소수(numeric): 더하는 순서와 무관하게 같은 합 — 동점 순서 고정
+    SELECT t.t, t.tq, round(ln(((SELECT count(*) FROM cand) + 1)::numeric / (count(c.id) + 1)), 9) AS idf
     FROM terms t LEFT JOIN cand c ON c.tsv @@ t.tq GROUP BY t.t, t.tq
   ),
   ls AS (
@@ -129,7 +131,7 @@ RETURNS TABLE(node_id bigint, score double precision, exact boolean, lex_terms i
   ),
   vec AS (
     SELECT id, r FROM (
-      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec) AS r
+      SELECT id, row_number() OVER (ORDER BY embedding <=> p_vec, id) AS r
       FROM cand WHERE p_vec IS NOT NULL AND embedding IS NOT NULL
     ) t WHERE r <= 20
   ),
