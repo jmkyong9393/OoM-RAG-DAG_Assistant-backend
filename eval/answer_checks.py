@@ -28,7 +28,7 @@ from app.graph import pipeline  # noqa: E402
 
 CHECKS = ("cited", "cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none", "no_leak")
 # 모든 답변에 공통: 지시문 · 내부 표기가 답에 새어 나오면 실패 — 마커 자리표시([N…]), 지시문 문구, 사례 기록 ID
-LEAK_RE = re.compile(r"\[[NP]…\]|장애를 실제로 해결한 기록은|이 장애를 해결한 기록은|답변에 꼭 담을|규정 관계:|질문에 직접 닿는|새로 생긴 문제다|팀이 정리한 절차 기록|질문이 찾은 조문")
+LEAK_RE = re.compile(r"\[[NP]…\]|장애를 실제로 해결한 기록은|이 장애를 해결한 기록은|답변에 꼭 담을|규정 관계:|질문에 직접 닿는|새로 생긴 문제다|팀이 정리한 절차 기록|질문이 찾은 조문|log_body")
 # 기록 ID 는 모양(c5-meta-fix)이 아니라 사례 데이터에 실제로 있는 ref 와 같은 낱말만 — 's3-bucket' 같은 기술 용어를 잡지 않게
 ID_LIKE = re.compile(r"(?<![\w-])[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?![\w-])")
 _record_ids: set[str] | None = None
