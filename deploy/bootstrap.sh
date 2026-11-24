@@ -22,10 +22,12 @@ else
   # 갱신 배포: 떠 있는 서비스를 멈추지 않고 바꾼다
   step "배포 직전 백업 (최근 3개 보관)"
   bash backup.sh deploy
-  # DB 마이그레이션이 바뀌었으면 api 는 옆에 띄우지 않는다 — 옛 api 가 새 스키마로 도는 순간이 없게(정상 종료 뒤 다시 띄움, 짧게 끊긴다)
+  # 마이그레이션이 바뀌었으면 api 는 옆에 띄우지 않는다 — 옛 api 가 새 스키마로 도는 순간이 없게(정상 종료 뒤 다시 띄움).
+  # 함수 파일(R__functions — CREATE OR REPLACE 라 이름 · 반환 형식이 그대로)만 바뀌었으면 옛 api 와 함께 돌아도 되므로 롤링으로 바꾼다.
+  # 뷰 파일(R__views)은 지우고 다시 만들어 열이 빠질 수 있어 스키마와 같이 다룬다
   old_tag=$(docker inspect -f '{{.Config.Image}}' "$($C ps -q api | head -1)"); old_tag=${old_tag##*:}
   if git -C .. cat-file -e "$old_tag^{commit}" 2>/dev/null; then
-    git -C .. diff --quiet "$old_tag" HEAD -- api/src/main/resources/db/migration || export RECREATE="api ${RECREATE:-}"
+    git -C .. diff --name-only "$old_tag" HEAD -- api/src/main/resources/db/migration | grep -qv '/R__functions\.sql$' && export RECREATE="api ${RECREATE:-}"
   elif [ "${MIGRATION_CHECK:-on}" != skip ]; then
     echo "  지금 api 이미지($old_tag)의 커밋을 레포에서 찾지 못해 마이그레이션 변경을 알 수 없다 — 안전하게 api 는 다시 띄운다"
     export RECREATE="api ${RECREATE:-}"

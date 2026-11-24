@@ -197,7 +197,7 @@ cd deploy && cp .env.example .env.smoke && bash smoke.sh
 WEB_IMAGE=<프론트 이미지> bash smoke.sh --web --quick   # 실제 프론트 이미지까지 넣은 리허설
 ```
 
-Lightsail 에 올리는 절차는 `deploy/lightsail/` 의 README 에 있습니다(서버 생성 · 운영 설정 · 이미지 전송 · 기동).
+Lightsail 에 올리는 절차는 `deploy/lightsail/` 의 README 에 있습니다(서버 생성 · 운영 설정 · 이미지 전송 · 기동). 그 뒤로는 `main` 에 머지하면 CI → 이미지 빌드(GHCR) → 서버가 당겨 와 무중단 교체합니다(`deploy/autodeploy.sh`).
 
 - 서버의 레포 체크아웃과 api · ai 이미지는 **같은 커밋**이어야 합니다.
 - 모든 단계는 다시 돌려도 됩니다. 데이터만 고쳤으면 `bash bootstrap.sh data`.
