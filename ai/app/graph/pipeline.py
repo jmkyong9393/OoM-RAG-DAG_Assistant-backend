@@ -410,13 +410,17 @@ async def _choose_entry(prof, query: str, hits: list[dict], floor: CaseFloor | N
     if not passed:
         return None
     # 질문이 찾은 조문에 연결된 사례(linked)의 줄기에 판정을 통과한 직접 후보도 있으면 그 줄기 — 판정이 후보를 거의 다 통과시켜 거리 차 0.01 로 갈리던 경우
+    dist = lambda h: h["distance"] if h["distance"] is not None else float("inf")
     linked = {_chain_of(h) for h in passed if h.get("linked")}
-    pool = [h for h in passed if not h.get("linked") and _chain_of(h) in linked] or passed
-    nearest = min(pool, key=lambda h: h["distance"] if h["distance"] is not None else float("inf"))   # 거리가 없는 후보(조문에 연결돼 올라온 사례)는 맨 뒤. 같으면 순위대로(min 은 앞의 것)
+    closest = min(dist(h) for h in passed)
+    # 연결 줄기의 직접 후보가 가장 가까운 후보와 SURE_MARGIN 안에 있을 때만 — 멀리 있는 줄기가 연결만으로 이기지 않게
+    pool = [h for h in passed if not h.get("linked") and _chain_of(h) in linked and dist(h) <= closest + SURE_MARGIN] or passed
+    nearest = min(pool, key=dist)   # 거리가 없는 후보(조문에 연결돼 올라온 사례)는 맨 뒤. 같으면 순위대로(min 은 앞의 것)
     chosen = next(h for h in passed if _chain_of(h) == _chain_of(nearest))
     # 같은 줄기에서 조문에 연결된 해결 기록이 지금 진입보다 질문에 더 가까우면 그것이 진입 — 질문이 찾은 조문을 따른 조치다
     closer = [h for h in passed if h.get("linked") and h.get("type") == "success" and _chain_of(h) == _chain_of(chosen)
-              and h.get("vdist") is not None and chosen["distance"] is not None and h["vdist"] < chosen["distance"]]
+              and h.get("vdist") is not None and chosen["distance"] is not None and h["vdist"] < chosen["distance"]
+              and (floor is None or h["vdist"] <= floor.near)]
     return min(closer, key=lambda h: h["vdist"])["node_id"] if closer else chosen["node_id"]
 
 
@@ -466,6 +470,7 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
             parents.setdefault(e["child_id"], []).append(refs[e["parent_id"]])
     # 갈라지는 체인(깊이 2 이상 기록의 상위가 둘 이상)일 때만 표시한다 — 한 줄기 체인에 표시를 더하면 답변에 뜻 없는 문장이 늘었다
     depth = {n["id"]: n["depth"] for n in nodes}
+    up = {c: list(ps) for c, ps in parents.items()}   # 판단용(뒤에 생긴 문제 등)은 늘 — 표시만 갈라지는 체인일 때
     if len({r for c, ps in parents.items() if depth.get(c, 0) >= 2 for r in ps}) < 2:
         parents = {}
     ctx, ev_nodes = [], []
@@ -475,6 +480,7 @@ def _load_chain(ws: int, entry: int) -> tuple[list[dict], ChainEvent]:
                     "resolution_summary": n.get("resolution_summary"), "depth": n["depth"], "policy_refs": n.get("policy_refs"),
                     "entry": n["id"] == entry, "near": n["id"] in near, "resolves_root": n["id"] in resolving, "via": via.get(n["id"], []),
                     "cause": cause, "parents": sorted(parents.get(n["id"], []), key=lambda r: int(r[1:])),
+                    "up": sorted(up.get(n["id"], []), key=lambda r: int(r[1:])),
                     # 질문이 짚은 문제 기록은 원문도 — AI 요약이 원인(수치)을 빼고 결정만 남기면 그 결정을 원인으로 읽었다
                     "body": n.get("body") if n["id"] == entry and n["type"] == "fail" else None})
         ev_nodes.append(ChainNode(ref=ref, id=n["id"], type=n["type"], status=n["status"], title=n["title"], depth=n["depth"],

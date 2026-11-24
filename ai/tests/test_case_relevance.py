@@ -233,3 +233,16 @@ async def test_linked_fix_record_becomes_the_entry_only_when_closer(monkeypatch)
     assert await pipeline._choose_entry(None, "q", [near, mine, {**fix, "vdist": 0.62}], FLOOR, None) == 318
     assert await pipeline._choose_entry(None, "q", [near, mine, {**fix, "type": "fail"}], FLOOR, None) == 318
     assert await pipeline._choose_entry(None, "q", [near, mine, {**fix, "vdist": None}], FLOOR, None) == 318
+
+
+
+async def test_linked_chain_preference_needs_distance_margin(monkeypatch):
+    """조문 연결 줄기 우선은 그 줄기의 직접 후보가 가장 가까운 후보와 SURE_MARGIN 안일 때만. 멀면 가장 가까운 줄기."""
+    async def judge(prof, query, case, usage):
+        return True
+    monkeypatch.setattr(pipeline.llm, "judge_case", judge)
+    near = {"node_id": 2, "root_id": 1, "exact": False, "distance": 0.32, "lex_terms": 1}
+    far = {"node_id": 6, "root_id": 5, "exact": False, "distance": 0.58, "lex_terms": 1}
+    link = {"node_id": 7, "root_id": 5, "exact": False, "distance": None, "lex_terms": 0, "linked": True}
+    assert await pipeline._choose_entry(None, "q", [near, far, link], FLOOR, None) == 2
+    assert await pipeline._choose_entry(None, "q", [near, {**far, "distance": 0.35}, link], FLOOR, None) == 6

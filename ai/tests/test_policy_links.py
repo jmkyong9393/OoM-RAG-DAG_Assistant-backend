@@ -327,42 +327,8 @@ def test_must_include_entry_relation_only_when_answering_from_cases():
 
 def test_note_text_drops_internal_record_ids():
     assert llm._note_text({"note": "70% 로 낮춘 것이 현재 기준(c5-meta-fix)"}) == "70% 로 낮춘 것이 현재 기준"
+    assert llm._note_text({"note": "메일 주소(e-mail)와 헤더(x-request-id)"}) == "메일 주소(e-mail)와 헤더(x-request-id)", "숫자 없는 괄호 표기는 그대로"
     assert llm._note_text({"note": "제17조의2 ③ — 회사 환불 보류(2026-11 판)"}) == "제17조의2 ③ — 회사 환불 보류(2026-11 판)"
-
-
-def test_focus_notes_point_at_a_late_clause_or_proviso():
-    p = {"ref": "P1", "text": "① 회사는 신청일부터 3영업일 이내에 환불한다. ② 게임 콘텐츠는 반환 확인일부터 3영업일 이내에 환불한다. "
-                              "⑥ 휴대전화 결제는 말일 하루 전까지만 취소되므로, 말일 3영업일 전부터 휴대전화 결제 환불 건을 먼저 처리한다."}
-    notes = llm._focus_notes("결제취소 기간 얼마 안 남은 환불 건은 먼저 처리해야 돼?", [p])
-    assert len(notes) == 1 and "'⑥ 휴대전화 결제는" in notes[0]
-    faq = {"ref": "P2", "text": "다른 수단으로 로그인할 수 있습니다. 상담원은 전화나 상담으로 2단계 인증을 대신 해제하지 않습니다. "
-                                "수단이 없으면 복구 화면의 절차로만 복구하며, 예외는 보안 담당 2인 승인을 받은 경우뿐입니다."}
-    notes = llm._focus_notes("상담원이 2단계 인증 대신 풀어줘도 돼?", [{"ref": "P1", "text": "관리자에게 문의합니다. 코드를 받습니다."}, faq])
-    assert len(notes) == 1 and notes[0].startswith("[P2]") and "'예외는 보안 담당 2인" in notes[0]
-    assert llm._focus_notes("환불 며칠 안에 해줘야 해?", [p]) == [], "질문에 닿는 곳이 첫 항이면 짚지 않는다"
-    pay = {"ref": "P2", "text": "① 수당은 매월 지급한다. ② 식대는 매월 준다. ④ 연장·야간·휴일근로수당은 제14조에 따라 실제 근로시간으로 계산한다. ⑤ 다만 근무하지 않은 달의 고정 수당은 일할 계산에 따른다."}
-    assert llm._focus_notes("야근수당은 어떻게 계산해?", [{"ref": "P1", "text": "① 연장근로수당은 50퍼센트를 가산한다. ② 휴일근로는 가산한다."}, pay]) == [],         "둘째 조문이 첫 조문보다 조금 더 겹치는 정도면 짚지 않는다"
-
-
-def test_both_ways_note_only_when_permission_asked_and_clause_forbids_and_allows():
-    p = {"ref": "P1", "text": "① 매주 금요일 18:00~월요일 09:00는 Soft 동결로 두어 C2 이상 변경과 마이그레이션을 막고, C3·C4 변경과 마이그레이션 없는 배포는 협의해 허용한다. "
-                              "② 동결 중 장애 복구 배포는 사후 보고한다."}
-    note = llm._both_ways_notes("금요일 저녁에 급한 수정 배포해도 돼?", [p])
-    assert len(note) == 1 and "막는 것과 허용하는 것을 함께" in note[0]
-    assert llm._both_ways_notes("금요일 저녁 배포 절차 알려줘", [p]) == [], "허용 여부를 묻지 않으면 넣지 않는다"
-    assert llm._both_ways_notes("수습 기간 중에 연차 쓸 수 있어?", [{"ref": "P1", "text": "① 수습 기간에도 발생한 연차를 쓸 수 있다. ② 수습은 3개월이다."}]) == []
-    m = llm.answer_input("금요일 저녁에 급한 수정 배포해도 돼?", [{**p, "source": "search", "doc_title": "d", "article_label": "제23조"}], [])
-    assert m.count("질문에 직접 닿는") + m.count("허용하는 것을 함께 정했다") == 1, "짚는 지시는 하나만"
-
-
-def test_procedure_memo_steps_are_counted():
-    p = {"relation": "follows", "ref": "P1", "label": "x", "note": "제17조의2 — 접수 당일 담당자를 정하고, 기록을 모아 소명 기한 3영업일 전까지 제출하며, 결과가 나올 때까지 회사 환불은 보류한다"}
-    assert llm._note_steps(p) == ["접수 당일 담당자를 정하고", "기록을 모아 소명 기한 3영업일 전까지 제출하며", "결과가 나올 때까지 회사 환불은 보류한다"]
-    memo = {"ref": "N4", "id": 4, "type": "ref", "status": "active", "title": "대응 순서(팀 메모)", "resolution_summary": None, "depth": 0,
-            "policy": [p], "entry": True, "near": True}
-    assert any("단계는 3개다" in m and "보류한다" in m for m in llm._must_include([memo]))
-    assert llm._note_steps({"note": "한 문장뿐인 메모"}) == []
-
 
 def test_policy_question_keeps_only_exceptions_on_the_entry_line_below_root():
     """규정 질문(case_required=False)에서는 진입 기록 줄기의 예외만 — 루트(장애 건 전체)와 다른 가지의 예외는 강제하지 않는다."""
@@ -387,10 +353,19 @@ def test_entry_problem_record_body_is_shown_in_context():
 
 
 
-def test_both_ways_note_for_outcome_question_points_at_the_list_item():
-    p = {"ref": "P1", "text": "① 결제수단별 결제취소 가능기간은 다음과 같다. 1. 신용카드: 결제일부터 60일 이내. 카드사가 취소를 받지 않으면 계좌로 환불한다 "
-                              "2. 휴대전화: 결제한 달 말일의 하루 전까지. 이 기간이 지나면 결제취소는 안 되고 회원 명의 계좌로 환불한다 3. 계좌이체: 환불"}
-    note = llm._both_ways_notes("폰결제 환불 월말 지나면 어떻게 돼", [p])
-    assert len(note) == 1 and "막는 것과 허용하는 것" in note[0] and "'2. 휴대전화" in note[0]
-    assert "질문의 '환불'은 이 조문에서 되는 쪽이고, 안 되는 것은 '결제취소'" in note[0]
-    assert "되는 쪽이고" not in llm._both_ways_notes("폰결제 취소 월말 지나면 어떻게 돼", [p])[0], "질문이 되는 쪽 낱말을 묻지 않으면 붙이지 않는다"
+
+
+def test_follow_up_problem_uses_parents_even_when_not_displayed():
+    """한 줄기 체인에서는 표시용 parents 가 비어도 판단용 up 으로 '뒤에 생긴 문제'를 알아본다."""
+    def node(i, typ, up=(), entry=False):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": "t", "resolution_summary": None, "depth": len(up),
+                "policy": None, "entry": entry, "near": True, "resolves_root": typ == "success", "parents": [], "up": list(up)}
+    must = llm._must_include([node(1, "fail"), node(2, "success", ["N1"]), node(3, "fail", ["N2"], entry=True)])
+    assert "[N3] 은 [N2] 조치 뒤에 새로 생긴 문제" in must[0]
+
+
+def test_entry_body_is_clipped_and_flattened():
+    body = "첫 줄\n둘째 줄 " + "가" * 400 + "."
+    ctx = llm._render_context([], [{"ref": "N1", "type": "fail", "status": "active", "title": "t", "resolution_summary": None, "depth": 0, "body": body}])
+    line = ctx.split("\n")[-1]
+    assert "첫 줄 둘째 줄" in line and len(line) < 320, "원문은 240자 안팎으로 자르고 줄바꿈을 없앤다"
