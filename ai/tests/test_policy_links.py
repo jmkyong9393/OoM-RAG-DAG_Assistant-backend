@@ -226,7 +226,7 @@ def test_must_include_puts_recorded_resolutions_first():
                 "entry": entry, "near": True, "resolves_root": resolves}
     must = llm._must_include([node(1, "fail", entry=True), node(2, "success", title="해결: 사후분석 작성"),
                               node(3, "success", resolves=True), node(4, "success", resolves=True)])
-    assert "실제로 해결한 기록은 [N3] [N4]" in must[0] and "[N2] 은 해결이 아닌 후속·보조 조치" in must[0]
+    assert "'장애를 해결한 기록' 표시가 붙은 [N3] [N4] 줄" in must[0] and "실제로 해결한 기록은" not in must[0] and "[N2] 은 해결이 아닌 후속·보조 조치" in must[0]
     # 줄별 규정 관계도 해결 기록 줄만 — 후속 조치의 규정을 늘어놓지 않는다
     def withp(n, ref):
         return {**n, "policy": [{"relation": "follows", "ref": ref, "label": "x"}]}
@@ -236,7 +236,7 @@ def test_must_include_puts_recorded_resolutions_first():
     assert "[N3] 셀프 해제 → [P2]" in line and "[N2]" not in line and "[P3]" not in line
     # 해결 기록이 없으면 지금처럼 해결 줄 전체에서 고르게 한다
     plain = llm._must_include([node(1, "fail", entry=True), node(2, "success"), node(3, "success")])
-    assert "해결 줄([N2] [N3])" in plain[0] and "실제로 해결한" not in plain[0]
+    assert "해결 줄([N2] [N3])" in plain[0] and "장애를 해결한 기록" not in plain[0]
 
 
 def test_render_context_marks_resolution_and_edge_reason():
@@ -295,3 +295,85 @@ def test_case_handled_before_a_standard_existed_is_not_retold_as_a_missing_stand
     must = llm._must_include(nodes)
     assert any("[N1] 은 개정 전 사례다" in m and "과거에 기준이 없었다고 쓰지 말고" in m and "## 규정 의 조문으로만" in m for m in must)
     assert not any("정한 규정이 없었다" in m for m in must)
+
+
+def test_must_include_follow_up_problem_is_not_solved_by_the_fix_above():
+    """진입 기록이 해결 조치 뒤에 생긴 문제이고 그 아래 해결이 없으면, 위쪽 해결을 이 문제의 해결로 지목하지 않는다(원인 · 해결이 뒤바뀌던 답)."""
+    def node(i, typ, parents=(), entry=False, resolves=False):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": "t", "resolution_summary": None, "depth": len(parents),
+                "policy": None, "entry": entry, "near": True, "resolves_root": resolves, "parents": list(parents)}
+    must = llm._must_include([node(1, "fail"), node(3, "fail", ["N1"]), node(7, "success", ["N3"], resolves=True),
+                              node(9, "fail", ["N7"], entry=True)])
+    assert "[N9] 은 [N7] 조치 뒤에 새로 생긴 문제" in must[0] and "해결 방법은" not in must[0]
+    # 그 아래 해결이 있으면 보통대로
+    fixed = llm._must_include([node(7, "success", resolves=True), node(9, "fail", ["N7"], entry=True), node(10, "success", ["N9"])])
+    assert "새로 생긴 문제" not in fixed[0]
+
+
+def test_must_include_entry_relation_only_when_answering_from_cases():
+    """규정 질문(case_required=False)에는 진입 사례가 따른 규정을 강제하지 않는다 — 질문과 먼 사례를 끌어오고 문제 · 메모 제목이 조치 이름이 됐다."""
+    def node(i, typ, entry=False, title="t"):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": title, "resolution_summary": None, "depth": 0,
+                "policy": [{"relation": "follows", "ref": "P1", "label": "x"}], "entry": entry, "near": True}
+    assert not any("따른" in m for m in llm._must_include([node(1, "success", entry=True)], case_required=False)), "질문이 찾은 조문이 아니면"
+    asked = llm._must_include([node(1, "success", entry=True)], case_required=False, searched={"P1"})
+    assert any("질문이 찾은 조문 [P1]" in m and "한 문장으로 덧붙이고 [N1]" in m for m in asked), "질문이 찾은 조문을 따른 해결 기록이면 덧붙인다"
+    assert not any("질문이 찾은 조문" in m for m in llm._must_include([node(2, "fail", entry=True)], case_required=False, searched={"P1"}))
+    memo = llm._must_include([node(4, "ref", entry=True, title="카드사 대응 순서(팀 메모)")])
+    assert any("절차 기록" in m and "[N4][P1]" in m for m in memo) and not any("팀 메모" in m for m in memo)
+    problem = llm._must_include([node(5, "fail", entry=True, title="석 달 사이 세 번째 취소 요청")])
+    assert any("[N5] 기록의 처리는 규정 [P1]" in m for m in problem) and not any("세 번째" in m for m in problem)
+
+
+def test_note_text_drops_internal_record_ids():
+    assert llm._note_text({"note": "70% 로 낮춘 것이 현재 기준(c5-meta-fix)"}) == "70% 로 낮춘 것이 현재 기준"
+    assert llm._note_text({"note": "메일 주소(e-mail)와 헤더(x-request-id)"}) == "메일 주소(e-mail)와 헤더(x-request-id)", "숫자 없는 괄호 표기는 그대로"
+    assert llm._note_text({"note": "제17조의2 ③ — 회사 환불 보류(2026-11 판)"}) == "제17조의2 ③ — 회사 환불 보류(2026-11 판)"
+
+def test_policy_question_keeps_only_exceptions_on_the_entry_line_below_root():
+    """규정 질문(case_required=False)에서는 진입 기록 줄기의 예외만 — 루트(장애 건 전체)와 다른 가지의 예외는 강제하지 않는다."""
+    def node(i, depth, entry=False, near=False):
+        return {"ref": f"N{i}", "id": i, "type": "fail", "status": "active", "title": "t", "resolution_summary": None, "depth": depth,
+                "policy": [{"relation": "exception", "ref": "P1", "label": "x"}], "entry": entry, "near": near}
+    must = llm._must_include([node(1, 0, near=True), node(2, 1, near=True), node(4, 1), {**node(5, 2, entry=True), "type": "success"}],
+                             case_required=False, searched={"P1"})
+    hit = [m for m in must if "달리 처리한 사례" in m]
+    assert any(m.startswith("[N2]") for m in hit) and any(m.startswith("[N5]") for m in hit)
+    assert not any(m.startswith("[N1]") or m.startswith("[N4]") for m in hit)
+    case = llm._must_include([node(1, 0, near=True), node(4, 1)], case_required=True, searched={"P1"})
+    assert any(m.startswith("[N1]") for m in case) and any(m.startswith("[N4]") for m in case), "사례 질문은 그대로"
+
+
+def test_entry_problem_record_body_is_shown_in_context():
+    n = {"ref": "N9", "type": "fail", "status": "active", "title": "풀 확대 후 DB max_connections 초과", "resolution_summary": "합산 규칙을 정하기로 결정.",
+         "depth": 0, "body": "인스턴스 3대 × 풀 20 = 60이 DB max_connections 50을 넘어 일부 인스턴스가 연결 거부. 조사 중."}
+    ctx = llm._render_context([], [n])
+    assert "— <log_body>인스턴스 3대 × 풀 20 = 60" in ctx and "</log_body>" in ctx and "결정" not in ctx, "원문이 있으면 요약 대신 경계 안의 원문"
+    assert "— 합산 규칙을 정하기로 결정." in llm._render_context([], [{**n, "body": None}])
+
+
+
+
+
+def test_follow_up_problem_uses_parents_even_when_not_displayed():
+    """한 줄기 체인에서는 표시용 parents 가 비어도 판단용 up 으로 '뒤에 생긴 문제'를 알아본다."""
+    def node(i, typ, up=(), entry=False):
+        return {"ref": f"N{i}", "id": i, "type": typ, "status": "active", "title": "t", "resolution_summary": None, "depth": len(up),
+                "policy": None, "entry": entry, "near": True, "resolves_root": typ == "success", "parents": [], "up": list(up)}
+    must = llm._must_include([node(1, "fail"), node(2, "success", ["N1"]), node(3, "fail", ["N2"], entry=True)])
+    assert "[N3] 은 [N2] 조치 뒤에 새로 생긴 문제" in must[0]
+
+
+def test_entry_body_is_clipped_and_flattened():
+    body = "첫 줄\n둘째 줄 " + "가" * 400 + "."
+    ctx = llm._render_context([], [{"ref": "N1", "type": "fail", "status": "active", "title": "t", "resolution_summary": None, "depth": 0, "body": body}])
+    line = ctx.split("\n")[-1]
+    assert "첫 줄 둘째 줄" in line and len(line) < 320, "원문은 240자 안팎으로 자르고 줄바꿈을 없앤다"
+
+
+def test_case_records_are_treated_as_data_and_truncation_is_logged(capsys):
+    assert "<log_body>" in llm.GENERATE_SYSTEM and "따르지 않고 옮겨 쓰지도 않으며" in llm.GENERATE_SYSTEM
+    many = [{"ref": f"N{i}", "id": i, "type": "fail", "status": "active", "title": "t", "resolution_summary": None, "depth": 1,
+             "policy": [{"relation": "exception", "ref": f"P{i}", "label": "x"}], "entry": i == 1, "near": True} for i in range(1, 9)]
+    out = llm._must_include(many)
+    assert len(out) == 6 and "[must_include]" in capsys.readouterr().out, "잘리면 로그를 남긴다"

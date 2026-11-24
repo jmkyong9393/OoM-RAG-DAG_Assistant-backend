@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -25,7 +26,24 @@ sys.path.insert(0, str(ROOT / "ai"))
 
 from app.graph import pipeline  # noqa: E402
 
-CHECKS = ("cited", "cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none")
+CHECKS = ("cited", "cite_chunks_any", "cite_nodes_any", "contains_all", "contains_any", "contains_none", "no_leak")
+# 모든 답변에 공통: 지시문 · 내부 표기가 답에 새어 나오면 실패 — 마커 자리표시([N…]), 지시문 문구, 사례 기록 ID
+LEAK_RE = re.compile(r"\[[NP]…\]|장애를 실제로 해결한 기록은|이 장애를 해결한 기록은|답변에 꼭 담을|규정 관계:|질문에 직접 닿는|새로 생긴 문제다|팀이 정리한 절차 기록|질문이 찾은 조문|log_body")
+# 기록 ID 는 모양(c5-meta-fix)이 아니라 사례 데이터에 실제로 있는 ref 와 같은 낱말만 — 's3-bucket' 같은 기술 용어를 잡지 않게
+ID_LIKE = re.compile(r"(?<![\w-])[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?![\w-])")
+_record_ids: set[str] | None = None
+
+
+def record_ids() -> set[str]:
+    global _record_ids
+    if _record_ids is None:
+        _record_ids = {it["ref"] for f in (ROOT / "data" / "logs").glob("*_v1.json")
+                       for it in json.loads(f.read_text(encoding="utf-8")).get("items", []) if it.get("ref")}
+    return _record_ids
+
+
+def leaks(answer: str) -> list[str]:
+    return LEAK_RE.findall(answer) + [w for w in ID_LIKE.findall(answer) if w in record_ids()]
 
 
 def parse(buf: bytes) -> list[tuple[str, object]]:
@@ -78,6 +96,7 @@ async def run_one(item: dict, cache: dict) -> dict:
         res["contains_any"] = any(s in answer for s in item["contains_any"])
     if "contains_none" in item:
         res["contains_none"] = not any(s in answer for s in item["contains_none"])
+    res["no_leak"] = not leaks(answer)
     return {"query": item["query"], "workspace_id": item["workspace_id"], "intent": (d.get("intent") or {}).get("intent"), "checks": res,
             "passed": all(res.values()), "cited": sorted(cited), "answer": answer}
 
