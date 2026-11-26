@@ -96,5 +96,125 @@
     "employee_no": "OIT0005",
     "email": "yoo@oit.local",
     "home_workspace_id": 23
+  },
+  {
+    "id": 100,
+    "tenant_id": 1,
+    "name": "시연 관리자",
+    "title": "시연",
+    "employee_no": "OOM0000",
+    "email": null,
+    "home_workspace_id": 1,
+    "consented": true
+  },
+  {
+    "id": 101,
+    "tenant_id": 1,
+    "name": "시연 SW관리자",
+    "title": "시연",
+    "employee_no": "OOM9001",
+    "email": null,
+    "home_workspace_id": 1,
+    "consented": true
+  },
+  {
+    "id": 102,
+    "tenant_id": 1,
+    "name": "시연 경영지원관리자",
+    "title": "시연",
+    "employee_no": "OOM9002",
+    "email": null,
+    "home_workspace_id": 2,
+    "consented": true
+  },
+  {
+    "id": 103,
+    "tenant_id": 1,
+    "name": "시연 CS관리자",
+    "title": "시연",
+    "employee_no": "OOM9003",
+    "email": null,
+    "home_workspace_id": 3,
+    "consented": true
+  },
+  {
+    "id": 104,
+    "tenant_id": 1,
+    "name": "시연 멤버",
+    "title": "시연",
+    "employee_no": "OOM9004",
+    "email": null,
+    "home_workspace_id": 1,
+    "consented": true
+  },
+  {
+    "id": 105,
+    "tenant_id": 1,
+    "name": "시연 상담사",
+    "title": "시연",
+    "employee_no": "OOM9005",
+    "email": null,
+    "home_workspace_id": 3,
+    "consented": true
+  },
+  {
+    "id": 110,
+    "tenant_id": 2,
+    "name": "시연 관리자",
+    "title": "시연",
+    "employee_no": "OIT0000",
+    "email": null,
+    "home_workspace_id": 21,
+    "consented": true
+  },
+  {
+    "id": 111,
+    "tenant_id": 2,
+    "name": "시연 SW관리자",
+    "title": "시연",
+    "employee_no": "OIT9001",
+    "email": null,
+    "home_workspace_id": 21,
+    "consented": true
+  },
+  {
+    "id": 112,
+    "tenant_id": 2,
+    "name": "시연 경영지원관리자",
+    "title": "시연",
+    "employee_no": "OIT9002",
+    "email": null,
+    "home_workspace_id": 22,
+    "consented": true
+  },
+  {
+    "id": 113,
+    "tenant_id": 2,
+    "name": "시연 CS관리자",
+    "title": "시연",
+    "employee_no": "OIT9003",
+    "email": null,
+    "home_workspace_id": 23,
+    "consented": true
+  },
+  {
+    "id": 114,
+    "tenant_id": 2,
+    "name": "시연 멤버",
+    "title": "시연",
+    "employee_no": "OIT9004",
+    "email": null,
+    "home_workspace_id": 21,
+    "consented": true
+  },
+  {
+    "id": 115,
+    "tenant_id": 2,
+    "name": "시연 상담사",
+    "title": "시연",
+    "employee_no": "OIT9005",
+    "email": null,
+    "home_workspace_id": 23,
+    "consented": true
   }
 ]
