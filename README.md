@@ -59,7 +59,7 @@ make ai                                 # :8000 (다른 터미널)
 make load-logs && make worker ARGS=--once && make link-policies link-chains   # 사례 · 정제 · 근거 연결
 ```
 
-- 계정: 유통 `OOM0001` ~ `0005`, IT `OIT0001` ~ `0005`(0001 이 회사 관리자). 비밀번호는 `deploy/.env` 의 `SEED_PASSWORD`.
+- 계정: 유통 `OOM0001` ~ `0005`(0001 ~ 0004 는 회사 관리자 + 세 부서 관리자), IT `OIT0001` ~ `0005`(0001 이 회사 관리자), 시연 계정 — 두 회사 같은 번호 `0000`(회사 관리자 + 세 부서) · `9001` ~ `9003`(SW 개발 · 경영지원 · 고객지원 관리자) · `9004` · `9005`(SW 개발 · 고객지원 멤버). 비밀번호는 `deploy/.env` 의 `SEED_PASSWORD`.
 - AI 키(`LLM_PROFILE_DEFAULT_API_KEY`)가 없으면 검색은 실제로 하고 답변은 규칙으로 만든 흉내 답변이 나옵니다.
 - 적재 명령은 다시 돌려도 결과가 같습니다(`make seed-reset` 만 업무 테이블을 비웁니다).
 
@@ -82,6 +82,7 @@ PR 마다 CI 가 키 · 금지 단어 검사, Python · Spring 테스트, 규정
 |---|---|
 | 무중단 교체 | 서비스마다 새 컨테이너가 준비되면 옛 컨테이너를 정상 종료(진행 중인 채팅은 끝까지) |
 | 되돌리기 · 백업 | `deploy/rollback.sh`(직전 이미지로) · 배포 직전과 매일 DB 백업 |
+| 사례 일괄 적재 · 되돌리기 | `scripts/bulk_load.py`(대응표 → `POST /logs/bulk`) · `scripts/bulk_revert.py`(적재 전 스냅샷 → 출처 접두어로 골라 되돌리기 → 대조). ai 만 다시 띄우기는 `FORCE="ai" bash deploy/rollout.sh ai` |
 | 처음 서버를 만들 때 | `deploy/lightsail/README.md` |
 
 ## 더 보기
