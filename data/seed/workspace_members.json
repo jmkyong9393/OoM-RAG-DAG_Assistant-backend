@@ -7,12 +7,12 @@
   {
     "workspace_id": 2,
     "user_id": 1,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 3,
     "user_id": 1,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 1,
@@ -22,17 +22,17 @@
   {
     "workspace_id": 2,
     "user_id": 2,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 3,
     "user_id": 2,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 1,
     "user_id": 3,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 2,
@@ -42,17 +42,17 @@
   {
     "workspace_id": 3,
     "user_id": 3,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 1,
     "user_id": 4,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 2,
     "user_id": 4,
-    "role": "member"
+    "role": "admin"
   },
   {
     "workspace_id": 3,
@@ -107,6 +107,21 @@
   {
     "workspace_id": 10,
     "user_id": 1,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 10,
+    "user_id": 2,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 10,
+    "user_id": 3,
+    "role": "admin"
+  },
+  {
+    "workspace_id": 10,
+    "user_id": 4,
     "role": "admin"
   },
   {
