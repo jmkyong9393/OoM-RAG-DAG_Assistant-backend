@@ -10,6 +10,7 @@ import time
 from typing import AsyncIterator, NamedTuple
 
 from app.config import ai_mode, policy_rerank, profile as load_profile
+from app.graph.conclusion_filter import ConclusionFilter
 from app.llm import client as llm
 from app.llm.schemas import (ChainEdge, ChainEvent, ChainNode, NodePolicy, CitationsEvent, DoneEvent, ErrorEvent, IntentEvent, Latency,
                              PolicyRef, StageEvent, TokenEvent)
@@ -152,11 +153,19 @@ async def run(workspace_id: int, policy_enabled: bool | None, query: str, sessio
         yield sse("stage", StageEvent(node="generate", status="start").model_dump())
         answer: list[str] = []
         first_token_ms: int | None = None
+        # 근거 마커 없이 '따라서'로 다시 맺는 문장은 내보내지 않는다 — 앞 문장과 어긋나는 결론이 여기서 나왔다
+        conclusions = ConclusionFilter()
         async for piece in llm.generate(prof, query, policy_ctx, chain_ctx, usage, case_required=intent != "policy"):
             if first_token_ms is None:
                 first_token_ms = int((time.perf_counter() - t0) * 1000)
-            answer.append(piece)
-            yield sse("token", TokenEvent(text=piece).model_dump())
+            piece = conclusions.feed(piece)
+            if piece:
+                answer.append(piece)
+                yield sse("token", TokenEvent(text=piece).model_dump())
+        rest = conclusions.close()
+        if rest:
+            answer.append(rest)
+            yield sse("token", TokenEvent(text=rest).model_dump())
         truncated = usage.finish_reason == "length"
         if truncated:
             yield sse("token", TokenEvent(text=TRUNCATED_NOTE).model_dump())
